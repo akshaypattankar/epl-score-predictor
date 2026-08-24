@@ -1,0 +1,87 @@
+services:
+  # Tailscale Sidecar: Manages the network identity & secure Tailnet access
+  ts-epl:
+    image: tailscale/tailscale:latest
+    container_name: ts-epl
+    hostname: ${TS_HOSTNAME:-epl-predictor}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_EXTRA_ARGS=${TS_EXTRA_ARGS:---advertise-tags=tag:container}
+      - TS_SERVE_CONFIG=${TS_SERVE_CONFIG:-/config/tailscale-serve.json}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=${TS_USERSPACE:-false}
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./config:/config
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    ports:
+      # Direct host access restricted to localhost (prevents direct external exposure)
+      - "127.0.0.1:19899:80"
+    restart: unless-stopped
+
+  # Express Backend API: Shares the network stack of ts-epl
+  epl-backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: epl_score_predictor_backend
+    restart: unless-stopped
+    # Share the Tailscale network identity
+    network_mode: service:ts-epl
+    volumes:
+      - epl-db-data:/app/data
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - TZ=${TZ:-Asia/Kolkata}
+    depends_on:
+      - ts-epl
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Production Frontend: Nginx serving Vite app & proxying /api/ to backend
+  epl-predictor:
+    build:
+      context: .
+      target: production
+    container_name: epl_score_predictor_prod
+    restart: unless-stopped
+    # Share the Tailscale network identity
+    network_mode: service:ts-epl
+    depends_on:
+      - ts-epl
+      - epl-backend
+
+  # Development Frontend: Hot-reloading Vite dev server (Optional)
+  epl-predictor-dev:
+    build:
+      context: .
+      target: development
+    container_name: epl_score_predictor_dev
+    restart: unless-stopped
+    # Share the Tailscale network identity
+    network_mode: service:ts-epl
+    volumes:
+      - .:/app
+      - dev-node-modules:/app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_BACKEND_URL=http://127.0.0.1:3000
+    depends_on:
+      - ts-epl
+      - epl-backend
+    profiles:
+      - dev
+
+volumes:
+  tailscale-state:
+  epl-db-data:
+  dev-node-modules:

@@ -1,0 +1,3282 @@
+// app.js - EPL Score Predictor Main Application with Auth, Guest Privacy, Polished Themes & Team-Restricted Groups
+import {
+  fetchFixtures,
+  getCrestImg,
+  getClubDetails,
+  CLUB_DIRECTORY,
+  getAuthToken,
+  apiAdminLogin,
+  apiAdminSetPlayer,
+  apiPlayerLogin,
+  apiVerifyAuth,
+  apiLogout,
+  apiResetPasscode,
+  apiFetchGroups,
+  apiCreateGroup,
+  apiRenameGroup,
+  apiDeleteGroup,
+  apiFetchGroupPlayers,
+  apiFetchMasterPlayers,
+  apiCreateMasterPlayer,
+  apiRenameMasterPlayer,
+  apiDeleteMasterPlayer,
+  apiAssignPlayerToGroup,
+  apiRemovePlayerFromGroup,
+  apiFetchPredictions,
+  apiSavePrediction,
+  apiSaveTimezone,
+  getFplCacheMeta,
+  resetFplCacheMetaToNormal
+} from './api.js';
+import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer } from './scoring.js';
+import { getTierIconSvg, TIER_TITLES } from './tierIcons.js';
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  activeView: 'dashboard', // 'dashboard' | 'scoring' | 'management'
+  fixtures: {},        // { [gw]: fixture[] }
+  gwNumbers: [],
+  teams: {},           // team dict with codes & names
+  activeGW: null,
+  groups: [],          // [{ id, name, teams_filter, player_count }]
+  activeGroup: null,   // { id, name, teams_filter }
+  players: [],         // [{ id, group_id, name }] (active group players)
+  masterPlayers: [],   // [{ id, name, group_ids: [number], passcode?: string }] (master directory)
+  predictions: {},     // { `${match_id}_${player_id}`: { predicted_home, predicted_away } }
+  selectedTeam: 'ALL',
+  selectedTeams: [],   // Array of selected team names, e.g. ['Arsenal', 'Chelsea']. Empty array [] = All teams
+  playerSearchQuery: '',
+  timezone: localStorage.getItem('epl_timezone') || 'UTC',
+  auth: {
+    role: 'guest',    // 'guest' | 'player' | 'admin'
+    activePlayerId: null,
+    activePlayerName: '',
+    token: null,
+  },
+  pendingAdminTargetView: null,
+};
+
+// ─── Deterministic Player Color System ───────────────────────────────────────
+const PLAYER_ACCENT_COLORS = [
+  '#a855f7', // Vivid Purple
+  '#06b6d4', // Cyan
+  '#10b981', // Emerald Green
+  '#f59e0b', // Amber / Gold
+  '#f43f5e', // Rose
+  '#3b82f6', // Cobalt Blue
+  '#ec4899', // Hot Pink
+  '#f97316', // Bright Orange
+  '#14b8a6', // Deep Teal
+  '#84cc16', // Lime Green
+  '#6366f1', // Indigo
+  '#d946ef', // Fuchsia
+  '#0284c7', // Sky Blue
+  '#eab308', // Yellow
+  '#22c55e', // Grass Green
+  '#fb7185', // Coral Pink
+  '#8b5cf6', // Violet Blue
+  '#059669', // Jade Green
+  '#ea580c', // Dark Orange
+  '#4f46e5'  // Deep Indigo
+];
+
+function getColorByIndex(index) {
+  const i = Math.abs(index);
+  if (i < PLAYER_ACCENT_COLORS.length) {
+    return PLAYER_ACCENT_COLORS[i];
+  }
+  const hue = Math.round((i * 137.508) % 360);
+  return `hsl(${hue}, 80%, 60%)`;
+}
+
+function getPlayerColor(playerOrIdOrName) {
+  if (playerOrIdOrName == null) return PLAYER_ACCENT_COLORS[0];
+
+  let pId = null;
+  let pName = null;
+
+  if (typeof playerOrIdOrName === 'object') {
+    pId = playerOrIdOrName.id;
+    pName = playerOrIdOrName.name;
+  } else if (typeof playerOrIdOrName === 'number') {
+    pId = playerOrIdOrName;
+  } else if (typeof playerOrIdOrName === 'string') {
+    if (/^\d+$/.test(playerOrIdOrName)) {
+      pId = parseInt(playerOrIdOrName, 10);
+    } else {
+      pName = playerOrIdOrName;
+    }
+  }
+
+  // 1. Look up in masterPlayers (stable global directory order)
+  if (state.masterPlayers && state.masterPlayers.length > 0) {
+    if (pId != null) {
+      const idx = state.masterPlayers.findIndex(p => p.id === pId);
+      if (idx !== -1) return getColorByIndex(idx);
+    }
+    if (pName) {
+      const idx = state.masterPlayers.findIndex(p => p.name.toLowerCase() === pName.toLowerCase());
+      if (idx !== -1) return getColorByIndex(idx);
+    }
+  }
+
+  // 2. Look up in active group players (sorted by id for stability)
+  if (state.players && state.players.length > 0) {
+    const sortedGroupPlayers = [...state.players].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    if (pId != null) {
+      const idx = sortedGroupPlayers.findIndex(p => p.id === pId);
+      if (idx !== -1) return getColorByIndex(idx);
+    }
+    if (pName) {
+      const idx = sortedGroupPlayers.findIndex(p => p.name.toLowerCase() === pName.toLowerCase());
+      if (idx !== -1) return getColorByIndex(idx);
+    }
+  }
+
+  // 3. Fallback: if numeric id / index provided
+  if (typeof pId === 'number') {
+    return getColorByIndex(Math.max(0, pId - 1));
+  }
+
+  return PLAYER_ACCENT_COLORS[0];
+}
+
+function isLocked(fixture) {
+  return new Date() >= new Date(fixture.kickoff_time);
+}
+
+function isPlayerEditable(playerId) {
+  if (state.auth.role === 'admin') return true;
+  if (state.auth.role === 'player' && state.auth.activePlayerId === Number(playerId)) return true;
+  return false;
+}
+
+function formatKO(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const tz = state.timezone || 'UTC';
+  try {
+    const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
+    const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    let tzName = '';
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(d);
+      const p = parts.find(x => x.type === 'timeZoneName');
+      if (p) tzName = ' ' + p.value;
+    } catch (e) {
+      tzName = ' ' + (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
+    }
+    return `${datePart} ${timePart}${tzName}`;
+  } catch (e) {
+    return d.toUTCString().slice(0, 22);
+  }
+}
+
+function startClock() {
+  const el = document.getElementById('utcClock');
+  if (!el) return;
+  function tick() {
+    const now = new Date();
+    const tz = state.timezone || 'UTC';
+    try {
+      const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz });
+      let tzName = '';
+      try {
+        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(now);
+        const p = parts.find(x => x.type === 'timeZoneName');
+        if (p) tzName = ' ' + p.value;
+      } catch (e) {
+        tzName = ' ' + (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
+      }
+      el.textContent = `${timeStr}${tzName}`;
+    } catch (e) {
+      el.textContent = now.toUTCString().split(' ').slice(4, 5)[0] + ' UTC';
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// Helper: parse group team filter into an array or null (for 'ALL')
+function getGroupTeamsFilter(group) {
+  if (!group || !group.teams_filter || group.teams_filter === 'ALL') return null;
+  try {
+    const parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Helper: filter fixtures according to active group's teams_filter
+function filterFixturesByGroup(fixtureList) {
+  const groupFilter = getGroupTeamsFilter(state.activeGroup);
+  if (!groupFilter) return fixtureList;
+  return fixtureList.filter(f => groupFilter.includes(f.home_name) || groupFilter.includes(f.away_name));
+}
+
+// Helper: check if a team is within active group's scope
+function isTeamInGroupScope(teamName, group = state.activeGroup) {
+  if (!teamName || teamName === 'ALL') return true;
+  const groupFilter = getGroupTeamsFilter(group);
+  if (!groupFilter) return true; // 'ALL' scope: all teams are in scope
+  return groupFilter.includes(teamName);
+}
+
+// Helper: check if a fixture is within active group's scope
+function isFixtureInGroupScope(fixture, group = state.activeGroup) {
+  if (!fixture) return true;
+  const groupFilter = getGroupTeamsFilter(group);
+  if (!groupFilter) return true; // 'ALL' scope: all fixtures are in scope
+  return groupFilter.includes(fixture.home_name) || groupFilter.includes(fixture.away_name);
+}
+
+// ─── AUTHENTICATION STATE & MODALS ───────────────────────────────────────────
+async function initAuth() {
+  const verified = await apiVerifyAuth();
+  if (verified.timezone) {
+    state.timezone = verified.timezone;
+    localStorage.setItem('epl_timezone', verified.timezone);
+    const tzSelect = document.getElementById('timezoneSelect');
+    if (tzSelect) tzSelect.value = verified.timezone;
+  }
+  if (verified.role === 'admin') {
+    state.auth = {
+      role: 'admin',
+      activePlayerId: verified.playerId || null,
+      activePlayerName: verified.name || 'Admin',
+      token: getAuthToken()
+    };
+  } else if (verified.role === 'player') {
+    state.auth = {
+      role: 'player',
+      activePlayerId: verified.playerId,
+      activePlayerName: verified.name,
+      token: getAuthToken()
+    };
+  } else {
+    state.auth = { role: 'guest', activePlayerId: null, activePlayerName: '', token: null };
+  }
+  renderAuthHeader();
+  initAuthModalEvents();
+  initAdminPlayerEvents();
+}
+
+function renderAuthHeader() {
+  const badge = document.getElementById('authStatusBadge');
+  const loginBtn = document.getElementById('authLoginBtn');
+  const logoutBtn = document.getElementById('authLogoutBtn');
+  const guestBanner = document.getElementById('guestNoticeBanner');
+  const mgmtBtn = document.getElementById('navManagementBtn');
+  const groupBox = document.getElementById('groupSelectBox');
+  const adminPlayerBox = document.getElementById('adminPlayerBox');
+  if (!badge || !loginBtn || !logoutBtn) return;
+
+  if (state.auth.role === 'admin') {
+    badge.className = 'auth-status-badge admin';
+    const playingText = state.auth.activePlayerId ? ` • ⚽ ${state.auth.activePlayerName}` : '';
+    badge.textContent = `👑 Admin${playingText}`;
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+    if (guestBanner) guestBanner.style.display = 'none';
+    if (mgmtBtn) mgmtBtn.style.display = 'inline-flex';
+    if (groupBox) groupBox.style.display = 'block';
+    if (adminPlayerBox) {
+      adminPlayerBox.style.display = 'block';
+      populateAdminPlayerDropdown();
+    }
+  } else if (state.auth.role === 'player') {
+    badge.className = 'auth-status-badge player';
+    badge.textContent = `⚽ Logged in: ${state.auth.activePlayerName}`;
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+    if (guestBanner) guestBanner.style.display = 'none';
+    if (mgmtBtn) mgmtBtn.style.display = 'none';
+    if (groupBox) groupBox.style.display = 'block';
+    if (adminPlayerBox) adminPlayerBox.style.display = 'none';
+  } else {
+    badge.className = 'auth-status-badge';
+    badge.textContent = '👤 Guest (View Only)';
+    loginBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'none';
+    if (guestBanner && state.activeView === 'dashboard') guestBanner.style.display = 'flex';
+    if (mgmtBtn) mgmtBtn.style.display = 'none';
+    if (groupBox) groupBox.style.display = 'none';
+    if (adminPlayerBox) adminPlayerBox.style.display = 'none';
+  }
+}
+
+function populateAdminPlayerDropdown() {
+  const select = document.getElementById('adminPlayerSelect');
+  if (!select) return;
+
+  const playersList = state.masterPlayers.length > 0 ? state.masterPlayers : state.players;
+  const currentId = state.auth.activePlayerId;
+
+  let options = `<option value="" ${!currentId ? 'selected' : ''}>👑 Playing as: None (Admin Only)</option>`;
+  options += playersList.map(p =>
+    `<option value="${p.id}" ${currentId === p.id ? 'selected' : ''}>⚽ Playing as: ${p.name}</option>`
+  ).join('');
+
+  select.innerHTML = options;
+}
+
+function initAdminPlayerEvents() {
+  const select = document.getElementById('adminPlayerSelect');
+  if (!select) return;
+
+  select.addEventListener('change', async (e) => {
+    const val = e.target.value;
+    const pId = val ? parseInt(val, 10) : null;
+    const player = pId ? state.masterPlayers.find(p => p.id === pId) : null;
+
+    try {
+      await apiAdminSetPlayer(pId);
+      state.auth.activePlayerId = pId;
+      state.auth.activePlayerName = player ? player.name : 'Admin';
+      renderAuthHeader();
+      renderDashboardComponents();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
+
+function initAuthModalEvents() {
+  const choiceModal = document.getElementById('authChoiceModal');
+  const playerModal = document.getElementById('playerLoginModal');
+  const adminModal = document.getElementById('adminLoginModal');
+
+  const loginBtn = document.getElementById('authLoginBtn');
+  const logoutBtn = document.getElementById('authLogoutBtn');
+  const bannerLoginBtn = document.getElementById('bannerLoginBtn');
+
+  const closeChoice = document.getElementById('closeChoiceModalBtn');
+  const closePlayer = document.getElementById('closePlayerModalBtn');
+  const closeAdmin = document.getElementById('closeAdminModalBtn');
+
+  const choosePlayerBtn = document.getElementById('choosePlayerLoginBtn');
+  const chooseAdminBtn = document.getElementById('chooseAdminLoginBtn');
+
+  const playerForm = document.getElementById('playerLoginForm');
+  const adminForm = document.getElementById('adminLoginForm');
+
+  const openChoiceModal = () => {
+    choiceModal.style.display = 'flex';
+  };
+
+  loginBtn?.addEventListener('click', openChoiceModal);
+  bannerLoginBtn?.addEventListener('click', openChoiceModal);
+
+  logoutBtn?.addEventListener('click', async () => {
+    await apiLogout();
+    stopLivePollingAndRevertToStandard();
+    state.auth = { role: 'guest', activePlayerId: null, activePlayerName: '', token: null };
+    renderAuthHeader();
+    await reloadMasterData();
+    renderDashboardComponents();
+    if (state.activeView === 'management') {
+      state.activeView = 'dashboard';
+      renderViewByName('dashboard');
+    }
+  });
+
+  closeChoice?.addEventListener('click', () => choiceModal.style.display = 'none');
+  closePlayer?.addEventListener('click', () => playerModal.style.display = 'none');
+  closeAdmin?.addEventListener('click', () => adminModal.style.display = 'none');
+
+  [choiceModal, playerModal, adminModal].forEach(modal => {
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  });
+
+  choosePlayerBtn?.addEventListener('click', () => {
+    choiceModal.style.display = 'none';
+    playerModal.style.display = 'flex';
+    const nameInput = document.getElementById('loginPlayerNameInput');
+    if (nameInput) {
+      nameInput.value = '';
+      nameInput.focus();
+    }
+    document.getElementById('loginPasscodeInput').value = '';
+    document.getElementById('playerLoginError').style.display = 'none';
+  });
+
+  chooseAdminBtn?.addEventListener('click', () => {
+    choiceModal.style.display = 'none';
+    adminModal.style.display = 'flex';
+    document.getElementById('adminPasswordInput').value = '';
+    const adminPlayerInput = document.getElementById('adminPlayerNameInput');
+    if (adminPlayerInput) adminPlayerInput.value = '';
+    document.getElementById('adminLoginError').style.display = 'none';
+  });
+
+  playerForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pName = document.getElementById('loginPlayerNameInput')?.value.trim();
+    const code = document.getElementById('loginPasscodeInput')?.value.trim();
+    const errDiv = document.getElementById('playerLoginError');
+
+    try {
+      const res = await apiPlayerLogin(pName, code, state.timezone);
+      state.auth = { role: 'player', activePlayerId: res.player.id, activePlayerName: res.player.name, token: res.token };
+      if (res.timezone) {
+        state.timezone = res.timezone;
+        localStorage.setItem('epl_timezone', res.timezone);
+        const tzSelect = document.getElementById('timezoneSelect');
+        if (tzSelect) tzSelect.value = res.timezone;
+      }
+      playerModal.style.display = 'none';
+      renderAuthHeader();
+      await reloadMasterData();
+      if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+      populateGroupDropdown();
+      renderDashboardComponents();
+    } catch (err) {
+      errDiv.textContent = err.message;
+      errDiv.style.display = 'block';
+    }
+  });
+
+  adminForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pwd = document.getElementById('adminPasswordInput').value;
+    const pName = document.getElementById('adminPlayerNameInput')?.value.trim() || '';
+    const errDiv = document.getElementById('adminLoginError');
+
+    try {
+      const res = await apiAdminLogin(pwd, pName, state.timezone);
+      state.auth = {
+        role: 'admin',
+        activePlayerId: res.player ? res.player.id : null,
+        activePlayerName: res.player ? res.player.name : 'Admin',
+        token: res.token
+      };
+      if (res.timezone) {
+        state.timezone = res.timezone;
+        localStorage.setItem('epl_timezone', res.timezone);
+        const tzSelect = document.getElementById('timezoneSelect');
+        if (tzSelect) tzSelect.value = res.timezone;
+      }
+      adminModal.style.display = 'none';
+      renderAuthHeader();
+      await reloadMasterData();
+      if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+      populateGroupDropdown();
+      renderDashboardComponents();
+      if (state.pendingAdminTargetView) {
+        renderViewByName(state.pendingAdminTargetView);
+        state.pendingAdminTargetView = null;
+      }
+    } catch (err) {
+      errDiv.textContent = err.message;
+      errDiv.style.display = 'block';
+    }
+  });
+}
+
+// ─── Timezone Selector ────────────────────────────────────────────────────────
+function initTimezoneSelector() {
+  const select = document.getElementById('timezoneSelect');
+  if (!select) return;
+
+  if (!localStorage.getItem('epl_timezone')) {
+    try {
+      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const match = Array.from(select.options).some(o => o.value === browserTz);
+      if (match) {
+        state.timezone = browserTz;
+        localStorage.setItem('epl_timezone', browserTz);
+      }
+    } catch (e) { }
+  }
+
+  select.value = state.timezone;
+
+  select.addEventListener('change', async (e) => {
+    state.timezone = e.target.value;
+    localStorage.setItem('epl_timezone', state.timezone);
+    if (state.auth && state.auth.token) {
+      await apiSaveTimezone(state.timezone);
+    }
+    renderMatrix();
+    renderTeamBreakdown();
+  });
+}
+
+// ─── Theme Switcher (Clean 2/3 Tone Dark Themes) ─────────────────────────────
+function initThemeSelector() {
+  const select = document.getElementById('themeSelect');
+  if (!select) return;
+
+  const savedTheme = localStorage.getItem('epl_theme_2tone') || 'midnight';
+  select.value = savedTheme;
+  applyTheme(savedTheme);
+
+  select.addEventListener('change', (e) => {
+    const theme = e.target.value;
+    applyTheme(theme);
+    localStorage.setItem('epl_theme_2tone', theme);
+  });
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+// ─── Leaderboard Calculation ──────────────────────────────────────────────────
+function calcLeaderboard() {
+  const results = state.players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    color: getPlayerColor(p),
+    total: 0,
+    bullseyes: 0,
+    correctOutcomes: 0,
+    t1: 0,
+    t2: 0,
+    t3: 0,
+    t4: 0,
+    t5: 0,
+    t6: 0,
+    gwPts: {},
+  }));
+
+  for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
+    const fixtures = filterFixturesByGroup(rawFixtures);
+    for (const f of fixtures) {
+      if (f.actual_home_score === null || f.actual_away_score === null) continue;
+      for (const r of results) {
+        const pred = state.predictions[`${f.id}_${r.id}`];
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+        const res = evaluatePrediction(
+          f.actual_home_score, f.actual_away_score,
+          pred.predicted_home, pred.predicted_away
+        );
+        if (!res) continue;
+        r.total += res.total;
+        r.gwPts[gw] = (r.gwPts[gw] ?? 0) + res.total;
+        if (res.isExactScore) r.bullseyes++;
+        if (res.isCorrectOutcome) r.correctOutcomes++;
+
+        if (res.tier === 1) r.t1++;
+        else if (res.tier === 2) r.t2++;
+        else if (res.tier === 3) r.t3++;
+        else if (res.tier === 4) r.t4++;
+        else if (res.tier === 5) r.t5++;
+        else if (res.tier === 6) r.t6++;
+      }
+    }
+  }
+
+  results.sort((a, b) => b.total - a.total || b.bullseyes - a.bullseyes || b.t2 - a.t2 || b.t3 - a.t3);
+  results.forEach((r, i) => r.rank = i + 1);
+  return results;
+}
+
+// ─── Data Loading Helpers ─────────────────────────────────────────────────────
+async function reloadMasterData() {
+  const [groups, masterPlayers] = await Promise.all([
+    apiFetchGroups(),
+    apiFetchMasterPlayers()
+  ]);
+  state.groups = groups;
+  state.masterPlayers = masterPlayers;
+
+  if (state.auth.role === 'admin') {
+    populateAdminPlayerDropdown();
+  }
+
+  const savedGroupId = parseInt(localStorage.getItem('epl_active_group_id'), 10);
+  if (savedGroupId && groups.some(g => g.id === savedGroupId)) {
+    state.activeGroup = groups.find(g => g.id === savedGroupId);
+  } else if (!state.activeGroup && groups.length > 0) {
+    state.activeGroup = groups[0];
+  } else if (state.activeGroup) {
+    const existing = groups.find(g => g.id === state.activeGroup.id);
+    state.activeGroup = existing || groups[0] || null;
+  }
+}
+
+async function loadActiveGroupData(groupId) {
+  if (!groupId) {
+    state.players = [];
+    state.predictions = {};
+    return;
+  }
+
+  try {
+    const players = await apiFetchGroupPlayers(groupId);
+    state.players = players;
+
+    const rawPreds = await apiFetchPredictions(groupId);
+    const predDict = {};
+    for (const p of rawPreds) {
+      predDict[`${p.match_id}_${p.player_id}`] = {
+        predicted_home: p.home_score,
+        predicted_away: p.away_score,
+      };
+    }
+    state.predictions = predDict;
+
+  } catch (err) {
+    console.error('Error loading active group data:', err);
+  }
+}
+
+function formatTimeAgo(timestamp) {
+  if (!timestamp) return 'just now';
+  const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.floor(diffHour / 24)}d ago`;
+}
+
+function renderModeIndicator() {
+  const indicatorEl = document.getElementById('fplModeIndicator');
+  if (!indicatorEl) return;
+
+  const meta = getFplCacheMeta();
+  const isLive = meta.state === 'LIVE';
+  const timeAgo = formatTimeAgo(meta.updatedAt);
+
+  if (isLive) {
+    indicatorEl.className = 'fpl-mode-indicator live';
+    indicatorEl.innerHTML = `
+      <span class="mode-dot"></span>
+      <span class="mode-label">🔴 <strong>Live Mode</strong> (5m sync) • Synced ${timeAgo}</span>
+    `;
+  } else {
+    indicatorEl.className = 'fpl-mode-indicator';
+    indicatorEl.innerHTML = `
+      <span class="mode-dot"></span>
+      <span class="mode-label">⚪ <strong>Standard Mode</strong> (Kickoff trigger) • Synced ${timeAgo}</span>
+    `;
+  }
+}
+
+let livePollInterval = null;
+let kickoffCheckTimer = null;
+let kickoffEventsInitialized = false;
+let lastActivityTimestamp = Date.now();
+const INACTIVITY_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
+
+function isUserSessionActive() {
+  return state.auth && (state.auth.role === 'player' || state.auth.role === 'admin');
+}
+
+function registerUserActivity() {
+  lastActivityTimestamp = Date.now();
+}
+
+function stopLivePollingAndRevertToStandard() {
+  if (livePollInterval) {
+    clearInterval(livePollInterval);
+    livePollInterval = null;
+  }
+  resetFplCacheMetaToNormal();
+  renderModeIndicator();
+}
+
+async function syncFixturesData() {
+  try {
+    const { gwNumbers, byGW, teams } = await fetchFixtures();
+    state.gwNumbers = gwNumbers;
+    state.fixtures = byGW;
+    state.teams = teams;
+    renderDashboardComponents();
+  } catch (e) {
+    console.warn('Fixtures sync notice:', e.message);
+  }
+}
+
+function checkAndTriggerLivePolling() {
+  // If user is guest or logged out, stop live polling & revert to standard mode!
+  if (!isUserSessionActive()) {
+    stopLivePollingAndRevertToStandard();
+    return;
+  }
+
+  // If user has been inactive for > 10 minutes, revert to standard mode
+  if (Date.now() - lastActivityTimestamp > INACTIVITY_LIMIT_MS) {
+    stopLivePollingAndRevertToStandard();
+    return;
+  }
+
+  const meta = getFplCacheMeta();
+  if (meta.state === 'LIVE') {
+    if (!livePollInterval) {
+      livePollInterval = setInterval(async () => {
+        const isInactive = Date.now() - lastActivityTimestamp > INACTIVITY_LIMIT_MS;
+        if (!document.hidden && isUserSessionActive() && !isInactive) {
+          await syncFixturesData();
+        } else {
+          stopLivePollingAndRevertToStandard();
+        }
+      }, 5 * 60 * 1000);
+    }
+  } else {
+    if (livePollInterval) {
+      clearInterval(livePollInterval);
+      livePollInterval = null;
+    }
+  }
+  scheduleNextKickoffCheck();
+}
+
+function scheduleNextKickoffCheck() {
+  if (kickoffCheckTimer) {
+    clearTimeout(kickoffCheckTimer);
+    kickoffCheckTimer = null;
+  }
+
+  const meta = getFplCacheMeta();
+  if (meta.state === 'LIVE') return; // Live polling handles active matches
+  if (!isUserSessionActive()) return; // Only active player/admin sessions schedule kickoff triggers
+
+  const now = Date.now();
+  let nextKickoffMs = null;
+
+  if (state.fixtures) {
+    for (const gwFixtures of Object.values(state.fixtures)) {
+      for (const f of gwFixtures) {
+        if (f.finished || f.finished_provisional) continue;
+        if (f.kickoff_time) {
+          const kickoff = new Date(f.kickoff_time).getTime();
+          if (!isNaN(kickoff) && kickoff > now) {
+            if (nextKickoffMs === null || kickoff < nextKickoffMs) {
+              nextKickoffMs = kickoff;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (nextKickoffMs !== null) {
+    const delay = Math.max(1000, nextKickoffMs - now + 2000); // 2s after kickoff
+    kickoffCheckTimer = setTimeout(async () => {
+      if (isUserSessionActive() && (Date.now() - lastActivityTimestamp <= INACTIVITY_LIMIT_MS)) {
+        console.log('⏰ Kickoff trigger reached! Checking FPL for Live Mode...');
+        await syncFixturesData();
+      }
+    }, delay);
+  }
+}
+
+function initKickoffAndVisibilityEvents() {
+  if (kickoffEventsInitialized) return;
+  kickoffEventsInitialized = true;
+
+  // Listen for user interaction events to track session activity
+  ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(evt => {
+    window.addEventListener(evt, registerUserActivity, { passive: true });
+  });
+
+  // Periodically check for 10-minute session inactivity
+  setInterval(() => {
+    if (isUserSessionActive() && (Date.now() - lastActivityTimestamp > INACTIVITY_LIMIT_MS)) {
+      console.log('⌛ 10 minutes of inactivity reached. Reverting live polling to Standard Mode.');
+      stopLivePollingAndRevertToStandard();
+    }
+    renderModeIndicator();
+  }, 30000);
+
+  document.addEventListener('visibilitychange', async () => {
+    if (!document.hidden) {
+      registerUserActivity();
+      if (!isUserSessionActive()) {
+        stopLivePollingAndRevertToStandard();
+        return;
+      }
+
+      const meta = getFplCacheMeta();
+      const now = Date.now();
+
+      if (meta.state === 'LIVE' && (now - meta.updatedAt) >= 5 * 60 * 1000) {
+        await syncFixturesData();
+      } else if (meta.state !== 'LIVE') {
+        let passedKickoff = false;
+        if (state.fixtures) {
+          for (const gwFixtures of Object.values(state.fixtures)) {
+            for (const f of gwFixtures) {
+              if (f.finished || f.finished_provisional) continue;
+              if (f.kickoff_time) {
+                const kickoff = new Date(f.kickoff_time).getTime();
+                if (!isNaN(kickoff) && kickoff <= now && meta.updatedAt < kickoff) {
+                  passedKickoff = true;
+                  break;
+                }
+              }
+            }
+            if (passedKickoff) break;
+          }
+        }
+        if (passedKickoff) {
+          await syncFixturesData();
+        }
+      }
+    }
+  });
+}
+
+function renderDashboardComponents() {
+  renderMatrix();
+  renderLeaderboard();
+  renderSnapshot(calcLeaderboard());
+  renderTeamBreakdown();
+  renderCumulativeChart();
+  renderModeIndicator();
+  checkAndTriggerLivePolling();
+}
+
+// ─── View Navigation (SPA) ────────────────────────────────────────────────────
+function renderViewByName(targetView) {
+  if (targetView === 'management' && state.auth.role !== 'admin') {
+    targetView = 'dashboard';
+  }
+  state.activeView = targetView;
+  const dashBtn = document.getElementById('navDashboardBtn');
+  const scoringBtn = document.getElementById('navScoringBtn');
+  const mgmtBtn = document.getElementById('navManagementBtn');
+
+  const dashView = document.getElementById('dashboardView');
+  const scoringView = document.getElementById('scoringView');
+  const mgmtView = document.getElementById('managementView');
+
+  [dashBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
+  [dashView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
+
+  renderAuthHeader();
+
+  if (targetView === 'dashboard') {
+    dashBtn?.classList.add('active');
+    if (dashView) dashView.style.display = 'block';
+    renderDashboardComponents();
+  } else if (targetView === 'scoring') {
+    scoringBtn?.classList.add('active');
+    if (scoringView) scoringView.style.display = 'block';
+  } else if (targetView === 'management') {
+    mgmtBtn?.classList.add('active');
+    if (mgmtView) mgmtView.style.display = 'block';
+    renderManagementPage();
+  }
+}
+
+function initNavigation() {
+  const dashBtn = document.getElementById('navDashboardBtn');
+  const scoringBtn = document.getElementById('navScoringBtn');
+  const mgmtBtn = document.getElementById('navManagementBtn');
+
+  dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
+  scoringBtn?.addEventListener('click', () => renderViewByName('scoring'));
+  mgmtBtn?.addEventListener('click', () => {
+    if (state.auth.role !== 'admin') {
+      renderViewByName('dashboard');
+      return;
+    }
+    renderViewByName('management');
+  });
+}
+
+// ─── Group Dropdown ──────────────────────────────────────────────────────────
+function populateGroupDropdown() {
+  const select = document.getElementById('groupSelect');
+  if (!select) return;
+
+  select.innerHTML = state.groups.map(g => {
+    const scopeLabel = getGroupTeamsFilter(g) ? ` [${getGroupTeamsFilter(g).length} Teams]` : '';
+    return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>👥 ${g.name}${scopeLabel} (${g.player_count ?? 0} players)</option>`;
+  }).join('');
+}
+
+function initGroupEvents() {
+  const select = document.getElementById('groupSelect');
+  if (!select) return;
+
+  select.addEventListener('change', async (e) => {
+    const groupId = parseInt(e.target.value, 10);
+    const group = state.groups.find(g => g.id === groupId);
+    if (!group) return;
+
+    state.activeGroup = group;
+    localStorage.setItem('epl_active_group_id', groupId);
+    await loadActiveGroupData(groupId);
+
+    renderDashboardComponents();
+  });
+}
+
+// ─── Team Filter Multi-Select ────────────────────────────────────────────────
+function getSelectedTeams() {
+  return state.selectedTeams || [];
+}
+
+function hasActiveTeamFilter() {
+  return Array.isArray(state.selectedTeams) && state.selectedTeams.length > 0;
+}
+
+function setSelectedTeams(teams) {
+  const teamList = Object.values(state.teams).map(t => t.name);
+  const validTeams = (Array.isArray(teams) ? teams : []).filter(t => teamList.includes(t));
+  state.selectedTeams = validTeams;
+  state.selectedTeam = validTeams.length === 1 ? validTeams[0] : (validTeams.length > 1 ? validTeams.join(', ') : 'ALL');
+  localStorage.setItem('epl_selected_teams', JSON.stringify(state.selectedTeams));
+  localStorage.setItem('epl_selected_team', state.selectedTeam);
+  updateTeamMultiSelectUI();
+  renderMatrix();
+  renderTeamBreakdown();
+}
+
+function toggleTeamFilter(teamName) {
+  const current = getSelectedTeams();
+  let updated = [];
+  if (current.includes(teamName)) {
+    updated = current.filter(t => t !== teamName);
+  } else {
+    updated = [...current, teamName];
+  }
+  setSelectedTeams(updated);
+}
+
+function clearTeamFilter() {
+  setSelectedTeams([]);
+}
+
+function populateTeamFilter() {
+  const teamList = Object.values(state.teams).sort((a, b) => a.name.localeCompare(b.name));
+  const dropdownList = document.getElementById('teamDropdownList');
+  if (!dropdownList) return;
+
+  // Initialize saved selected teams
+  const savedTeamsJson = localStorage.getItem('epl_selected_teams');
+  const savedSingle = localStorage.getItem('epl_selected_team');
+  if (savedTeamsJson) {
+    try {
+      const parsed = JSON.parse(savedTeamsJson);
+      if (Array.isArray(parsed)) {
+        state.selectedTeams = parsed.filter(t => teamList.some(tm => tm.name === t));
+      }
+    } catch (e) {
+      state.selectedTeams = [];
+    }
+  } else if (savedSingle && savedSingle !== 'ALL' && teamList.some(tm => tm.name === savedSingle)) {
+    state.selectedTeams = [savedSingle];
+  } else {
+    state.selectedTeams = [];
+  }
+  state.selectedTeam = state.selectedTeams.length === 1 ? state.selectedTeams[0] : (state.selectedTeams.length > 1 ? state.selectedTeams.join(', ') : 'ALL');
+
+  // Populate dropdown items
+  dropdownList.innerHTML = teamList.map(t => {
+    const isSelected = state.selectedTeams.includes(t.name);
+    const isInScope = isTeamInGroupScope(t.name);
+    const scopeTag = !isInScope ? '<span class="team-option-scope-tag" title="Outside active group scope">Out of Scope</span>' : '';
+    const details = getClubDetails(t.name) || t;
+    const venueSub = details.stadium ? `<span class="team-option-venue-sub" title="Stadium: ${details.stadium}, ${details.city}">🏟️ ${details.stadium}${details.city ? ` · 📍 ${details.city}` : ''}</span>` : '';
+    return `
+      <div class="team-option-item ${isSelected ? 'selected' : ''}" data-team="${t.name}" role="option" aria-selected="${isSelected}" title="${t.name} (${details.shortName || t.short}) · 🏟️ ${details.stadium || 'Stadium'}, ${details.city || 'City'}">
+        <div class="team-option-row">
+          <span class="team-option-checkbox-custom"></span>
+          <span class="team-option-crest">${getCrestImg(t.code, t.name)}</span>
+          <div class="team-option-text-group">
+            <span class="team-option-name">${t.name}</span>
+            ${venueSub}
+          </div>
+          <span class="team-option-short">${details.shortName || t.short}</span>
+          ${scopeTag}
+          <button type="button" class="team-option-only-btn" data-only-team="${t.name}" title="Filter only ${t.name}">Only</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  updateTeamMultiSelectUI();
+  initTeamMultiSelectEvents(teamList);
+}
+
+function updateTeamMultiSelectUI() {
+  const displayEl = document.getElementById('teamMultiSelectDisplay');
+  const countSummary = document.getElementById('teamFilterCountSummary');
+  const scopeBtn = document.getElementById('teamSelectScopeBtn');
+  const btn = document.getElementById('teamMultiSelectBtn');
+  if (!displayEl) return;
+
+  const count = state.selectedTeams.length;
+  const groupFilter = getGroupTeamsFilter(state.activeGroup);
+
+  if (scopeBtn) {
+    scopeBtn.style.display = groupFilter ? 'inline-block' : 'none';
+  }
+
+  if (count === 0) {
+    displayEl.innerHTML = `
+      <span class="team-filter-all-icon">⚽</span>
+      <span class="team-filter-text">All Teams (20)</span>
+    `;
+    btn?.classList.remove('active');
+  } else if (count === 1) {
+    const team = state.selectedTeams[0];
+    const teamObj = Object.values(state.teams).find(t => t.name === team);
+    const code = teamObj?.code;
+    const details = getClubDetails(team) || teamObj;
+    displayEl.innerHTML = `
+      <span class="team-option-crest" style="width:18px;height:18px;">${getCrestImg(code, team)}</span>
+      <span class="team-filter-text" style="font-weight:700; color:#fff;" title="${team} (${details?.shortName || ''}) - 🏟️ ${details?.stadium || ''}, ${details?.city || ''}">
+        <span class="team-name-full">${team}</span>
+        <span class="team-name-short">${details?.shortName || team.slice(0, 3).toUpperCase()}</span>
+      </span>
+      <span class="team-filter-pill-remove" data-remove-team="${team}" title="Clear ${team}">✕</span>
+    `;
+    btn?.classList.add('active');
+  } else if (count <= 3) {
+    displayEl.innerHTML = state.selectedTeams.map(team => {
+      const teamObj = Object.values(state.teams).find(t => t.name === team);
+      const code = teamObj?.code;
+      const details = getClubDetails(team) || teamObj;
+      const short = details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
+      return `
+        <span class="team-filter-pill" title="${team} - 🏟️ ${details?.stadium || ''}, ${details?.city || ''}">
+          <span style="width:14px;height:14px;display:inline-flex;">${getCrestImg(code, team)}</span>
+          <span>${short}</span>
+          <span class="team-filter-pill-remove" data-remove-team="${team}" title="Remove ${team}">✕</span>
+        </span>
+      `;
+    }).join('');
+    btn?.classList.add('active');
+  } else {
+    displayEl.innerHTML = `
+      <span class="team-filter-count-badge">${count} Teams</span>
+      <span class="team-filter-text">Selected</span>
+      <span class="team-filter-pill-remove" data-clear-all="true" title="Clear all">✕</span>
+    `;
+    btn?.classList.add('active');
+  }
+
+  // Update dropdown options
+  document.querySelectorAll('.team-option-item').forEach(item => {
+    const teamName = item.dataset.team;
+    const isSelected = state.selectedTeams.includes(teamName);
+    if (isSelected) {
+      item.classList.add('selected');
+      item.setAttribute('aria-selected', 'true');
+    } else {
+      item.classList.remove('selected');
+      item.setAttribute('aria-selected', 'false');
+    }
+  });
+
+  if (countSummary) {
+    countSummary.textContent = count === 0 ? 'All 20 teams shown' : `${count} of 20 teams selected`;
+  }
+}
+
+let teamMultiSelectInitialized = false;
+
+function initTeamMultiSelectEvents(teamList) {
+  if (teamMultiSelectInitialized) return;
+  teamMultiSelectInitialized = true;
+
+  const container = document.getElementById('teamMultiSelect');
+  const btn = document.getElementById('teamMultiSelectBtn');
+  const dropdown = document.getElementById('teamMultiSelectDropdown');
+  const searchInput = document.getElementById('teamSearchInput');
+  const searchClearBtn = document.getElementById('teamSearchClearBtn');
+  const selectAllBtn = document.getElementById('teamSelectAllBtn');
+  const clearAllBtn = document.getElementById('teamClearAllBtn');
+  const selectScopeBtn = document.getElementById('teamSelectScopeBtn');
+  const applyBtn = document.getElementById('teamFilterApplyBtn');
+  const dropdownList = document.getElementById('teamDropdownList');
+
+  function openDropdown() {
+    dropdown.style.display = 'block';
+    container.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+    searchInput?.focus();
+  }
+
+  function closeDropdown() {
+    dropdown.style.display = 'none';
+    container.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+    if (searchInput) {
+      searchInput.value = '';
+      filterTeamOptions('');
+      if (searchClearBtn) searchClearBtn.style.display = 'none';
+    }
+  }
+
+  function toggleDropdown() {
+    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+      openDropdown();
+    } else {
+      closeDropdown();
+    }
+  }
+
+  btn?.addEventListener('click', (e) => {
+    const removeTeam = e.target.closest('[data-remove-team]')?.getAttribute('data-remove-team');
+    if (removeTeam) {
+      e.stopPropagation();
+      toggleTeamFilter(removeTeam);
+      return;
+    }
+    const clearAll = e.target.closest('[data-clear-all]');
+    if (clearAll) {
+      e.stopPropagation();
+      clearTeamFilter();
+      return;
+    }
+    toggleDropdown();
+  });
+
+  applyBtn?.addEventListener('click', () => {
+    closeDropdown();
+  });
+
+  // Search filter
+  function filterTeamOptions(query) {
+    const q = query.trim().toLowerCase();
+    document.querySelectorAll('.team-option-item').forEach(item => {
+      const name = item.dataset.team.toLowerCase();
+      const short = item.querySelector('.team-option-short')?.textContent.toLowerCase() || '';
+      if (!q || name.includes(q) || short.includes(q)) {
+        item.style.display = 'flex';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+  }
+
+  searchInput?.addEventListener('input', (e) => {
+    const val = e.target.value;
+    filterTeamOptions(val);
+    if (searchClearBtn) {
+      searchClearBtn.style.display = val ? 'inline-block' : 'none';
+    }
+  });
+
+  searchClearBtn?.addEventListener('click', () => {
+    if (searchInput) {
+      searchInput.value = '';
+      filterTeamOptions('');
+      searchClearBtn.style.display = 'none';
+      searchInput.focus();
+    }
+  });
+
+  // Actions
+  selectAllBtn?.addEventListener('click', () => {
+    const allNames = Object.values(state.teams).map(t => t.name);
+    setSelectedTeams(allNames);
+  });
+
+  clearAllBtn?.addEventListener('click', () => {
+    clearTeamFilter();
+  });
+
+  selectScopeBtn?.addEventListener('click', () => {
+    const groupFilter = getGroupTeamsFilter(state.activeGroup);
+    if (groupFilter) {
+      setSelectedTeams(groupFilter);
+    }
+  });
+
+  // Toggling & selecting options
+  dropdownList?.addEventListener('click', (e) => {
+    const onlyBtn = e.target.closest('[data-only-team]');
+    if (onlyBtn) {
+      e.stopPropagation();
+      const onlyTeam = onlyBtn.getAttribute('data-only-team');
+      if (onlyTeam) {
+        setSelectedTeams([onlyTeam]);
+      }
+      return;
+    }
+
+    const item = e.target.closest('.team-option-item');
+    if (!item) return;
+    const teamName = item.dataset.team;
+    if (teamName) {
+      toggleTeamFilter(teamName);
+    }
+  });
+
+  // Click outside to close
+  document.addEventListener('click', (e) => {
+    if (!container?.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  // Escape key to close
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && container?.classList.contains('open')) {
+      closeDropdown();
+    }
+  });
+
+  // Clear Team Filter button in breakdown card
+  document.getElementById('clearTeamFilterBtn')?.addEventListener('click', () => {
+    clearTeamFilter();
+  });
+}
+
+// ─── Render: GW Tabs ──────────────────────────────────────────────────────────
+function renderGWTabs() {
+  const container = document.getElementById('gwTabs');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const label = document.getElementById('gwCurrentLabel');
+  if (label && state.activeGW) {
+    label.textContent = `GW ${state.activeGW} of ${state.gwNumbers.length}`;
+  }
+
+  for (const gw of state.gwNumbers) {
+    const btn = document.createElement('button');
+    btn.className = `gw-tab${gw === state.activeGW ? ' active' : ''}`;
+    btn.textContent = `GW ${gw}`;
+    btn.id = `gwTab_${gw}`;
+    btn.addEventListener('click', () => {
+      state.activeGW = gw;
+      localStorage.setItem('epl_active_gw', gw);
+      renderGWTabs();
+      renderMatrix();
+    });
+    container.appendChild(btn);
+    if (gw === state.activeGW) {
+      setTimeout(() => {
+        btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }, 50);
+    }
+  }
+}
+
+function initGWSkipControls() {
+  document.getElementById('gwPrevBtn')?.addEventListener('click', () => {
+    if (!state.gwNumbers.length || !state.activeGW) return;
+    const idx = state.gwNumbers.indexOf(state.activeGW);
+    if (idx > 0) {
+      state.activeGW = state.gwNumbers[idx - 1];
+      localStorage.setItem('epl_active_gw', state.activeGW);
+      renderGWTabs();
+      renderMatrix();
+    }
+  });
+
+  document.getElementById('gwNextBtn')?.addEventListener('click', () => {
+    if (!state.gwNumbers.length || !state.activeGW) return;
+    const idx = state.gwNumbers.indexOf(state.activeGW);
+    if (idx < state.gwNumbers.length - 1) {
+      state.activeGW = state.gwNumbers[idx + 1];
+      localStorage.setItem('epl_active_gw', state.activeGW);
+      renderGWTabs();
+      renderMatrix();
+    }
+  });
+}
+
+// ─── Render: Snapshot Leaderboard ────────────────────────────────────────────
+function renderSnapshot(lb) {
+  const container = document.getElementById('leaderboardSnapshot');
+  if (!container) return;
+
+  // Guest view privacy check
+  if (state.auth.role === 'guest') {
+    container.innerHTML = `
+      <div class="glass-card" style="grid-column: 1/-1; text-align:center; padding: 18px; color: var(--text-muted);">
+        🔒 <strong>Leaderboard Snapshot Hidden for Guests:</strong> Log in with a 6-character player passcode to view rankings!
+      </div>`;
+    return;
+  }
+
+  if (lb.length === 0) {
+    container.innerHTML = `<div class="glass-card" style="grid-column: 1/-1; text-align:center; color:var(--text-muted);">No players in this group yet.</div>`;
+    return;
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+  container.innerHTML = lb.slice(0, 3).map(r => {
+    const isYou = state.auth.activePlayerId === r.id;
+    const playerColor = getPlayerColor(r);
+
+    const activeTiers = [
+      { icon: getTierIconSvg(1, 15) || '🔮', count: r.t1, cls: 't1', title: '🔮 The Vishwaguru (Exact Score)' },
+      { icon: getTierIconSvg(2, 15) || '📋', count: r.t2, cls: 't2', title: '📋 The Manager (Outcome + GD)' },
+      { icon: getTierIconSvg(3, 15) || '🎙️', count: r.t3, cls: 't3', title: '🎙️ The Fan (Outcome + Single Team)' },
+      { icon: getTierIconSvg(4, 15) || '📣', count: r.t4, cls: 't4', title: '📣 The Pundit (Outcome Only)' },
+      { icon: getTierIconSvg(5, 15) || '🎲', count: r.t5, cls: 't5', title: '🎲 The Casual (Goals Only)' },
+    ].filter(t => t.count > 0);
+
+    const tierChipsHtml = activeTiers.length > 0
+      ? `<div class="snapshot-tier-counts">
+          ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" title="${t.title}: ${t.count}">${t.icon} <strong>${t.count}</strong></span>`).join('')}
+        </div>`
+      : '';
+
+    return `
+      <div class="snapshot-card rank-${r.rank} ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${playerColor};">
+        <div class="rank-medal-badge rank-${r.rank}" title="Rank #${r.rank}">
+          <span class="rank-medal-icon">${medals[r.rank - 1] ?? `#${r.rank}`}</span>
+        </div>
+        <div class="snapshot-info">
+          <div class="snapshot-header-row">
+            <span class="snapshot-name" style="color: ${playerColor};" title="${r.name}">${r.name}</span>
+            ${isYou ? '<span class="you-tag">You</span>' : ''}
+          </div>
+          <div class="snapshot-pts-row">
+            <span class="snapshot-pts">${r.total}</span>
+            <span class="snapshot-pts-unit">pts</span>
+          </div>
+          <div class="snapshot-meta">GW ${state.activeGW ?? '?'}</div>
+        </div>
+        ${tierChipsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── Status Logo Renderer ──────────────────────────────────────────────────
+function getStatusLogoHtml(f, isGuest = false) {
+  const timeLocked = isLocked(f);
+  const fixtureInScope = isFixtureInGroupScope(f);
+  const isMatchInScope = isGuest || fixtureInScope;
+  const koFormatted = formatKO(f.kickoff_time);
+
+  // Check if active player has submitted a score for this match
+  const activePlayerId = state.auth?.activePlayerId;
+  let hasActivePrediction = false;
+  if (activePlayerId) {
+    const pred = state.predictions[`${f.id}_${activePlayerId}`];
+    hasActivePrediction = pred &&
+      pred.predicted_home !== null && pred.predicted_home !== undefined && pred.predicted_home !== '' &&
+      pred.predicted_away !== null && pred.predicted_away !== undefined && pred.predicted_away !== '';
+  }
+
+  // 1. Grey locked: predictions not allowed because match is out of group scope
+  if (!isMatchInScope) {
+    return `<span class="status-logo status-out-of-scope status-grey-locked" title="Locked - Match is outside active group scope (Predictions disabled)" aria-label="Locked: Out of Scope" role="img">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        <line x1="4" y1="4" x2="20" y2="20"></line>
+      </svg>
+    </span>`;
+  }
+
+  // 2. Red locked: player missed entering predictions before kickoff
+  if (timeLocked) {
+    if (!hasActivePrediction && !isGuest && activePlayerId) {
+      return `<span class="status-logo status-locked status-red-locked" title="Locked - Missed prediction deadline (${koFormatted})" aria-label="Locked: Missed Deadline" role="img">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </span>`;
+    }
+    return `<span class="status-logo status-locked status-submitted-locked" title="Closed - Kickoff passed (${koFormatted})" aria-label="Closed: Kickoff passed" role="img">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    </span>`;
+  }
+
+  // 3. Green unlocked: unlocked and allowed for entry (prediction entered & saved)
+  if (hasActivePrediction) {
+    return `<span class="status-logo status-open status-green-unlocked" title="Unlocked & Saved - Prediction entered (Kickoff: ${koFormatted})" aria-label="Unlocked and prediction entered" role="img">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+      </svg>
+    </span>`;
+  }
+
+  // 4. Yellow unlocked: open for entry based on established rules (prediction pending)
+  return `<span class="status-logo status-open-rules status-yellow-unlocked" title="Open for entry - Prediction pending (Kickoff: ${koFormatted})" aria-label="Open for entry" role="img">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+      <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+    </svg>
+  </span>`;
+}
+
+// ─── Render: Team Breakdown & Match Table ──────────────────────────────────────
+function renderTeamBreakdown() {
+  const card = document.getElementById('teamBreakdownCard');
+  if (!card) return;
+
+  const selectedTeams = getSelectedTeams();
+  if (selectedTeams.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+
+  if (selectedTeams.length === 1) {
+    const team = selectedTeams[0];
+    const club = getClubDetails(team) || Object.values(state.teams).find(t => t.name === team);
+    document.getElementById('teamBreakdownTitle').innerHTML = `${club?.fullName || team} <span class="team-title-short" style="color:var(--accent-cyan); font-size:0.9rem; font-weight:700;">(${club?.shortName || club?.short || ''})</span>`;
+    document.getElementById('teamBreakdownSubtitle').innerHTML = `
+      <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
+        ${club?.stadium ? `<span class="meta-chip" title="Home Stadium">🏟️ ${club.stadium}</span>` : ''}
+        ${club?.city ? `<span class="meta-chip" title="Club City">📍 ${club.city}</span>` : ''}
+        <span style="color:var(--text-muted); font-size:0.8rem;">Participant predictions & breakdown</span>
+      </span>
+    `;
+    const code = club?.code || Object.values(state.teams).find(t => t.name === team)?.code;
+    document.getElementById('teamBadgeIcon').innerHTML = getCrestImg(code, team);
+  } else {
+    document.getElementById('teamBreakdownTitle').textContent = selectedTeams.length <= 3
+      ? `${selectedTeams.join(' & ')} Matches & Predictions`
+      : `${selectedTeams.length} Selected Teams Matches & Predictions`;
+    document.getElementById('teamBreakdownSubtitle').textContent = `Participant performance on matches involving: ${selectedTeams.join(', ')}`;
+    const crestsHtml = `<div class="team-badge-stack">` +
+      selectedTeams.slice(0, 3).map(t => {
+        const c = Object.values(state.teams).find(tm => tm.name === t)?.code;
+        return `<span class="team-badge-stack-item">${getCrestImg(c, t)}</span>`;
+      }).join('') +
+      (selectedTeams.length > 3 ? `<span class="team-badge-stack-more">+${selectedTeams.length - 3}</span>` : '') +
+      `</div>`;
+    document.getElementById('teamBadgeIcon').innerHTML = crestsHtml;
+  }
+
+  const isGuest = state.auth.role === 'guest';
+  const players = isGuest ? [] : state.players;
+
+  const allTeamFixtures = [];
+  const seenFixtureIds = new Set();
+
+  for (const gw of state.gwNumbers) {
+    const rawGwFixtures = state.fixtures[gw] ?? [];
+    for (const f of rawGwFixtures) {
+      if (seenFixtureIds.has(f.id)) continue;
+      const isHomeSelected = selectedTeams.includes(f.home_name);
+      const isAwaySelected = selectedTeams.includes(f.away_name);
+      if (isHomeSelected || isAwaySelected) {
+        seenFixtureIds.add(f.id);
+        allTeamFixtures.push(f);
+      }
+    }
+  }
+
+  // Render Participant Stats Grid
+  const participantGrid = document.getElementById('teamParticipantGrid');
+  if (isGuest) {
+    participantGrid.innerHTML = `
+      <div style="grid-column: 1/-1; padding: 12px; color: var(--text-muted); font-size: 0.88rem;">
+        🔒 Participant predictions and statistics are hidden for guest users.
+      </div>`;
+  } else {
+    participantGrid.innerHTML = players.map((p) => {
+      let pts = 0, bullseyes = 0, correct = 0, played = 0;
+
+      for (const f of allTeamFixtures) {
+        if (f.actual_home_score === null || f.actual_away_score === null) continue;
+        const pred = state.predictions[`${f.id}_${p.id}`];
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+
+        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        if (!res) continue;
+        pts += res.total;
+        played++;
+        if (res.isExactScore) bullseyes++;
+        else if (res.isCorrectOutcome) correct++;
+      }
+
+      const pColor = getPlayerColor(p);
+      const isYou = state.auth.activePlayerId === p.id;
+
+      return `
+        <div class="participant-card ${isYou ? 'you-card' : ''}" style="border-top: 3px solid ${pColor};">
+          <div class="participant-header">
+            <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${pColor};margin-right:4px;"></span>
+            <span class="participant-name">${p.name}</span>
+            ${isYou ? '<span class="you-tag">You</span>' : ''}
+          </div>
+          <div class="participant-score" style="color:${pColor};">${pts}<span class="pts-unit">pts</span></div>
+          <div class="participant-breakdown">
+            <span class="mini-badge bullseye" title="Exact scorelines">🎯 ${bullseyes}</span>
+            <span class="mini-badge correct" title="Correct outcome only">✅ ${correct}</span>
+            <span class="mini-badge played" title="Finished matches">${played} m</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Render Team Match Table
+  const thead = document.getElementById('teamMatchesHead');
+  thead.innerHTML = `
+    <th class="gw-col-header" style="min-width:60px; white-space:nowrap; text-align:center;">GW</th>
+    <th class="col-match" style="text-align:left; white-space:nowrap;">Matchup</th>
+    <th class="col-result" style="white-space:nowrap; min-width:85px; text-align:center;">Status</th>
+    ${players.map((p) => {
+    const isYou = state.auth.activePlayerId === p.id;
+    const playerColor = getPlayerColor(p);
+    return `<th style="text-align:center; color:${playerColor}!important; white-space:nowrap;">
+        <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:5px;vertical-align:middle;"></span>
+        ${p.name}${isYou ? '<span class="you-tag">You</span>' : ''}
+      </th>`;
+  }).join('')}
+  `;
+
+  const tbody = document.getElementById('teamMatchesBody');
+  if (allTeamFixtures.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${3 + players.length}" style="text-align:center; padding:20px; color:var(--text-muted);">No fixtures found for selected teams.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = allTeamFixtures.map(f => {
+    const timeLocked = isLocked(f);
+    const fixtureInScope = isFixtureInGroupScope(f);
+    const isMatchInScope = isGuest || fixtureInScope;
+    const locked = timeLocked || !isMatchInScope;
+    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
+
+    let resultText = '';
+    if (hasResult) {
+      resultText = `<span class="actual-score-badge" title="Official Premier League Result">${f.actual_home_score}&nbsp;–&nbsp;${f.actual_away_score}</span>`;
+    } else {
+      resultText = getStatusLogoHtml(f, isGuest);
+    }
+
+    const playerCells = players.map((p) => {
+      const pred = state.predictions[`${f.id}_${p.id}`];
+      const pH = pred?.predicted_home ?? '';
+      const pA = pred?.predicted_away ?? '';
+      const canEdit = !locked && isPlayerEditable(p.id) && isMatchInScope;
+
+      let res = null;
+      if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
+        res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+      }
+
+      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res.total)}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}">${res.total}</span>` : '';
+
+      if (!canEdit) {
+        return `
+          <td style="text-align:center; white-space:nowrap;">
+            <div style="font-family:var(--font-title); font-weight:700; font-size:0.95rem; white-space:nowrap; ${!isMatchInScope ? 'color:var(--text-dim); opacity:0.7;' : ''}">${pH !== '' ? `${pH}&nbsp;–&nbsp;${pA}` : (locked ? '-' : '?')}</div>
+            ${ptsBadge}
+          </td>
+        `;
+      } else {
+        return `
+          <td style="text-align:center; white-space:nowrap;">
+            <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
+              <input type="number" min="0" max="99" class="score-input"
+                id="tb_inp_${f.id}_${p.id}_h"
+                value="${pH}"
+                data-match="${f.id}" data-player="${p.id}" data-side="h"
+                aria-label="${p.name} home score">
+              <span style="color:var(--text-dim); font-size:0.8rem; font-weight:700;">–</span>
+              <input type="number" min="0" max="99" class="score-input"
+                id="tb_inp_${f.id}_${p.id}_a"
+                value="${pA}"
+                data-match="${f.id}" data-player="${p.id}" data-side="a"
+                aria-label="${p.name} away score">
+            </div>
+          </td>
+        `;
+      }
+    }).join('');
+
+    const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
+    const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
+
+    return `
+      <tr>
+        <td class="gw-cell" style="font-weight:700; color:var(--accent-purple); white-space:nowrap; text-align:center;">GW ${f.event}</td>
+        <td class="col-match">
+          <div class="match-info">
+            <div class="match-teams">
+              <span class="match-team home-team">
+                ${getCrestImg(f.home_code, f.home_name)}
+                <span class="team-click-link ${selectedTeams.includes(f.home_name) ? 'active-filter' : ''}" data-team="${f.home_name}" title="${homeTitle}">
+                  <span class="team-name-full">${f.home_name}</span>
+                  <span class="team-name-short">${f.home_short || f.home_name.slice(0, 3).toUpperCase()}</span>
+                </span>
+              </span>
+              <span class="match-vs">vs</span>
+              <span class="match-team away-team">
+                ${getCrestImg(f.away_code, f.away_name)}
+                <span class="team-click-link ${selectedTeams.includes(f.away_name) ? 'active-filter' : ''}" data-team="${f.away_name}" title="${awayTitle}">
+                  <span class="team-name-full">${f.away_name}</span>
+                  <span class="team-name-short">${f.away_short || f.away_name.slice(0, 3).toUpperCase()}</span>
+                </span>
+              </span>
+            </div>
+            <div class="match-meta-line">
+              <span class="match-ko">${formatKO(f.kickoff_time)}</span>
+              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="col-result">${resultText}</td>
+        ${playerCells}
+      </tr>
+    `;
+  }).join('');
+
+  attachInputHandlers();
+  attachTeamLinkHandlers();
+}
+
+function attachTeamLinkHandlers() {
+  document.querySelectorAll('.team-click-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      const selected = e.target.dataset.team || e.target.closest('.team-click-link')?.dataset.team;
+      if (!selected) return;
+      if (state.selectedTeams.length === 1 && state.selectedTeams[0] === selected) {
+        clearTeamFilter();
+      } else {
+        setSelectedTeams([selected]);
+      }
+    });
+  });
+}
+
+// ─── Render: Gameweek Matrix ──────────────────────────────────────────────────
+function renderMatrix() {
+  const gw = state.activeGW;
+  if (!gw) return;
+
+  const isGuest = state.auth.role === 'guest';
+  const rawFixtures = state.fixtures[gw] ?? [];
+  const groupFilter = getGroupTeamsFilter(state.activeGroup);
+  let fixtures = isGuest ? rawFixtures : filterFixturesByGroup(rawFixtures);
+
+  const selectedTeams = getSelectedTeams();
+  const hasTeamFilter = selectedTeams.length > 0;
+
+  if (hasTeamFilter) {
+    fixtures = rawFixtures.filter(f => selectedTeams.includes(f.home_name) || selectedTeams.includes(f.away_name));
+  }
+
+  let titleAddon = '';
+  if (selectedTeams.length === 1) {
+    const details = getClubDetails(selectedTeams[0]);
+    titleAddon = ` (${details?.shortName || selectedTeams[0]})`;
+  } else if (selectedTeams.length > 1) {
+    titleAddon = ` (${selectedTeams.length} Teams)`;
+  }
+
+  const groupAddon = (!isGuest && state.activeGroup) ? ` - ${state.activeGroup.name}` : '';
+  const subtitleText = isGuest
+    ? '📌 Premier League Fixture Schedule & Official Scores'
+    : `📅 GW ${gw} Predictions${titleAddon}${groupAddon}`;
+
+  document.getElementById('matrixTitle').textContent = subtitleText;
+
+  const totalGWFixtures = fixtures.length;
+  const locked = fixtures.filter(f => isLocked(f)).length;
+
+  const scopeChip = (!isGuest && groupFilter)
+    ? `<span class="meta-chip" style="color:var(--accent-gold);border-color:var(--accent-gold)">🎯 Scope: ${groupFilter.length} Teams</span>`
+    : (!isGuest ? `<span class="meta-chip">⚽ All Teams Scope</span>` : '');
+
+  let filterChip = '';
+  if (selectedTeams.length === 1) {
+    const details = getClubDetails(selectedTeams[0]);
+    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]} (${details?.shortName || ''})</span>`;
+  } else if (selectedTeams.length > 1) {
+    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`;
+  }
+
+  document.getElementById('matrixMeta').innerHTML = `
+    ${scopeChip}
+    ${filterChip}
+    <span class="meta-chip">🔒 ${locked} locked</span>
+    <span class="meta-chip">⏳ ${totalGWFixtures - locked} open</span>
+  `;
+
+  let players = isGuest ? [] : [...state.players];
+  if (!isGuest && state.auth.activePlayerId) {
+    const youIdx = players.findIndex(p => p.id === state.auth.activePlayerId);
+    if (youIdx > 0) {
+      const [youPlayer] = players.splice(youIdx, 1);
+      players.unshift(youPlayer);
+    }
+  }
+  const head = document.getElementById('matrixHead');
+
+  if (isGuest) {
+    head.innerHTML = `
+      <tr>
+        <th class="col-match">Matchup</th>
+        <th class="col-ko">Kickoff Time</th>
+        <th class="col-status">Status</th>
+        <th class="col-result">Official Result</th>
+      </tr>
+    `;
+  } else {
+    head.innerHTML = `
+      <tr>
+        <th class="col-match" rowspan="2">Match</th>
+        <th class="col-status" rowspan="2">Status</th>
+        ${players.map((p) => {
+      const isYou = state.auth.activePlayerId === p.id;
+      const playerColor = getPlayerColor(p);
+      return `
+            <th colspan="3" class="th-friend-group" style="color:${playerColor}!important; border-bottom: 2px solid ${playerColor}55; background:${playerColor}12 !important;">
+              <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:6px;vertical-align:middle;box-shadow:0 0 6px ${playerColor}88;"></span>
+              <span class="player-header-name">${p.name}</span>${isYou ? '<span class="you-tag">You</span>' : ''}
+            </th>
+          `;
+    }).join('')}
+        <th class="col-result" rowspan="2">Result</th>
+      </tr>
+      <tr>
+        ${players.map(() => `
+          <th class="col-sub-h" title="Home score prediction">H</th>
+          <th class="col-sub-a" title="Away score prediction">A</th>
+          <th class="col-sub-pts" title="Points scored">Pts <span class="pts-info-help" data-rules-help="true" title="Click or tap to view scoring rules">ℹ️</span></th>
+        `).join('')}
+      </tr>
+    `;
+  }
+
+  const tbody = document.getElementById('matrixBody');
+
+  if (!isGuest && players.length === 0) {
+    const msg = state.auth.role === 'admin'
+      ? 'No players found in this group yet. Click "Manage Leagues & Players" to add people!'
+      : 'No players found in this group yet. Ask your league admin to add players!';
+    tbody.innerHTML = `<tr><td colspan="10" class="loading-state">${msg}</td></tr>`;
+    return;
+  }
+
+  if (fixtures.length === 0) {
+    const emptyMsg = isGuest
+      ? (hasTeamFilter ? `No fixtures found for selected team(s) in GW ${gw}.` : `No fixtures found for GW ${gw}.`)
+      : `No fixtures matching current scope/filter for GW ${gw}.`;
+    tbody.innerHTML = `<tr><td colspan="${isGuest ? 4 : (4 + players.length * 3)}" class="loading-state">${emptyMsg}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = fixtures.map(f => {
+    const timeLocked = isLocked(f);
+    const fixtureInScope = isFixtureInGroupScope(f);
+    const isMatchInScope = isGuest || fixtureInScope;
+    const locked = timeLocked || !isMatchInScope;
+    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
+
+    const statusHtml = getStatusLogoHtml(f, isGuest);
+
+    const actualHtml = hasResult
+      ? `<span class="actual-score-badge" title="Official Premier League Result">${f.actual_home_score}&nbsp;–&nbsp;${f.actual_away_score}</span>`
+      : `<span class="actual-score-badge pending" title="${timeLocked ? 'Match awaiting official result' : (!isMatchInScope ? 'Locked: Outside group scope' : 'Open for predictions')}">${timeLocked ? 'TBD' : '-'}</span>`;
+
+    const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
+    const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
+
+    if (isGuest) {
+      return `
+        <tr>
+          <td class="col-match">
+            <div class="match-info">
+              <div class="match-teams">
+                <span class="match-team home-team">
+                  ${getCrestImg(f.home_code, f.home_name)}
+                  <span class="team-click-link ${selectedTeams.includes(f.home_name) ? 'active-filter' : ''}" data-team="${f.home_name}" title="${homeTitle}">
+                    <span class="team-name-full">${f.home_name}</span>
+                    <span class="team-name-short">${f.home_short || f.home_name.slice(0, 3).toUpperCase()}</span>
+                  </span>
+                </span>
+                <span class="match-vs">vs</span>
+                <span class="match-team away-team">
+                  ${getCrestImg(f.away_code, f.away_name)}
+                  <span class="team-click-link ${selectedTeams.includes(f.away_name) ? 'active-filter' : ''}" data-team="${f.away_name}" title="${awayTitle}">
+                    <span class="team-name-full">${f.away_name}</span>
+                    <span class="team-name-short">${f.away_short || f.away_name.slice(0, 3).toUpperCase()}</span>
+                  </span>
+                </span>
+              </div>
+              <div class="match-meta-line">
+                ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+              </div>
+            </div>
+          </td>
+          <td class="col-ko">${formatKO(f.kickoff_time)}</td>
+          <td class="col-status">${statusHtml}</td>
+          <td class="col-result">${actualHtml}</td>
+        </tr>
+      `;
+    }
+
+    const playerCells = players.map((p) => {
+      const pred = state.predictions[`${f.id}_${p.id}`];
+      const pH = pred?.predicted_home ?? '';
+      const pA = pred?.predicted_away ?? '';
+      const canEdit = !locked && isPlayerEditable(p.id) && isMatchInScope;
+
+      let result = null;
+      if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null &&
+        pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
+        result = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+      }
+
+      const ptsClass = result ? ptsBadgeClass(result.total) : 'pending';
+      const ptsText = result ? result.total : (locked ? '-' : '?');
+      const ptsTitle = result ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') : '';
+
+      return `
+        <td class="col-score col-score-h">
+          <div class="score-inputs">
+            <input type="number" min="0" max="99" class="score-input"
+              id="inp_${f.id}_${p.id}_h"
+              value="${pH}"
+              data-match="${f.id}" data-player="${p.id}" data-side="h"
+              ${!canEdit ? 'disabled' : ''}
+              style="${!canEdit ? 'opacity: 0.65; cursor: not-allowed;' : ''}"
+              title="${!isMatchInScope ? 'Locked: Outside group scope' : (timeLocked ? 'Locked: Kickoff passed' : 'Enter predicted home score')}"
+              aria-label="${p.name} home score for ${f.home_name}">
+          </div>
+        </td>
+        <td class="col-score col-score-a">
+          <div class="score-inputs">
+            <input type="number" min="0" max="99" class="score-input"
+              id="inp_${f.id}_${p.id}_a"
+              value="${pA}"
+              data-match="${f.id}" data-player="${p.id}" data-side="a"
+              ${!canEdit ? 'disabled' : ''}
+              style="${!canEdit ? 'opacity: 0.65; cursor: not-allowed;' : ''}"
+              title="${!isMatchInScope ? 'Locked: Outside group scope' : (timeLocked ? 'Locked: Kickoff passed' : 'Enter predicted away score')}"
+              aria-label="${p.name} away score for ${f.away_name}">
+          </div>
+        </td>
+        <td class="col-pts">
+          <span class="pts-badge pts-interactive ${ptsClass}"
+            data-match="${f.id}"
+            data-player="${p.id}"
+            tabindex="0"
+            role="button"
+            aria-label="Points breakdown for ${p.name}"
+            title="${ptsTitle}">${ptsText}</span>
+        </td>
+      `;
+    }).join('');
+
+    return `
+      <tr>
+        <td class="col-match">
+          <div class="match-info">
+            <div class="match-teams">
+              <span class="match-team home-team">
+                ${getCrestImg(f.home_code, f.home_name)}
+                <span class="team-click-link ${selectedTeams.includes(f.home_name) ? 'active-filter' : ''}" data-team="${f.home_name}" title="${homeTitle}">
+                  <span class="team-name-full">${f.home_name}</span>
+                  <span class="team-name-short">${f.home_short || f.home_name.slice(0, 3).toUpperCase()}</span>
+                </span>
+              </span>
+              <span class="match-vs">vs</span>
+              <span class="match-team away-team">
+                ${getCrestImg(f.away_code, f.away_name)}
+                <span class="team-click-link ${selectedTeams.includes(f.away_name) ? 'active-filter' : ''}" data-team="${f.away_name}" title="${awayTitle}">
+                  <span class="team-name-full">${f.away_name}</span>
+                  <span class="team-name-short">${f.away_short || f.away_name.slice(0, 3).toUpperCase()}</span>
+                </span>
+              </span>
+            </div>
+            <div class="match-meta-line">
+              <span class="match-ko">${formatKO(f.kickoff_time)}</span>
+              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="col-status">${statusHtml}</td>
+        ${playerCells}
+        <td class="col-result">${actualHtml}</td>
+      </tr>
+    `;
+  }).join('');
+
+  if (!isGuest) attachInputHandlers();
+  attachTeamLinkHandlers();
+}
+
+// ─── Input Handlers (Server Auto-Save) ────────────────────────────────────────
+function attachInputHandlers() {
+  document.querySelectorAll('.score-input').forEach(input => {
+    input.addEventListener('blur', handleInputBlur);
+    input.addEventListener('input', () => {
+      const v = parseInt(input.value, 10);
+      if (!isNaN(v) && v < 0) input.value = 0;
+      if (!isNaN(v) && v > 99) input.value = 99;
+    });
+  });
+}
+
+async function handleInputBlur(e) {
+  const input = e.target;
+  const matchId = parseInt(input.dataset.match, 10);
+  const playerId = parseInt(input.dataset.player, 10);
+  if (!state.activeGroup) return;
+
+  if (!isPlayerEditable(playerId)) return;
+
+  // Scope & Lock validation
+  const fixture = state.fixtures[state.activeGW]?.find(f => f.id === matchId) ||
+    Object.values(state.fixtures).flat().find(f => f.id === matchId);
+  if (fixture) {
+    if (isLocked(fixture)) return;
+    if (!isFixtureInGroupScope(fixture)) {
+      console.warn('Prediction rejected: Match is outside group scope.');
+      return;
+    }
+  }
+
+  const hInput = document.getElementById(`inp_${matchId}_${playerId}_h`) || document.getElementById(`tb_inp_${matchId}_${playerId}_h`);
+  const aInput = document.getElementById(`inp_${matchId}_${playerId}_a`) || document.getElementById(`tb_inp_${matchId}_${playerId}_a`);
+
+  const hVal = hInput?.value ?? '';
+  const aVal = aInput?.value ?? '';
+
+  try {
+    await apiSavePrediction(matchId, playerId, state.activeGroup.id, hVal, aVal);
+
+    const key = `${matchId}_${playerId}`;
+    state.predictions[key] = {
+      predicted_home: hVal !== '' ? parseInt(hVal, 10) : null,
+      predicted_away: aVal !== '' ? parseInt(aVal, 10) : null,
+    };
+
+    [hInput, aInput].forEach(inp => {
+      if (!inp) return;
+      inp.classList.add('saved-flash');
+      setTimeout(() => inp.classList.remove('saved-flash'), 800);
+    });
+
+    showSaveToast();
+
+    updatePtsBadge(matchId, playerId);
+    renderLeaderboard();
+    renderSnapshot(calcLeaderboard());
+    renderCumulativeChart();
+    if (hasActiveTeamFilter()) renderTeamBreakdown();
+  } catch (err) {
+    console.error('Failed to save prediction to server:', err);
+    alert(err.message);
+  }
+}
+
+function updatePtsBadge(matchId, playerId) {
+  const fixture = state.fixtures[state.activeGW]?.find(f => f.id === matchId);
+  if (!fixture) return;
+  const pred = state.predictions[`${matchId}_${playerId}`];
+  const pIdx = state.players.findIndex(p => p.id === playerId);
+  if (pIdx === -1) return;
+
+  const row = document.querySelector(`[id="inp_${matchId}_${playerId}_h"]`)?.closest('tr');
+  if (!row) return;
+
+  let result = null;
+  if (fixture.actual_home_score !== null && fixture.actual_away_score !== null &&
+    pred?.predicted_home !== null && pred?.predicted_away !== null &&
+    pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
+    result = evaluatePrediction(
+      fixture.actual_home_score, fixture.actual_away_score,
+      pred.predicted_home, pred.predicted_away
+    );
+  }
+
+  const allBadges = row.querySelectorAll('.pts-badge');
+  const badge = allBadges[pIdx];
+  if (!badge) return;
+
+  const ptsClass = result ? ptsBadgeClass(result.total) : 'pending';
+  const ptsText = result ? result.total : (isLocked(fixture) ? '-' : '?');
+  const ptsTitle = result
+    ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '')
+    : '';
+
+  badge.className = `pts-badge pts-interactive ${ptsClass}`;
+  badge.textContent = ptsText;
+  badge.title = ptsTitle;
+  badge.setAttribute('data-match', matchId);
+  badge.setAttribute('data-player', playerId);
+  badge.setAttribute('tabindex', '0');
+  badge.setAttribute('role', 'button');
+
+  const statusCell = row.querySelector('.col-status');
+  if (statusCell) {
+    statusCell.innerHTML = getStatusLogoHtml(fixture, state.auth.role === 'guest');
+  }
+}
+
+function showSaveToast() {
+  const toast = document.getElementById('saveToast');
+  if (!toast) return;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ─── Render: Full Leaderboard ─────────────────────────────────────────────────
+function renderLeaderboard() {
+  const tbody = document.getElementById('leaderboardBody');
+  if (!tbody) return;
+
+  if (state.auth.role === 'guest') {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding: 30px; color: var(--text-muted);">
+          🔒 <strong>Leaderboard Table Hidden for Guests:</strong> Log in with a 6-character player passcode or admin password to view rankings and point totals.
+        </td>
+      </tr>`;
+    return;
+  }
+
+  const lb = calcLeaderboard();
+  if (lb.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding: 24px; color: var(--text-muted);">
+          No player data available for this group.
+        </td>
+      </tr>`;
+    return;
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+
+  tbody.innerHTML = lb.map(r => {
+    const isYou = state.auth.activePlayerId === r.id;
+    const playerColor = getPlayerColor(r);
+    return `
+      <tr class="${isYou ? 'active-player-row' : ''}">
+        <td class="lb-rank">${medals[r.rank - 1] ?? `#${r.rank}`}</td>
+        <td class="lb-name">
+          <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:8px;vertical-align:middle;"></span>
+          <span style="color:${playerColor};font-weight:600;">${r.name}</span>${isYou ? '<span class="you-tag">You</span>' : ''}
+        </td>
+        <td class="lb-tier-cell ${r.t1 === 0 ? 'lb-zero' : ''}" data-tier="1" data-player-name="${r.name}" data-count="${r.t1}" tabindex="0" role="button" aria-label="Tier 1 (The Vishwaguru) count for ${r.name}: ${r.t1}" title="Click or tap to learn what Tier 1 (The Vishwaguru) means">${r.t1}</td>
+        <td class="lb-tier-cell ${r.t2 === 0 ? 'lb-zero' : ''}" data-tier="2" data-player-name="${r.name}" data-count="${r.t2}" tabindex="0" role="button" aria-label="Tier 2 (The Manager) count for ${r.name}: ${r.t2}" title="Click or tap to learn what Tier 2 (The Manager) means">${r.t2}</td>
+        <td class="lb-tier-cell ${r.t3 === 0 ? 'lb-zero' : ''}" data-tier="3" data-player-name="${r.name}" data-count="${r.t3}" tabindex="0" role="button" aria-label="Tier 3 (The Fan) count for ${r.name}: ${r.t3}" title="Click or tap to learn what Tier 3 (The Fan) means">${r.t3}</td>
+        <td class="lb-tier-cell ${r.t4 === 0 ? 'lb-zero' : ''}" data-tier="4" data-player-name="${r.name}" data-count="${r.t4}" tabindex="0" role="button" aria-label="Tier 4 (The Pundit) count for ${r.name}: ${r.t4}" title="Click or tap to learn what Tier 4 (The Pundit) means">${r.t4}</td>
+        <td class="lb-tier-cell ${r.t5 === 0 ? 'lb-zero' : ''}" data-tier="5" data-player-name="${r.name}" data-count="${r.t5}" tabindex="0" role="button" aria-label="Tier 5 (The Casual) count for ${r.name}: ${r.t5}" title="Click or tap to learn what Tier 5 (The Casual) means">${r.t5}</td>
+        <td class="lb-tier-cell ${r.t6 === 0 ? 'lb-zero' : ''}" data-tier="6" data-player-name="${r.name}" data-count="${r.t6}" tabindex="0" role="button" aria-label="Tier 6 (The Infantino) count for ${r.name}: ${r.t6}" title="Click or tap to learn what Tier 6 (The Infantino) means">${r.t6}</td>
+        <td class="lb-pts">${r.total}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ─── Render: Cumulative Line Chart ────────────────────────────────────────────
+function renderCumulativeChart() {
+  const wrapper = document.getElementById('chartWrapper');
+  const legendContainer = document.getElementById('chartLegend');
+  if (!wrapper || !legendContainer) return;
+
+  if (state.auth.role === 'guest') {
+    wrapper.innerHTML = `
+      <div style="text-align:center; padding:40px; color:var(--text-muted);">
+        🔒 <strong>Points Progression Chart Hidden for Guests:</strong> Log in with a player passcode to view cumulative charts.
+      </div>`;
+    legendContainer.innerHTML = '';
+    return;
+  }
+
+  // Determine which gameweeks have ongoing or finished games
+  const isMatchActiveOrFinished = (f) => {
+    if (!f) return false;
+    return Boolean(
+      f.finished === true ||
+      f.started === true ||
+      isLocked(f) ||
+      (f.actual_home_score !== null && f.actual_away_score !== null)
+    );
+  };
+
+  const isGWActiveOrFinished = (gw) => {
+    const rawGwFixtures = state.fixtures[gw] ?? [];
+    const scopedFixtures = filterFixturesByGroup(rawGwFixtures);
+    const list = scopedFixtures.length > 0 ? scopedFixtures : rawGwFixtures;
+    return list.some(f => isMatchActiveOrFinished(f));
+  };
+
+  const gwList = state.gwNumbers;
+  const activeGwIndices = gwList
+    .map((gw, idx) => (isGWActiveOrFinished(gw) ? idx : -1))
+    .filter(idx => idx !== -1);
+  const maxPlayedGwIdx = activeGwIndices.length > 0 ? Math.max(...activeGwIndices) : -1;
+
+  const playerData = state.players.map((p, idx) => {
+    let cumulative = 0;
+    const pointsByGW = [];
+
+    for (const gw of state.gwNumbers) {
+      let gwPts = 0;
+      const rawGwFixtures = state.fixtures[gw] ?? [];
+      const fixtures = filterFixturesByGroup(rawGwFixtures);
+      for (const f of fixtures) {
+        if (f.actual_home_score === null || f.actual_away_score === null) continue;
+        const pred = state.predictions[`${f.id}_${p.id}`];
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+
+        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        if (res) gwPts += res.total;
+      }
+      cumulative += gwPts;
+      pointsByGW.push({ gw, gwPts, cumulative });
+    }
+
+    return {
+      id: p.id,
+      name: p.name,
+      color: getPlayerColor(p),
+      total: cumulative,
+      pointsByGW
+    };
+  });
+
+  if (playerData.length === 0 || state.gwNumbers.length === 0) {
+    wrapper.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">No player chart data available for this group.</div>`;
+    legendContainer.innerHTML = '';
+    return;
+  }
+
+  const sortedLegendPlayers = [...playerData].sort((a, b) => {
+    const isYouA = state.auth.activePlayerId === a.id;
+    const isYouB = state.auth.activePlayerId === b.id;
+    if (isYouA && !isYouB) return -1;
+    if (!isYouA && isYouB) return 1;
+    if (b.total !== a.total) return b.total - a.total;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+
+  legendContainer.innerHTML = sortedLegendPlayers.map(p => {
+    const isYou = state.auth.activePlayerId === p.id;
+    return `
+      <div class="chart-legend-chip ${isYou ? 'active' : ''}">
+        <span class="legend-dot" style="background: ${p.color};"></span>
+        <span>${p.name}${isYou ? ' (You)' : ''}</span>
+        <span class="legend-pts">${p.total} pts</span>
+      </div>
+    `;
+  }).join('');
+
+  const numGWs = state.gwNumbers.length;
+  const padLeft = 65;
+  const padRight = 25;
+  const padTop = 26;
+  const padBottom = 48;
+  const svgWidth = 1000;
+  const svgHeight = 280;
+
+  const chartW = svgWidth - padLeft - padRight;
+  const chartH = svgHeight - padTop - padBottom;
+
+  let maxPts = Math.max(10, ...playerData.map(p => p.total));
+  maxPts = Math.ceil(maxPts / 5) * 5;
+
+  const getX = (i) => padLeft + (numGWs > 1 ? (i / (numGWs - 1)) * chartW : chartW / 2);
+  const getY = (val) => padTop + chartH - (val / maxPts) * chartH;
+
+  // 1. Y-Axis Grid Lines & Tick Labels
+  let gridLinesSvg = '';
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = Math.round((maxPts / ySteps) * i);
+    const y = getY(val);
+    gridLinesSvg += `
+      <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
+      <text class="chart-axis-tick" x="${padLeft - 10}" y="${y + 4}" fill="var(--text-dim)" font-size="11" font-weight="600" text-anchor="end" font-family="var(--font-main)">${val}</text>
+    `;
+  }
+
+  // Y-Axis Baseline line
+  const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />`;
+
+  // Y-Axis Label
+  const yLabelX = 20;
+  const yLabelY = padTop + (chartH / 2);
+  const yAxisLabelSvg = `
+    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">POINTS</text>
+  `;
+
+  // 2. X-Axis Baseline & Gameweek Ticks
+  const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />`;
+
+  let xLabelsSvg = '';
+  gwList.forEach((gw, i) => {
+    const x = getX(i);
+    const isPlayed = i <= maxPlayedGwIdx;
+    xLabelsSvg += `
+      <line x1="${x}" y1="${padTop + chartH}" x2="${x}" y2="${padTop + chartH + 5}" stroke="${isPlayed ? 'rgba(56, 189, 248, 0.45)' : 'rgba(255,255,255,0.12)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+      <text class="chart-axis-tick" x="${x}" y="${padTop + chartH + 18}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${gw}</text>
+    `;
+  });
+
+  // X-Axis Label
+  const xLabelX = padLeft + (chartW / 2);
+  const xLabelY = padTop + chartH + 38;
+  const xAxisLabelSvg = `
+    <text class="chart-axis-label" x="${xLabelX}" y="${xLabelY}" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.14em" text-anchor="middle" font-family="var(--font-title)">GAMEWEEK</text>
+  `;
+
+  let linesSvg = '';
+  let markersSvg = '';
+
+  const hasActivePlayer = state.auth.activePlayerId != null && (state.auth.role === 'player' || (state.auth.role === 'admin' && state.auth.activePlayerId));
+
+  const sortedPlayersForSvg = [...playerData].sort((a, b) => {
+    const isYouA = state.auth.activePlayerId === a.id ? 1 : 0;
+    const isYouB = state.auth.activePlayerId === b.id ? 1 : 0;
+    return isYouA - isYouB;
+  });
+
+  sortedPlayersForSvg.forEach(p => {
+    const isYou = state.auth.activePlayerId === p.id;
+    const isDotted = hasActivePlayer ? !isYou : false;
+    const pts = p.pointsByGW;
+    // Only plot points for ongoing or completed gameweeks
+    const playedPts = pts.filter((pt, i) => i <= maxPlayedGwIdx);
+
+    const strokeWidth = isYou ? '3.5' : (hasActivePlayer ? '2' : '2.5');
+    const strokeDash = isDotted ? 'stroke-dasharray="4,4"' : '';
+    const opacity = isDotted ? '0.85' : '1';
+    const shadowFilter = isYou
+      ? `style="filter: drop-shadow(0 2px 6px ${p.color}88);"`
+      : `style="filter: drop-shadow(0 1px 3px ${p.color}44);"`;
+
+    if (playedPts.length >= 2) {
+      const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
+      const pathD = `M ${pathCoords}`;
+
+      linesSvg += `
+        <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" ${shadowFilter} />
+      `;
+    }
+
+    playedPts.forEach((pt, i) => {
+      const cx = getX(i);
+      const cy = getY(pt.cumulative);
+      const radius = isYou ? '4.5' : '3.5';
+      const strokeW = isYou ? '2.2' : '1.5';
+      const nodeClass = isYou ? 'chart-marker-node chart-marker-node-you' : 'chart-marker-node';
+
+      markersSvg += `
+        <g class="chart-marker-group" data-gw-idx="${i}">
+          <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-gw-idx="${i}" />
+        </g>
+      `;
+    });
+  });
+
+  // Calculate full standings per gameweek for multi-player tooltip
+  const gwStandings = gwList.map((gw, i) => {
+    const isPlayed = i <= maxPlayedGwIdx;
+    const list = playerData.map(p => {
+      const pt = p.pointsByGW[i] || { gw, gwPts: 0, cumulative: 0 };
+      return {
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        gwPts: pt.gwPts,
+        cumulative: pt.cumulative,
+        isYou: state.auth.activePlayerId === p.id
+      };
+    });
+
+    list.sort((a, b) => {
+      if (a.isYou && !b.isYou) return -1;
+      if (!a.isYou && b.isYou) return 1;
+      if (b.cumulative !== a.cumulative) return b.cumulative - a.cumulative;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    return {
+      gw,
+      isPlayed,
+      x: getX(i),
+      players: list
+    };
+  });
+
+  let crosshairsSvg = '';
+  let hitboxesSvg = '';
+  const colWidth = numGWs > 1 ? chartW / (numGWs - 1) : chartW;
+
+  gwList.forEach((gw, i) => {
+    const cx = getX(i);
+    crosshairsSvg += `
+      <line id="chartCrosshair_${i}" class="chart-crosshair" x1="${cx}" y1="${padTop}" x2="${cx}" y2="${padTop + chartH}" stroke="rgba(56, 189, 248, 0.45)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
+    `;
+
+    const boxX = numGWs > 1
+      ? (i === 0 ? padLeft - 10 : cx - colWidth / 2)
+      : padLeft;
+    const boxW = numGWs > 1
+      ? (i === 0 || i === numGWs - 1 ? colWidth / 2 + 10 : colWidth)
+      : chartW;
+
+    hitboxesSvg += `
+      <rect class="chart-col-hitbox" data-gw-idx="${i}" x="${boxX}" y="${padTop}" width="${boxW}" height="${chartH + padBottom}" fill="transparent" />
+    `;
+  });
+
+  wrapper.innerHTML = `
+    <div class="svg-container" style="width: 100%; position: relative;">
+      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="display: block; width: 100%; height: auto;">
+        ${gridLinesSvg}
+        ${yAxisLineSvg}
+        ${yAxisLabelSvg}
+        ${xAxisLineSvg}
+        ${xLabelsSvg}
+        ${xAxisLabelSvg}
+        ${crosshairsSvg}
+        ${linesSvg}
+        ${markersSvg}
+        ${hitboxesSvg}
+      </svg>
+      <div id="chartTooltip" class="chart-tooltip" style="display: none; position: absolute; pointer-events: none; z-index: 10;"></div>
+    </div>
+  `;
+
+  attachChartTooltipHandlers(gwStandings, svgWidth);
+}
+
+function attachChartTooltipHandlers(gwStandings, svgWidth) {
+  const tooltip = document.getElementById('chartTooltip');
+  const container = document.querySelector('.svg-container');
+  if (!tooltip || !container || !gwStandings?.length) return;
+
+  function showGWTooltip(gwIdx) {
+    const data = gwStandings[gwIdx];
+    if (!data) return;
+
+    // Show crosshair
+    document.querySelectorAll('.chart-crosshair').forEach((line, idx) => {
+      line.style.display = idx === gwIdx ? 'block' : 'none';
+    });
+
+    // Highlight markers for this GW
+    document.querySelectorAll('.chart-marker-node').forEach(node => {
+      const nodeGw = parseInt(node.getAttribute('data-gw-idx'), 10);
+      if (nodeGw === gwIdx) {
+        node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '6.5' : '5.5');
+      } else {
+        node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '4.5' : '3.5');
+      }
+    });
+
+    if (!data.isPlayed) {
+      tooltip.innerHTML = `
+        <div class="chart-tooltip-header">
+          <span>📅 GW ${data.gw} · Upcoming</span>
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-dim); text-align:center; padding:6px 0;">
+          Matches have not kicked off yet
+        </div>
+      `;
+    } else {
+      // Render multi-player list
+      tooltip.innerHTML = `
+        <div class="chart-tooltip-header">
+          <span>📅 GW ${data.gw} Standings</span>
+        </div>
+        <div class="chart-tooltip-list">
+          ${data.players.map(p => `
+            <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
+              <div class="chart-tooltip-player">
+                <span class="chart-tooltip-dot" style="background:${p.color};"></span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+              </div>
+              <div class="chart-tooltip-scores">
+                <span class="chart-tooltip-cum-pts">${p.cumulative} pts</span>
+                <span class="chart-tooltip-gw-pts" style="${p.gwPts > 0 ? '' : 'color:var(--text-dim);'}">(+${p.gwPts})</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Position tooltip
+    const containerRect = container.getBoundingClientRect();
+    const xRatio = data.x / svgWidth;
+    const targetX = xRatio * containerRect.width;
+    const tooltipWidth = 230;
+
+    if (targetX + tooltipWidth + 20 > containerRect.width) {
+      tooltip.style.left = `${Math.max(8, targetX - tooltipWidth - 14)}px`;
+    } else {
+      tooltip.style.left = `${targetX + 14}px`;
+    }
+    tooltip.style.top = '14px';
+    tooltip.style.display = 'block';
+  }
+
+  function hideGWTooltip() {
+    tooltip.style.display = 'none';
+    document.querySelectorAll('.chart-crosshair').forEach(line => {
+      line.style.display = 'none';
+    });
+    document.querySelectorAll('.chart-marker-node').forEach(node => {
+      node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '4.5' : '3.5');
+    });
+  }
+
+  container.querySelectorAll('.chart-col-hitbox, .chart-marker-group').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      showGWTooltip(idx);
+    });
+
+    el.addEventListener('mousemove', () => {
+      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      showGWTooltip(idx);
+    });
+
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      showGWTooltip(idx);
+    });
+
+    el.addEventListener('touchstart', () => {
+      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      showGWTooltip(idx);
+    }, { passive: true });
+  });
+
+  container.addEventListener('mouseleave', () => {
+    hideGWTooltip();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target)) {
+      hideGWTooltip();
+    }
+  });
+}
+
+// ─── Interactive Points Tooltip & Rules Popover ──────────────────────────────
+let tooltipPopoverEl = null;
+let tooltipBackdropEl = null;
+let activeTooltipTarget = null;
+
+function renderPointsTooltip(matchId, playerId, isGeneralRulesOnly) {
+  return generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly);
+}
+
+function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
+  if (isGeneralRulesOnly) {
+    return `
+      <span class="pts-sheet-handle"></span>
+      <div class="pts-tooltip-header">
+        <div class="pts-tooltip-header-left">
+          <div class="pts-tooltip-title-wrap">
+            <div class="pts-tooltip-icon-badge" style="background:rgba(56, 189, 248, 0.15); border-color:rgba(56, 189, 248, 0.35);">📖</div>
+            <div class="pts-tooltip-title-meta">
+              <div class="pts-tooltip-title-row">
+                <span class="pts-tooltip-tier-name">Scoring Engine Rules</span>
+              </div>
+              <div class="pts-tooltip-sub-label">Official Premier League Prediction System</div>
+            </div>
+          </div>
+        </div>
+        <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close rules guide">✕</button>
+      </div>
+
+      <div class="pts-rules-section" style="border-top:none; padding-top:0;">
+        <div class="pts-rules-title">
+          <span>🏆 Base Points</span>
+          <span class="pts-rules-sub">Highest achieved tier awarded</span>
+        </div>
+        <div class="pts-rules-list">
+          ${SCORING_TIERS.map(t => `
+            <div class="pts-rule-row tier-${t.tier}">
+              <div class="pts-rule-icon-box tier-${t.tier}">${getTierIconSvg(t.tier, 22) || t.icon}</div>
+              <div class="pts-rule-body">
+                <div class="pts-rule-top">
+                  <span class="pts-rule-name">${t.name}</span>
+                </div>
+                <div class="pts-rule-short">${t.desc}</div>
+                ${renderExampleContainer(t.example)}
+              </div>
+              <div class="pts-rule-pts pts-p${t.pts}">+${t.pts} pts</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="pts-rules-title" style="margin-top:16px;">
+          <span>🔥 Additive Bonus Points</span>
+          <span class="pts-rules-sub">Stackable on correct outcomes</span>
+        </div>
+        <div class="pts-rules-list">
+          ${SCORING_BONUSES.map(b => `
+            <div class="pts-rule-row bonus-row">
+              <div class="pts-rule-icon-box bonus-box">${b.icon}</div>
+              <div class="pts-rule-body">
+                <div class="pts-rule-top">
+                  <span class="pts-rule-name">${b.name}</span>
+                </div>
+                <div class="pts-rule-short">${b.desc}</div>
+                ${renderExampleContainer(b.example)}
+              </div>
+              <div class="pts-rule-pts pts-bonus">+${b.pts} pt</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Find fixture
+  let fixture = null;
+  for (const gw in state.fixtures) {
+    const found = state.fixtures[gw]?.find(item => item.id === matchId);
+    if (found) { fixture = found; break; }
+  }
+
+  // Find player
+  const player = state.players.find(p => p.id === playerId) || state.masterPlayers.find(p => p.id === playerId) || { id: playerId, name: 'Player' };
+  const isYou = state.auth.activePlayerId === playerId;
+  const pColor = getPlayerColor(player);
+
+  // Prediction data
+  const pred = state.predictions[`${matchId}_${playerId}`];
+  const pH = pred?.predicted_home ?? null;
+  const pA = pred?.predicted_away ?? null;
+
+  const actH = fixture?.actual_home_score ?? null;
+  const actA = fixture?.actual_away_score ?? null;
+
+  const breakdown = getPredictionBreakdown(actH, actA, pH, pA);
+
+  const homeCrest = fixture ? getCrestImg(fixture.home_code, fixture.home_name) : '';
+  const awayCrest = fixture ? getCrestImg(fixture.away_code, fixture.away_name) : '';
+  const matchTitle = fixture ? `${fixture.home_name} vs ${fixture.away_name}` : 'Premier League Match';
+  const gwText = fixture?.event ? `GW ${fixture.event}` : '';
+
+  let earnedPtsHtml = '';
+  if (breakdown.status === 'evaluated') {
+    earnedPtsHtml = `<div class="pts-score-total-val">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:var(--accent-green); text-transform:uppercase;">Points</span>`;
+  } else if (breakdown.status === 'no_prediction') {
+    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-rose);">0</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">No Pred</span>`;
+  } else {
+    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-cyan); font-size:1.05rem;">TBD</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Pending</span>`;
+  }
+
+  let formulaHtml = '';
+  if (breakdown.status === 'evaluated') {
+    const items = [];
+    items.push(`<span class="pts-formula-item">${breakdown.tierInfo.icon} ${breakdown.tierInfo.name} (+${breakdown.eval.base} pts)</span>`);
+    for (const b of breakdown.bonuses) {
+      items.push(`<span class="pts-formula-item bonus">${b.icon} ${b.name} (+${b.pts} pt)</span>`);
+    }
+    formulaHtml = `
+      <div class="pts-breakdown-card">
+        <div class="pts-breakdown-card-title">⚡ How This Score Was Achieved</div>
+        <div class="pts-breakdown-formula">${items.join('<span style="color:var(--text-dim);"> + </span>')} <span style="color:var(--accent-green); font-weight:800; margin-left:4px;">= ${breakdown.total} Pts Total</span></div>
+        <div class="pts-breakdown-explanation">${breakdown.explanation}</div>
+      </div>
+    `;
+  } else if (breakdown.status === 'no_prediction') {
+    formulaHtml = `
+      <div class="pts-breakdown-card" style="border-color:rgba(244,63,94,0.3); background:rgba(244,63,94,0.06);">
+        <div class="pts-breakdown-card-title" style="color:var(--accent-rose);">⚠️ Prediction Status</div>
+        <div class="pts-breakdown-explanation" style="color:var(--text-main);">No score prediction was entered by ${player.name} for this match (0 points awarded).</div>
+      </div>
+    `;
+  } else {
+    formulaHtml = `
+      <div class="pts-breakdown-card" style="border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.05);">
+        <div class="pts-breakdown-card-title">⏳ Match Pending</div>
+        <div class="pts-breakdown-explanation">Prediction submitted: <strong style="color:var(--text-main); font-family:var(--font-title);">${breakdown.predScore || 'None'}</strong>. Points will be automatically computed upon official match completion based on the tiers below.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <span class="pts-sheet-handle"></span>
+    <div class="pts-tooltip-header">
+      <div class="pts-tooltip-header-left">
+        <div class="pts-tooltip-match-title">
+          ${homeCrest}
+          <span>${matchTitle}</span>
+          ${awayCrest}
+          ${gwText ? `<span style="color:var(--accent-purple); font-size:0.75rem; font-weight:700;">(${gwText})</span>` : ''}
+        </div>
+        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
+        <div class="pts-tooltip-player-tag" style="border-color:${pColor}55; color:${pColor};">
+          <span class="player-color-dot" style="background:${pColor}; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
+          <span>${player.name}</span>
+          ${isYou ? '<span class="you-tag" style="margin-left:4px;">You</span>' : ''}
+        </div>
+      </div>
+      <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close breakdown">✕</button>
+    </div>
+
+    <div class="pts-tooltip-score-strip">
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">Predicted</div>
+        <div class="pts-score-box-value" style="color:${pH !== null ? 'var(--text-main)' : 'var(--text-dim)'};">${pH !== null ? `${pH} – ${pA}` : '-'}</div>
+      </div>
+      <div class="pts-score-sep">vs</div>
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">Actual Result</div>
+        <div class="pts-score-box-value" style="color:${actH !== null ? 'var(--accent-cyan)' : 'var(--text-dim)'};">${actH !== null ? `${actH} – ${actA}` : (fixture && isLocked(fixture) ? 'Locked' : 'Open')}</div>
+      </div>
+      <div class="pts-score-sep">=</div>
+      <div class="pts-score-total-box">
+        ${earnedPtsHtml}
+      </div>
+    </div>
+
+    ${formulaHtml}
+
+    <div class="pts-rules-section">
+      <div class="pts-rules-title">
+        <span>📖 Scoring Tiers Breakdown</span>
+        <span class="pts-rules-sub">Highest achieved tier awarded</span>
+      </div>
+      <div class="pts-rules-list">
+        ${SCORING_TIERS.map(t => {
+    const isAchieved = breakdown.tierInfo && breakdown.tierInfo.tier === t.tier;
+    return `
+            <div class="pts-rule-row ${isAchieved ? 'active-tier' : ''} tier-${t.tier}">
+              <div class="pts-rule-icon-box tier-${t.tier}">${getTierIconSvg(t.tier, 22) || t.icon}</div>
+              <div class="pts-rule-body">
+                <div class="pts-rule-top">
+                  <span class="pts-rule-name">${t.name}</span>
+                  ${isAchieved ? '<span class="pts-active-pill"><span class="pts-active-dot"></span>Awarded</span>' : ''}
+                </div>
+                <div class="pts-rule-short">${t.shortDesc || t.desc}</div>
+                ${renderExampleContainer(t.example)}
+              </div>
+              <div class="pts-rule-pts pts-p${t.pts}">+${t.pts} pts</div>
+            </div>
+          `;
+  }).join('')}
+      </div>
+
+      <div class="pts-rules-title" style="margin-top:14px;">
+        <span>🔥 Multipliers & Bonus Rules</span>
+        <span class="pts-rules-sub">Additive bonus points</span>
+      </div>
+      <div class="pts-rules-list">
+        ${SCORING_BONUSES.map(b => {
+    const isAchieved = breakdown.bonuses && breakdown.bonuses.some(ab => ab.type === b.type);
+    return `
+            <div class="pts-rule-row ${isAchieved ? 'active-tier bonus-row' : 'bonus-row'}">
+              <div class="pts-rule-icon-box bonus-box">${b.icon}</div>
+              <div class="pts-rule-body">
+                <div class="pts-rule-top">
+                  <span class="pts-rule-name">${b.name}</span>
+                  ${isAchieved ? '<span class="pts-active-pill bonus"><span class="pts-active-dot bonus"></span>Added</span>' : ''}
+                </div>
+                <div class="pts-rule-short">${b.desc}</div>
+                ${renderExampleContainer(b.example)}
+              </div>
+              <div class="pts-rule-pts pts-bonus">+${b.pts} pt</div>
+            </div>
+          `;
+  }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
+  const tier = SCORING_TIERS.find(t => t.tier === tierNumber);
+  if (!tier) return '<div style="padding:15px; color:var(--text-muted);">Tier information not found.</div>';
+
+  return `
+    <span class="pts-sheet-handle"></span>
+    <div class="pts-tooltip-header">
+      <div class="pts-tooltip-header-left">
+        <div class="pts-tooltip-title-wrap">
+          <div class="pts-tooltip-icon-badge tier-${tier.tier}">
+            <span>${getTierIconSvg(tier.tier, 24) || tier.icon}</span>
+          </div>
+          <div class="pts-tooltip-title-meta">
+            <div class="pts-tooltip-title-row">
+              <span class="pts-tooltip-tier-name">${tier.name}</span>
+              <span class="pts-tier-pts-pill pts-p${tier.pts}">+${tier.pts} Pts</span>
+            </div>
+            ${playerName ? `
+              <div class="pts-tooltip-player-badge">
+                <span class="pts-player-dot"></span>
+                <span class="pts-player-name">${playerName}</span>
+                <span class="pts-player-divider">·</span>
+                <span class="pts-player-stat"><strong>${count ?? 0}</strong> matches</span>
+                <span class="pts-player-pts-calc">(${(count ?? 0) * tier.pts} pts)</span>
+              </div>
+            ` : `<div class="pts-tooltip-sub-label">Scoring Tier ${tier.tier} of 6</div>`}
+          </div>
+        </div>
+      </div>
+      <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close tier details">✕</button>
+    </div>
+
+    <div class="pts-requirement-card tier-${tier.tier}">
+      <div class="pts-requirement-header">
+        <span class="pts-requirement-icon">📋</span>
+        <span class="pts-requirement-title">Tier Requirement</span>
+      </div>
+      <div class="pts-requirement-desc">${tier.desc}</div>
+      ${renderExampleContainer(tier.example)}
+    </div>
+
+    <div class="pts-rules-section">
+      <div class="pts-rules-title">
+        <span>📊 All Scoring Tiers Comparison</span>
+        <span class="pts-rules-sub">Highest match tier awarded</span>
+      </div>
+      <div class="pts-rules-list">
+        ${SCORING_TIERS.map(t => {
+    const isActive = t.tier === tierNumber;
+    return `
+            <div class="pts-rule-row ${isActive ? 'active-tier' : ''} tier-${t.tier}">
+              <div class="pts-rule-icon-box tier-${t.tier}">${t.icon}</div>
+              <div class="pts-rule-body">
+                <div class="pts-rule-top">
+                  <span class="pts-rule-name">${t.name}</span>
+                  ${isActive ? '<span class="pts-active-pill"><span class="pts-active-dot"></span>Active Tier</span>' : ''}
+                </div>
+                <div class="pts-rule-short">${t.shortDesc || t.desc}</div>
+                ${renderExampleContainer(t.example)}
+              </div>
+              <div class="pts-rule-pts pts-p${t.pts}">+${t.pts} pts</div>
+            </div>
+          `;
+  }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function positionTooltipPopover(targetEl) {
+  if (!tooltipPopoverEl || window.innerWidth <= 768) {
+    if (tooltipPopoverEl) {
+      tooltipPopoverEl.style.top = '';
+      tooltipPopoverEl.style.left = '';
+      tooltipPopoverEl.style.right = '';
+      tooltipPopoverEl.style.bottom = '';
+    }
+    return;
+  }
+
+  const rect = targetEl.getBoundingClientRect();
+  const popoverWidth = tooltipPopoverEl.offsetWidth || 390;
+  const popoverHeight = tooltipPopoverEl.offsetHeight || 420;
+  const margin = 12;
+
+  let top = rect.top - 10;
+  let left = rect.right + 10;
+
+  if (left + popoverWidth > window.innerWidth - margin) {
+    left = rect.left - popoverWidth - 10;
+  }
+
+  if (left < margin) {
+    left = Math.max(margin, Math.min(window.innerWidth - popoverWidth - margin, rect.left + rect.width / 2 - popoverWidth / 2));
+    top = rect.bottom + 10;
+    if (top + popoverHeight > window.innerHeight - margin) {
+      top = Math.max(margin, rect.top - popoverHeight - 10);
+    }
+  }
+
+  top = Math.max(margin, Math.min(window.innerHeight - popoverHeight - margin, top));
+  left = Math.max(margin, Math.min(window.innerWidth - popoverWidth - margin, left));
+
+  tooltipPopoverEl.style.top = `${top}px`;
+  tooltipPopoverEl.style.left = `${left}px`;
+  tooltipPopoverEl.style.right = 'auto';
+  tooltipPopoverEl.style.bottom = 'auto';
+}
+
+function showPointsTooltip(targetEl) {
+  if (!tooltipPopoverEl) initPointsTooltip();
+
+  const matchId = targetEl.dataset.match ? parseInt(targetEl.dataset.match, 10) : null;
+  const playerId = targetEl.dataset.player ? parseInt(targetEl.dataset.player, 10) : null;
+  const isRulesHelp = targetEl.dataset.rulesHelp === 'true';
+  const tier = targetEl.dataset.tier ? parseInt(targetEl.dataset.tier, 10) : null;
+  const playerName = targetEl.dataset.playerName || null;
+  const count = targetEl.dataset.count !== undefined ? targetEl.dataset.count : null;
+
+  activeTooltipTarget = targetEl;
+
+  if (tier) {
+    tooltipPopoverEl.innerHTML = renderTierHelpTooltip(tier, playerName, count);
+  } else {
+    tooltipPopoverEl.innerHTML = renderPointsTooltip(matchId, playerId, isRulesHelp);
+  }
+
+  tooltipPopoverEl.style.display = 'block';
+  document.getElementById('ptsTooltipCloseBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hidePointsTooltip();
+  });
+
+  tooltipBackdropEl?.classList.add('show');
+  positionTooltipPopover(targetEl);
+}
+
+function hidePointsTooltip() {
+  if (tooltipPopoverEl) {
+    tooltipPopoverEl.style.display = 'none';
+    tooltipBackdropEl?.classList.remove('show');
+    activeTooltipTarget = null;
+  }
+}
+
+function initPointsTooltip() {
+  if (!tooltipPopoverEl) {
+    tooltipPopoverEl = document.createElement('div');
+    tooltipPopoverEl.id = 'ptsTooltipPopover';
+    tooltipPopoverEl.className = 'pts-tooltip-popover';
+    tooltipPopoverEl.style.display = 'none';
+    document.body.appendChild(tooltipPopoverEl);
+  }
+
+  if (!tooltipBackdropEl) {
+    tooltipBackdropEl = document.createElement('div');
+    tooltipBackdropEl.id = 'ptsTooltipBackdrop';
+    tooltipBackdropEl.className = 'pts-tooltip-backdrop';
+    document.body.appendChild(tooltipBackdropEl);
+  }
+
+  const tooltipTriggerSelector = '.pts-badge.pts-interactive, .pts-info-help, .lb-tier-th, .lb-tier-cell';
+
+  // Touch / Click toggle handler ONLY (no hover/mouseover popups)
+  document.addEventListener('click', (e) => {
+    const badge = e.target.closest(tooltipTriggerSelector);
+    if (badge) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (activeTooltipTarget === badge) {
+        hidePointsTooltip();
+      } else {
+        showPointsTooltip(badge);
+      }
+      return;
+    }
+
+    if (tooltipPopoverEl && !tooltipPopoverEl.contains(e.target)) {
+      hidePointsTooltip();
+    }
+  });
+
+  // Keyboard accessibility
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hidePointsTooltip();
+  });
+
+  tooltipBackdropEl.addEventListener('click', () => hidePointsTooltip());
+
+  window.addEventListener('resize', () => {
+    if (activeTooltipTarget && tooltipPopoverEl.style.display !== 'none') {
+      positionTooltipPopover(activeTooltipTarget);
+    }
+  });
+}
+
+// ─── Management Page Rendering & Events ────────────────────────────────────────
+function renderTeamSelectionGrid() {
+  const grid = document.getElementById('mgmtTeamChipGrid');
+  if (!grid) return;
+
+  const teamNames = Object.values(state.teams).map(t => t.name).sort();
+  grid.innerHTML = teamNames.map(name => {
+    const teamObj = Object.values(state.teams).find(t => t.name === name);
+    const code = teamObj?.code;
+    const details = getClubDetails(name) || teamObj;
+    const title = `${name} (${details?.shortName || ''}) - 🏟️ ${details?.stadium || 'Stadium'}, ${details?.city || 'City'}`;
+    return `
+      <label class="team-filter-chip" title="${title}">
+        <input type="checkbox" value="${name}" class="mgmt-team-checkbox">
+        ${getCrestImg(code, name)}
+        <span class="team-name-full">${name}</span>
+        <span class="team-name-short">${details?.shortName || name.slice(0, 3).toUpperCase()}</span>
+      </label>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.mgmt-team-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const chip = cb.closest('.team-filter-chip');
+      if (cb.checked) chip.classList.add('selected');
+      else chip.classList.remove('selected');
+    });
+  });
+}
+
+function initManagementEvents() {
+  const teamModeRadios = document.getElementsByName('mgmtTeamMode');
+  const chipGrid = document.getElementById('mgmtTeamChipGrid');
+
+  teamModeRadios.forEach(r => {
+    r.addEventListener('change', (e) => {
+      if (chipGrid) {
+        chipGrid.style.display = e.target.value === 'CUSTOM' ? 'grid' : 'none';
+      }
+    });
+  });
+
+  document.getElementById('mgmtCreateGroupBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('mgmtNewGroupNameInput');
+    const name = input.value.trim();
+    if (!name) return;
+
+    let teamsFilter = 'ALL';
+    const mode = Array.from(teamModeRadios).find(r => r.checked)?.value;
+    if (mode === 'CUSTOM' && chipGrid) {
+      const selected = Array.from(chipGrid.querySelectorAll('.mgmt-team-checkbox:checked')).map(cb => cb.value);
+      if (selected.length === 0) {
+        alert('Please select at least one team for custom team scope, or switch to All Teams!');
+        return;
+      }
+      teamsFilter = selected;
+    }
+
+    try {
+      const newGroup = await apiCreateGroup(name, teamsFilter);
+      state.groups.push(newGroup);
+      state.activeGroup = newGroup;
+      input.value = '';
+
+      await reloadMasterData();
+      await loadActiveGroupData(newGroup.id);
+      populateGroupDropdown();
+      renderManagementPage();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById('mgmtCreatePlayerBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('mgmtNewPlayerNameInput');
+    const val = input.value.trim();
+    if (!val) return;
+
+    const defaultGroupIds = state.activeGroup ? [state.activeGroup.id] : [];
+
+    try {
+      const newPlayer = await apiCreateMasterPlayer(val, defaultGroupIds);
+      state.masterPlayers.push(newPlayer);
+      input.value = '';
+
+      if (newPlayer.passcode) {
+        alert(`Player "${newPlayer.name}" created!\n6-Character Passcode: ${newPlayer.passcode}`);
+      }
+
+      await reloadMasterData();
+      if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+      renderManagementPage();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById('mgmtSearchPlayerInput')?.addEventListener('input', (e) => {
+    state.playerSearchQuery = e.target.value.toLowerCase().trim();
+    renderMasterPlayersTable();
+  });
+}
+
+function renderManagementPage() {
+  renderTeamSelectionGrid();
+  renderGroupsGrid();
+  renderMasterPlayersTable();
+}
+
+function renderGroupsGrid() {
+  const grid = document.getElementById('mgmtGroupsGrid');
+  if (!grid) return;
+
+  if (state.groups.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1; color:var(--text-muted); padding:16px;">No groups created yet. Type a group name above to create one!</div>`;
+    return;
+  }
+
+  grid.innerHTML = state.groups.map(g => {
+    const groupPlayers = state.masterPlayers.filter(p => p.group_ids.includes(g.id));
+    const filter = getGroupTeamsFilter(g);
+    const scopeLabel = filter ? `🎯 Scope: ${filter.length} Teams (${filter.slice(0, 3).join(', ')}${filter.length > 3 ? '...' : ''})` : '⚽ Scope: All Teams';
+
+    return `
+      <div class="mgmt-group-card">
+        <div class="mgmt-group-header">
+          <input type="text" class="form-input mgmt-group-name-input" data-id="${g.id}" value="${g.name}" style="font-weight:700; font-family:var(--font-title); font-size:1.05rem;" />
+          <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group">🗑️</button>
+        </div>
+        <div style="font-size:0.8rem; color:var(--accent-purple); font-weight:600; margin: 4px 0;">
+          ${scopeLabel}
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+          <span>👥 ${groupPlayers.length} Members</span>
+          <span style="color:var(--text-dim);">ID #${g.id}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.mgmt-group-name-input').forEach(input => {
+    input.addEventListener('change', async () => {
+      const gId = parseInt(input.dataset.id, 10);
+      const val = input.value.trim();
+      if (!val) return;
+      try {
+        const group = state.groups.find(g => g.id === gId);
+        const filterVal = group ? group.teams_filter : 'ALL';
+        await apiRenameGroup(gId, val, filterVal);
+        if (group) group.name = val;
+        populateGroupDropdown();
+        renderMasterPlayersTable();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  grid.querySelectorAll('.delete-group-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const gId = parseInt(btn.dataset.id, 10);
+      const group = state.groups.find(g => g.id === gId);
+      if (!confirm(`Delete group "${group ? group.name : gId}"?`)) return;
+
+      try {
+        await apiDeleteGroup(gId);
+        await reloadMasterData();
+        populateGroupDropdown();
+        if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+        renderManagementPage();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+}
+
+function renderMasterPlayersTable() {
+  const tbody = document.getElementById('mgmtPlayersBody');
+  if (!tbody) return;
+
+  let players = state.masterPlayers;
+  if (state.playerSearchQuery) {
+    players = players.filter(p => p.name.toLowerCase().includes(state.playerSearchQuery));
+  }
+
+  if (players.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">No players found. Add someone to your master directory above!</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = players.map(p => {
+    const groupPills = state.groups.map(g => {
+      const isMember = p.group_ids.includes(g.id);
+      return `
+        <span class="group-tag-pill ${isMember ? 'active' : ''}"
+              data-player-id="${p.id}"
+              data-group-id="${g.id}"
+              data-is-member="${isMember}">
+          ${isMember ? '✓' : '+'} ${g.name}
+        </span>
+      `;
+    }).join('');
+
+    const passcodeDisplay = state.auth.role === 'admin'
+      ? `<div style="display:flex; align-items:center; justify-content:center; gap:6px;">
+          <span class="passcode-chip" title="Click to copy passcode">${p.passcode || '-'}</span>
+          <button class="btn-icon copy-passcode-btn" data-code="${p.passcode || ''}" title="Copy Passcode">📋</button>
+          <button class="btn-icon reset-passcode-btn" data-id="${p.id}" title="Reset 6-Char Passcode">🔄</button>
+         </div>`
+      : `<span style="color:var(--text-dim); font-size:0.8rem;">🔒 Hidden</span>`;
+
+    return `
+      <tr>
+        <td>
+          <input type="text" class="form-input mgmt-player-name-input" data-id="${p.id}" value="${p.name}" style="font-weight:600;" />
+        </td>
+        <td>
+          <div class="group-tag-pill-container">
+            ${groupPills}
+          </div>
+        </td>
+        <td style="text-align: center;">
+          ${passcodeDisplay}
+        </td>
+        <td style="text-align: center;">
+          <button class="btn-icon delete-master-player-btn" data-id="${p.id}" title="Remove Person from Directory">🗑️ Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('.copy-passcode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.dataset.code;
+      if (!code) return;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = '✅';
+        setTimeout(() => btn.textContent = '📋', 1200);
+      }).catch(() => { });
+    });
+  });
+
+  tbody.querySelectorAll('.reset-passcode-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pId = parseInt(btn.dataset.id, 10);
+      const player = state.masterPlayers.find(p => p.id === pId);
+      if (!confirm(`Regenerate passcode for "${player ? player.name : pId}"?`)) return;
+
+      try {
+        const res = await apiResetPasscode(pId);
+        alert(`New 6-character passcode for ${player ? player.name : 'player'}: ${res.passcode}`);
+        await reloadMasterData();
+        renderMasterPlayersTable();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.group-tag-pill').forEach(pill => {
+    pill.addEventListener('click', async () => {
+      const pId = parseInt(pill.dataset.playerId, 10);
+      const gId = parseInt(pill.dataset.groupId, 10);
+      const isMember = pill.dataset.isMember === 'true';
+
+      try {
+        if (isMember) {
+          await apiRemovePlayerFromGroup(pId, gId);
+        } else {
+          await apiAssignPlayerToGroup(pId, gId);
+        }
+
+        await reloadMasterData();
+        if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+        populateGroupDropdown();
+        renderManagementPage();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.mgmt-player-name-input').forEach(input => {
+    input.addEventListener('change', async () => {
+      const pId = parseInt(input.dataset.id, 10);
+      const val = input.value.trim();
+      if (!val) return;
+
+      try {
+        await apiRenameMasterPlayer(pId, val);
+        const player = state.masterPlayers.find(p => p.id === pId);
+        if (player) player.name = val;
+        if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.delete-master-player-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pId = parseInt(btn.dataset.id, 10);
+      const player = state.masterPlayers.find(p => p.id === pId);
+      if (!confirm(`Delete "${player ? player.name : pId}" from master directory?`)) return;
+
+      try {
+        await apiDeleteMasterPlayer(pId);
+        await reloadMasterData();
+        if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+        populateGroupDropdown();
+        renderManagementPage();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+}
+
+function initCopyBtn() {
+  document.getElementById('copyLeaderboardBtn')?.addEventListener('click', () => {
+    const lb = calcLeaderboard();
+    const medals = ['🥇', '🥈', '🥉'];
+    const text = lb.map(r =>
+      `${medals[r.rank - 1] ?? '#' + r.rank} ${r.name}: ${r.total} pts (🎯 T1: ${r.t1} | ✅ T2: ${r.t2} | ⚽ T3: ${r.t3} | 👍 T4: ${r.t4} | 🎗️ T5: ${r.t5} | ❌ T6: ${r.t6})`
+    ).join('\n');
+    navigator.clipboard.writeText(text).catch(() => { });
+  });
+}
+
+function startLockRefresh() {
+  setInterval(() => {
+    if (state.activeGW && state.activeView === 'dashboard') renderMatrix();
+  }, 60_000);
+}
+
+// ─── Init Application ────────────────────────────────────────────────────────
+async function init() {
+  startClock();
+  initThemeSelector();
+  initTimezoneSelector();
+  initNavigation();
+  initGroupEvents();
+  initGWSkipControls();
+  initManagementEvents();
+  initCopyBtn();
+  startLockRefresh();
+  initPointsTooltip();
+
+  document.getElementById('matrixBody').innerHTML = `
+    <tr><td colspan="10">
+      <div class="loading-state"><div class="spinner"></div><span>Connecting to backend server & fetching FPL data…</span></div>
+    </td></tr>`;
+
+  try {
+    await initAuth();
+    await reloadMasterData();
+    populateGroupDropdown();
+
+    if (state.activeGroup) {
+      await loadActiveGroupData(state.activeGroup.id);
+    }
+
+    const { gwNumbers, byGW, teams } = await fetchFixtures();
+    state.gwNumbers = gwNumbers;
+    state.fixtures = byGW;
+    state.teams = teams;
+
+    const savedGW = parseInt(localStorage.getItem('epl_active_gw'), 10);
+    if (savedGW && gwNumbers.includes(savedGW)) {
+      state.activeGW = savedGW;
+    } else {
+      const now = new Date();
+      state.activeGW = gwNumbers.find(gw =>
+        byGW[gw].some(f => new Date(f.kickoff_time) > now)
+      ) ?? gwNumbers[0];
+    }
+
+    populateTeamFilter();
+    renderGWTabs();
+    renderDashboardComponents();
+    initKickoffAndVisibilityEvents();
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('matrixBody').innerHTML = `
+      <tr><td colspan="10">
+        <div class="error-state">
+          <span style="font-size:2rem">⚠️</span>
+          <strong>Could not connect to backend server</strong>
+          <span>${err.message}</span>
+          <button class="btn btn-primary" onclick="location.reload()">🔄 Retry</button>
+        </div>
+      </td></tr>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);

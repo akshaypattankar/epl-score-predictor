@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EPL Score Predictor - Premier League Dashboard</title>
+  <meta name="description"
+    content="Track, predict and compare Premier League match scores with friends in mini-leagues." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap"
+    rel="stylesheet" />
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <!-- ── APP HEADER ─────────────────────────────────────── -->
+    <header class="app-header glass-card">
+      <div class="header-main-row">
+
+        <!-- Brand -->
+        <div class="brand">
+          <span class="brand-icon">⚽</span>
+          <div class="brand-text">
+            <h1>EPL Predictor</h1>
+            <span class="brand-tag">2026/27 Premier League</span>
+          </div>
+        </div>
+
+        <!-- Main Navigation View Tabs -->
+        <nav class="nav-view-tabs">
+          <button class="nav-tab active" id="navDashboardBtn">⚽ Dashboard</button>
+          <button class="nav-tab" id="navScoringBtn">📖 Rules & Scoring</button>
+          <button class="nav-tab" id="navManagementBtn" style="display: none;">⚙️ Manage Leagues & Players</button>
+        </nav>
+
+        <!-- Right Side: Preferences, Auth, Clock -->
+        <div class="header-right-group">
+          <!-- Theme & Timezone Selectors -->
+          <div class="header-pref-group">
+            <select id="themeSelect" class="control-dropdown theme-dropdown" title="Change Visual Theme">
+              <option value="midnight">🌙 Midnight Slate</option>
+              <option value="emerald">🌲 Obsidian Emerald</option>
+              <option value="indigo">🔮 Deep Indigo</option>
+            </select>
+            <select id="timezoneSelect" class="control-dropdown timezone-dropdown"
+              title="Select Match Kickoff Timezone">
+              <option value="UTC">🌐 UTC</option>
+              <option value="Europe/London">🇬🇧 London (UK)</option>
+              <option value="Asia/Kolkata">🇮🇳 India (IST)</option>
+              <option value="America/New_York">🇺🇸 New York (ET)</option>
+              <option value="America/Chicago">🇺🇸 Chicago (CT)</option>
+              <option value="America/Denver">🇺🇸 Denver (MT)</option>
+              <option value="America/Los_Angeles">🇺🇸 Los Angeles (PT)</option>
+              <option value="Europe/Paris">🇪🇺 Paris / Berlin (CET)</option>
+              <option value="Asia/Dubai">🇦🇪 Dubai (GST)</option>
+              <option value="Asia/Singapore">🇸🇬 Singapore / HK (SGT)</option>
+              <option value="Asia/Tokyo">🇯🇵 Tokyo (JST)</option>
+              <option value="Australia/Sydney">🇦🇺 Sydney (AEST)</option>
+              <option value="Pacific/Auckland">🇳🇿 Auckland (NZST)</option>
+              <option value="Africa/Lagos">🇳🇬 Lagos (WAT)</option>
+              <option value="Africa/Johannesburg">🇿🇦 Johannesburg (SAST)</option>
+            </select>
+          </div>
+
+          <!-- Auth Control & Status -->
+          <div class="header-auth-box" id="authControlBox">
+            <span class="auth-status-badge" id="authStatusBadge">👤 Guest (View Only)</span>
+            <button class="btn btn-sm btn-primary" id="authLoginBtn">🔒 Log In</button>
+            <button class="btn btn-sm" id="authLogoutBtn" style="display:none;">🚪 Log Out</button>
+          </div>
+
+          <!-- Live Clock -->
+          <div class="utc-clock" id="utcClock">--:-- UTC</div>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- ═════════════════════════════════════════════════════ -->
+    <!-- ── VIEW 1: PREDICTIONS DASHBOARD ──────────────────── -->
+    <!-- ═════════════════════════════════════════════════════ -->
+    <div id="dashboardView">
+
+      <!-- GUEST MODE BANNER -->
+      <div class="guest-mode-banner" id="guestNoticeBanner" style="display: none;">
+        <div class="guest-mode-banner-text">
+          <span style="font-size: 1.3rem;">ℹ️</span>
+          <div>
+            <strong>Viewing as Guest:</strong> Displaying Premier League fixture schedules and official scores.
+            Log in with your 6-character player passcode or admin password to view player predictions, scores, and
+            leaderboards!
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="bannerLoginBtn">🔒 Log In</button>
+      </div>
+
+      <!-- DASHBOARD WORKSPACE TOOLBAR -->
+      <div class="dashboard-toolbar glass-card" id="dashboardToolbar">
+        <div class="toolbar-left">
+          <!-- Group Selector (Hidden for Guests) -->
+          <div class="toolbar-item" id="groupSelectBox" style="display: none;">
+            <label for="groupSelect" class="toolbar-label">👥 League:</label>
+            <select id="groupSelect" class="control-dropdown group-dropdown">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <!-- Team Multi-Select with Crests -->
+          <div class="toolbar-item team-filter-item" id="teamFilterContainer">
+            <label class="toolbar-label" id="teamFilterLabel">⚽ Team:</label>
+            <div class="team-multiselect" id="teamMultiSelect">
+              <button class="team-multiselect-btn" id="teamMultiSelectBtn" type="button" aria-haspopup="listbox"
+                aria-expanded="false" aria-labelledby="teamFilterLabel">
+                <div class="team-multiselect-display" id="teamMultiSelectDisplay">
+                  <span class="team-filter-all-icon">⚽</span>
+                  <span class="team-filter-text">All Teams (20)</span>
+                </div>
+                <span class="team-multiselect-arrow">▾</span>
+              </button>
+
+              <div class="team-multiselect-dropdown glass-card" id="teamMultiSelectDropdown" style="display: none;"
+                role="listbox" aria-multiselectable="true">
+                <div class="team-dropdown-header">
+                  <div class="team-dropdown-search-box">
+                    <span class="team-search-icon">🔍</span>
+                    <input type="text" id="teamSearchInput" class="team-search-input" placeholder="Search teams..."
+                      autocomplete="off">
+                    <button type="button" id="teamSearchClearBtn" class="team-search-clear" style="display: none;"
+                      title="Clear search">✕</button>
+                  </div>
+                  <div class="team-dropdown-actions">
+                    <button type="button" class="team-action-btn" id="teamSelectAllBtn"
+                      title="Select all 20 Premier League teams">Select All</button>
+                    <button type="button" class="team-action-btn" id="teamClearAllBtn"
+                      title="Reset filter to all teams">Reset (All)</button>
+                    <button type="button" class="team-action-btn scope-action" id="teamSelectScopeBtn"
+                      style="display: none;" title="Select only teams in current league scope">🎯 Scope Only</button>
+                  </div>
+                </div>
+
+                <div class="team-dropdown-list" id="teamDropdownList">
+                  <!-- Populated dynamically with team crests and multi-checkboxes -->
+                </div>
+
+                <div class="team-dropdown-footer">
+                  <span id="teamFilterCountSummary" class="team-filter-count-summary">All 20 teams shown</span>
+                  <button type="button" class="btn btn-sm btn-primary" id="teamFilterApplyBtn">Done</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Admin Player Switcher (Only visible in Admin mode) -->
+          <div class="toolbar-item" id="adminPlayerBox" style="display: none;">
+            <label for="adminPlayerSelect" class="toolbar-label">👤 Play As:</label>
+            <select id="adminPlayerSelect" class="control-dropdown admin-player-dropdown" title="Participate as a user">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+        </div>
+
+        <div class="toolbar-right" id="dashboardToolbarMeta">
+          <!-- Dynamic info chips like scope, filter, etc. -->
+        </div>
+      </div>
+
+      <!-- Gameweek Navigation Strip with Arrow Steppers -->
+      <div class="gw-nav-strip glass-card" id="gwNavStrip">
+        <div class="gw-nav-controls">
+          <button class="gw-arrow-btn" id="gwPrevBtn" title="Previous Gameweek"
+            aria-label="Previous Gameweek">◀</button>
+          <span class="gw-strip-label" id="gwCurrentLabel">Gameweeks</span>
+        </div>
+        <nav class="gw-tabs" id="gwTabs">
+          <!-- rendered by JS -->
+        </nav>
+        <div class="gw-nav-controls">
+          <button class="gw-arrow-btn" id="gwNextBtn" title="Next Gameweek" aria-label="Next Gameweek">▶</button>
+        </div>
+      </div>
+
+      <!-- LEADERBOARD SNAPSHOT -->
+      <section class="snapshot-grid" id="leaderboardSnapshot">
+        <!-- rendered by JS -->
+      </section>
+
+      <!-- TEAM BREAKDOWN & PARTICIPANT STATS (When filtered) -->
+      <section class="glass-card team-breakdown-section" id="teamBreakdownCard" style="display: none;">
+        <div class="section-header">
+          <div class="team-breakdown-title-box">
+            <div class="team-badge-icon" id="teamBadgeIcon">⚽</div>
+            <div>
+              <h2 id="teamBreakdownTitle">Arsenal Predictions & Stats</h2>
+              <p id="teamBreakdownSubtitle">Participant performance breakdown on matches involving this team</p>
+            </div>
+          </div>
+          <div class="team-breakdown-actions">
+            <button class="btn btn-sm" id="clearTeamFilterBtn">✕ Clear Team Filter</button>
+          </div>
+        </div>
+
+        <div class="team-participant-grid" id="teamParticipantGrid">
+          <!-- Rendered by JS -->
+        </div>
+
+        <div class="team-matches-wrapper" style="margin-top: 20px;">
+          <h3 style="font-family: var(--font-title); font-size: 1rem; margin-bottom: 12px; color: var(--text-main);">
+            📋 Match Predictions & Outcomes
+          </h3>
+          <div class="table-responsive">
+            <table class="data-table team-matches-table" id="teamMatchesTable">
+              <thead>
+                <tr id="teamMatchesHead">
+                  <!-- Rendered by JS -->
+                </tr>
+              </thead>
+              <tbody id="teamMatchesBody">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- GAMEWEEK MATRIX -->
+      <section class="glass-card matrix-section">
+        <div class="section-header">
+          <div>
+            <h2 id="matrixTitle">📅 GW 1 Predictions</h2>
+            <p id="matrixSubtitle">Enter your scores before kick-off - fields lock automatically</p>
+          </div>
+          <div class="matrix-meta" id="matrixMeta"></div>
+        </div>
+        <div class="matrix-wrapper">
+          <table class="matrix-table" id="matrixTable">
+            <thead id="matrixHead"></thead>
+            <tbody id="matrixBody"></tbody>
+          </table>
+        </div>
+        <div class="save-toast" id="saveToast">✅ Saved to Server</div>
+      </section>
+
+      <!-- LEADERBOARD -->
+      <section class="glass-card" style="margin-top: 24px;">
+        <div class="section-header">
+          <div>
+            <h2>🏆 Leaderboard</h2>
+            <p>Scoring tier breakdown and total points for active group</p>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="leaderboardTable">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">Rank</th>
+                <th>Player</th>
+                <th class="lb-tier-th" data-tier="1" tabindex="0" role="button" aria-label="Tier 1 Rules: The Vishwaguru"
+                  title="Click or tap to learn what Tier 1 means">
+                  <div class="th-tier-title">🔮 Tier 1</div>
+                  <div class="th-tier-sub">6 pts</div>
+                </th>
+                <th class="lb-tier-th" data-tier="2" tabindex="0" role="button" aria-label="Tier 2 Rules: The Manager"
+                  title="Click or tap to learn what Tier 2 means">
+                  <div class="th-tier-title">📋 Tier 2</div>
+                  <div class="th-tier-sub">4 pts</div>
+                </th>
+                <th class="lb-tier-th" data-tier="3" tabindex="0" role="button" aria-label="Tier 3 Rules: The Fan"
+                  title="Click or tap to learn what Tier 3 means">
+                  <div class="th-tier-title">🎙️ Tier 3</div>
+                  <div class="th-tier-sub">3 pts</div>
+                </th>
+                <th class="lb-tier-th" data-tier="4" tabindex="0" role="button" aria-label="Tier 4 Rules: The Pundit"
+                  title="Click or tap to learn what Tier 4 means">
+                  <div class="th-tier-title">📣 Tier 4</div>
+                  <div class="th-tier-sub">2 pts</div>
+                </th>
+                <th class="lb-tier-th" data-tier="5" tabindex="0" role="button"
+                  aria-label="Tier 5 Rules: The Casual" title="Click or tap to learn what Tier 5 means">
+                  <div class="th-tier-title">🎲 Tier 5</div>
+                  <div class="th-tier-sub">1 pt</div>
+                </th>
+                <th class="lb-tier-th" data-tier="6" tabindex="0" role="button" aria-label="Tier 6 Rules: The Infantino"
+                  title="Click or tap to learn what Tier 6 means">
+                  <div class="th-tier-title">🛋️ Tier 6</div>
+                  <div class="th-tier-sub">0 pts</div>
+                </th>
+                <th class="lb-total-th" title="Total Cumulative Points">
+                  <div class="th-tier-title">Total</div>
+                  <div class="th-tier-sub">Pts</div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CUMULATIVE PROGRESSION CHART -->
+      <section class="glass-card chart-section" style="margin-top: 24px;">
+        <div class="section-header" style="flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2>📈 Leaderboard Points Progression</h2>
+            <p>Cumulative total points tracked across all completed gameweeks</p>
+          </div>
+          <div class="chart-legend-container" id="chartLegend">
+            <!-- Player color legend chips rendered by JS -->
+          </div>
+        </div>
+
+        <div class="chart-canvas-wrapper" id="chartWrapper">
+          <!-- Responsive SVG Line Chart with Markers & Tooltips rendered by JS -->
+        </div>
+      </section>
+
+    </div><!-- /#dashboardView -->
+
+    <!-- ═════════════════════════════════════════════════════ -->
+    <!-- ── VIEW 2: SCORING & RULES EXPLAINER PAGE ─────────── -->
+    <!-- ═════════════════════════════════════════════════════ -->
+    <div id="scoringView" style="display: none;">
+
+      <!-- Section Header -->
+      <div class="mgmt-page-header">
+        <div>
+          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
+            📖 Official Scoring Engine Specification
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Learn how predictions earn base points across 6 tiers, plus additive bonus points for high-scoring thrillers
+            and exact draw predictions.
+          </p>
+        </div>
+      </div>
+
+      <!-- Point Tiers Summary Grid -->
+      <div class="scoring-rules-grid"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+        <div class="glass-card scoring-rule-card tier-1">
+          <div class="rule-icon"><img src="assets/icons/oracle.svg" width="36" height="36" alt="The Vishwaguru" /></div>
+          <div class="rule-title">Tier 1 - The Vishwaguru</div>
+          <div class="rule-pts">6 Pts</div>
+          <p class="rule-desc">Correctly predict the exact final scoreline for both teams.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">3–1</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card tier-2">
+          <div class="rule-icon"><img src="assets/icons/manager.svg" width="36" height="36" alt="The Manager" /></div>
+          <div class="rule-title">Tier 2 - The Manager</div>
+          <div class="rule-pts">4 Pts</div>
+          <p class="rule-desc">Correct match outcome AND exact goal difference matched.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1 (GD +2)</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">2–0 (GD +2)</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card tier-3">
+          <div class="rule-icon"><img src="assets/icons/fan.svg" width="36" height="36" alt="The Fan" /></div>
+          <div class="rule-title">Tier 3 - The Fan</div>
+          <div class="rule-pts">3 Pts</div>
+          <p class="rule-desc">Correct outcome, incorrect GD, but correctly predicted either home or away score.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">3–0 or 2–1</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card tier-4">
+          <div class="rule-icon"><img src="assets/icons/pundit.svg" width="36" height="36" alt="The Pundit" /></div>
+          <div class="rule-title">Tier 4 - The Pundit</div>
+          <div class="rule-pts">2 Pts</div>
+          <p class="rule-desc">Correct match outcome only; goal difference and individual team scores are incorrect.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">4–0 or 1–0</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card tier-5">
+          <div class="rule-icon"><img src="assets/icons/lucky-guess.svg" width="36" height="36" alt="The Casual" />
+          </div>
+          <div class="rule-title">Tier 5 - The Casual</div>
+          <div class="rule-pts">1 Pt</div>
+          <p class="rule-desc">Incorrect outcome, but correctly predicted one team's exact goal tally.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1 (Home Win)</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">3–3 or 0–1</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card tier-6">
+          <div class="rule-icon"><img src="assets/icons/casual.svg" width="36" height="36" alt="The Infantino" /></div>
+          <div class="rule-title">Tier 6 - The Infantino</div>
+          <div class="rule-pts">0 Pts</div>
+          <p class="rule-desc">Incorrect match outcome and zero correct individual team goal predictions.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">0–2</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bonus Points Section -->
+      <div class="mgmt-page-header" style="margin-top: 36px;">
+        <div>
+          <h2 style="font-family: var(--font-title); font-size: 1.5rem; font-weight: 800; color: var(--text-main);">
+            🔥 Additive Bonus Points
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Earn extra points on goal-fests and exact draw predictions that stack on top of base tier points.
+          </p>
+        </div>
+      </div>
+
+      <div class="scoring-rules-grid"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+        <div class="glass-card scoring-rule-card bonus-1">
+          <div class="rule-icon">🔥</div>
+          <div class="rule-title">High-Scoring Thriller Bonus</div>
+          <div class="rule-pts">+1 Pt</div>
+          <p class="rule-desc">Triggered when both actual match total goals and predicted total goals are &ge; 4. Player must have predicted the correct match outcome.</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">3–1 (&ge;4 goals)</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">4–0 (&ge;4 goals)</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card scoring-rule-card bonus-2">
+          <div class="rule-icon">✨</div>
+          <div class="rule-title">Exact Draw Premium</div>
+          <div class="rule-pts">+1 Pt</div>
+          <p class="rule-desc">Triggered when match ends in a draw and player predicts the exact scoreline. Stacks with
+            The Vishwaguru and Thriller for up to 8 Pts total!</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario</span>
+            </div>
+            <div class="rule-example-body">
+              <div class="example-flex-row">
+                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
+                    class="example-chip-val">2–2</span></div>
+                <span class="example-vs-badge">VS</span>
+                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
+                    class="example-chip-val">2–2</span></div>
+                <span class="example-calc-pill">Total: 6+1+1 = 8 pts</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Worked Examples Table -->
+      <section class="glass-card" style="margin-top: 24px;">
+        <div class="section-header">
+          <div>
+            <h3>📊 Comprehensive Scenarios Matrix</h3>
+            <p>Detailed point breakdown for sample match results and predictions</p>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Actual Score</th>
+                <th>Predicted Score</th>
+                <th>Base Tier Met</th>
+                <th>Base Pts</th>
+                <th>High-Scoring (+1)</th>
+                <th>Draw Premium (+1)</th>
+                <th>Total Earned</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>3 – 1</td>
+                <td><span class="pts-badge p7">🔮 The Vishwaguru</span></td>
+                <td>6 Pts</td>
+                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">7 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>2 – 0</td>
+                <td><span class="pts-badge p4">📋 The Manager</span></td>
+                <td>4 Pts</td>
+                <td>0 (Pred &lt; 4 goals)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">4 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>3 – 0</td>
+                <td><span class="pts-badge p3">🎙️ The Fan</span></td>
+                <td>3 Pts</td>
+                <td>0 (Pred &lt; 4 goals)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">3 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>4 – 0</td>
+                <td><span class="pts-badge p3">📣 The Pundit</span></td>
+                <td>2 Pts</td>
+                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">3 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>1 – 1</td>
+                <td><span class="pts-badge p1">🎲 The Casual</span></td>
+                <td>1 Pt</td>
+                <td>0 (Wrong outcome)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">1 Pt</strong></td>
+              </tr>
+              <tr>
+                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>0 – 2</td>
+                <td><span class="pts-badge p0">🛋️ The Infantino</span></td>
+                <td>0 Pts</td>
+                <td>0</td>
+                <td>-</td>
+                <td><strong style="color:var(--text-muted);">0 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>2 – 2</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>2 – 2</td>
+                <td><span class="pts-badge p8">🔮 The Vishwaguru (Exact Draw)</span></td>
+                <td>6 Pts</td>
+                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
+                <td>✨ +1 (Exact Draw)</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">8 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>1 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 2)</span>
+                </td>
+                <td>1 – 1</td>
+                <td><span class="pts-badge p7">🔮 The Vishwaguru (Exact Draw)</span></td>
+                <td>6 Pts</td>
+                <td>0 (Goals &lt; 4)</td>
+                <td>✨ +1 (Exact Draw)</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">7 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>2 – 2</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
+                </td>
+                <td>1 – 1</td>
+                <td><span class="pts-badge p4">📋 The Manager</span></td>
+                <td>4 Pts</td>
+                <td>0 (Pred &lt; 4 goals)</td>
+                <td>0 (Not exact)</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">4 Pts</strong></td>
+              </tr>
+              <tr>
+                <td><strong>1 – 0</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 1)</span>
+                </td>
+                <td>1 – 0</td>
+                <td><span class="pts-badge p6">🔮 The Vishwaguru</span></td>
+                <td>6 Pts</td>
+                <td>0 (Goals &lt; 4)</td>
+                <td>-</td>
+                <td><strong style="color:var(--accent-green); font-size:1.1rem;">6 Pts</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Lock Rules Section -->
+      <section class="glass-card"
+        style="margin-top: 24px; background: rgba(124,58,237,0.06); border-color: rgba(124,58,237,0.3);">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 2.2rem;">🔒</span>
+          <div>
+            <h4
+              style="font-family: var(--font-title); font-size: 1.15rem; color: var(--text-main); margin-bottom: 4px;">
+              Time Lock Enforcement</h4>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+              All match score input fields lock automatically at official kickoff time (in UTC). Predictions cannot be
+              submitted or edited after a match starts.
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /#scoringView -->
+
+    <!-- ═════════════════════════════════════════════════════ -->
+    <!-- ── VIEW 3: LEAGUE & PLAYER MANAGEMENT PAGE ────────── -->
+    <!-- ═════════════════════════════════════════════════════ -->
+    <div id="managementView" style="display: none;">
+
+      <!-- Section Header -->
+      <div class="mgmt-page-header">
+        <div>
+          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
+            ⚙️ League & Player Directory
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Manage all participants in your master directory and toggle their league group memberships with one click.
+          </p>
+        </div>
+      </div>
+
+      <!-- GROUPS HUB SECTION -->
+      <section class="glass-card" style="margin-bottom: 24px;">
+        <div class="section-header">
+          <div>
+            <h3>🏆 League Groups</h3>
+            <p>Create and manage mini-leagues</p>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+          <div class="mgmt-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <input type="text" id="mgmtNewGroupNameInput" class="form-input"
+              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" style="max-width: 320px;" />
+            <button class="btn btn-primary" id="mgmtCreateGroupBtn">➕ Create New Group</button>
+          </div>
+
+          <div
+            style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 14px; border-radius: var(--radius-sm);">
+            <label
+              style="font-weight: 600; font-size: 0.88rem; color: var(--text-main); display: block; margin-bottom: 6px;">
+              ⚽ Group Team Scope:
+            </label>
+            <div style="display: flex; gap: 16px; align-items: center; font-size: 0.85rem; margin-bottom: 8px;">
+              <label style="cursor: pointer;"><input type="radio" name="mgmtTeamMode" value="ALL" checked> All Premier
+                League Teams (Default)</label>
+              <label style="cursor: pointer;"><input type="radio" name="mgmtTeamMode" value="CUSTOM"> Select Specific
+                Teams Only</label>
+            </div>
+            <div id="mgmtTeamChipGrid" class="team-filter-grid" style="display: none;">
+              <!-- Rendered dynamically by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="mgmt-groups-grid" id="mgmtGroupsGrid">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </section>
+
+      <!-- MASTER PLAYERS DIRECTORY SECTION -->
+      <section class="glass-card">
+        <div class="section-header">
+          <div>
+            <h3>👤 Master Player Directory</h3>
+            <p>Add people once, then assign or unassign them from any league group</p>
+          </div>
+        </div>
+
+        <!-- Add Player Bar -->
+        <div class="mgmt-action-row"
+          style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+          <input type="text" id="mgmtNewPlayerNameInput" class="form-input"
+            placeholder="Add new person (e.g., Sarah, Michael)" style="max-width: 320px;" />
+          <button class="btn btn-primary" id="mgmtCreatePlayerBtn">👤 Add to Directory</button>
+
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-muted);">Search:</span>
+            <input type="text" id="mgmtSearchPlayerInput" class="form-input" placeholder="Filter names..."
+              style="max-width: 200px; padding: 6px 10px; font-size: 0.85rem;" />
+          </div>
+        </div>
+
+        <!-- Master Players Table -->
+        <div class="table-responsive">
+          <table class="data-table mgmt-players-table" id="mgmtPlayersTable">
+            <thead>
+              <tr>
+                <th style="width: 180px;">Player Name</th>
+                <th>League Group Memberships <span
+                    style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Click chip to add/remove)</span>
+                </th>
+                <th style="width: 160px; text-align: center;">6-Char Passcode</th>
+                <th style="width: 120px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mgmtPlayersBody">
+              <!-- Rendered dynamically by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div><!-- /#managementView -->
+
+    <!-- Dashboard Mode & Data Freshness Indicator Footer -->
+    <footer class="dashboard-footer">
+      <div id="fplModeIndicator" class="fpl-mode-indicator">
+        <span class="mode-dot"></span>
+        <span class="mode-label">Checking match data status…</span>
+      </div>
+    </footer>
+
+  </div><!-- /.app-container -->
+
+  <!-- ── AUTHENTICATION MODALS ────────────────────────────────────────── -->
+  <!-- Auth Selection Modal -->
+  <div class="modal-overlay" id="authChoiceModal" style="display: none;">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h3>🔐 Select Login Type</h3>
+        <button class="modal-close-btn" id="closeChoiceModalBtn">✕</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 20px 0;">
+        <button class="btn btn-primary" id="choosePlayerLoginBtn"
+          style="padding: 14px; font-size: 0.95rem; justify-content: center;">
+          ⚽ Player Login (Enter 6-Char Passcode)
+        </button>
+        <button class="btn" id="chooseAdminLoginBtn"
+          style="padding: 14px; font-size: 0.95rem; justify-content: center; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass);">
+          👑 Admin Mode (Manage Leagues & Passcodes)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player Login Modal -->
+  <div class="modal-overlay" id="playerLoginModal" style="display: none;">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h3>⚽ Player Login</h3>
+        <button class="modal-close-btn" id="closePlayerModalBtn">✕</button>
+      </div>
+      <form id="playerLoginForm" class="modal-body"
+        style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Your
+            Name:</label>
+          <input type="text" id="loginPlayerNameInput" class="form-input" placeholder="e.g. Alice" required
+            autocomplete="off" />
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Enter
+            6-Character Passcode:</label>
+          <input type="text" id="loginPasscodeInput" class="form-input" placeholder="K9X2P7" maxlength="6"
+            style="text-transform: uppercase; letter-spacing: 3px; font-weight: 700; font-family: monospace; font-size: 1.1rem; text-align: center;"
+            required />
+        </div>
+        <div id="playerLoginError" style="color: #ff5555; font-size: 0.85rem; display: none; text-align: center;"></div>
+        <button type="submit" class="btn btn-primary"
+          style="margin-top: 8px; justify-content: center; padding: 12px;">Unlock Prediction Editing</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Login Modal -->
+  <div class="modal-overlay" id="adminLoginModal" style="display: none;">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h3>👑 Admin Login</h3>
+        <button class="modal-close-btn" id="closeAdminModalBtn">✕</button>
+      </div>
+      <form id="adminLoginForm" class="modal-body"
+        style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Admin
+            Password:</label>
+          <input type="password" id="adminPasswordInput" class="form-input" placeholder="Enter admin password..."
+            required />
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Participate
+            as Player (Optional):</label>
+          <input type="text" id="adminPlayerNameInput" class="form-input"
+            placeholder="e.g. Alice (or leave blank for Admin only)" autocomplete="off" />
+        </div>
+        <div id="adminLoginError" style="color: #ff5555; font-size: 0.85rem; display: none; text-align: center;"></div>
+        <button type="submit" class="btn btn-primary"
+          style="margin-top: 8px; justify-content: center; padding: 12px;">Authenticate Admin</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main JS -->
+  <script type="module" src="js/app.js"></script>
+</body>
+
+</html>
