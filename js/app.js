@@ -215,6 +215,16 @@ function filterFixturesByGroup(fixtureList) {
   return fixtureList.filter(f => groupFilter.includes(f.home_name) || groupFilter.includes(f.away_name));
 }
 
+// Helper: filter fixtures according to active group's teams_filter AND active team filter (selectedTeams)
+function filterFixturesByGroupAndTeam(fixtureList) {
+  let fixtures = filterFixturesByGroup(fixtureList);
+  const selectedTeams = getSelectedTeams();
+  if (selectedTeams.length > 0) {
+    fixtures = fixtures.filter(f => selectedTeams.includes(f.home_name) || selectedTeams.includes(f.away_name));
+  }
+  return fixtures;
+}
+
 // Helper: check if a team is within active group's scope
 function isTeamInGroupScope(teamName, group = state.activeGroup) {
   if (!teamName || teamName === 'ALL') return true;
@@ -544,7 +554,7 @@ function calcLeaderboard() {
   }));
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
-    const fixtures = filterFixturesByGroup(rawFixtures);
+    const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
     for (const f of fixtures) {
       if (f.actual_home_score === null || f.actual_away_score === null) continue;
       for (const r of results) {
@@ -928,8 +938,7 @@ function setSelectedTeams(teams) {
   localStorage.setItem('epl_selected_teams', JSON.stringify(state.selectedTeams));
   localStorage.setItem('epl_selected_team', state.selectedTeam);
   updateTeamMultiSelectUI();
-  renderMatrix();
-  renderTeamBreakdown();
+  renderDashboardComponents();
 }
 
 function toggleTeamFilter(teamName) {
@@ -977,19 +986,19 @@ function populateTeamFilter() {
     const isInScope = isTeamInGroupScope(t.name);
     const scopeTag = !isInScope ? '<span class="team-option-scope-tag" title="Outside active group scope">Out of Scope</span>' : '';
     const details = getClubDetails(t.name) || t;
+    const short = details.short || details.shortName || t.short || t.name.slice(0, 3).toUpperCase();
     const venueSub = details.stadium ? `<span class="team-option-venue-sub" title="Stadium: ${details.stadium}, ${details.city}">🏟️ ${details.stadium}${details.city ? ` · 📍 ${details.city}` : ''}</span>` : '';
     return `
-      <div class="team-option-item ${isSelected ? 'selected' : ''}" data-team="${t.name}" role="option" aria-selected="${isSelected}" title="${t.name} (${details.shortName || t.short}) · 🏟️ ${details.stadium || 'Stadium'}, ${details.city || 'City'}">
+      <div class="team-option-item ${isSelected ? 'selected' : ''}" data-team="${t.name}" role="option" aria-selected="${isSelected}" title="${t.name} (${short}) · 🏟️ ${details.stadium || 'Stadium'}, ${details.city || 'City'}">
         <div class="team-option-row">
           <span class="team-option-checkbox-custom"></span>
           <span class="team-option-crest">${getCrestImg(t.code, t.name)}</span>
           <div class="team-option-text-group">
-            <span class="team-option-name">${t.name}</span>
+            <span class="team-option-name" style="font-weight:700; font-family:var(--font-title);">${short}</span>
             ${venueSub}
           </div>
-          <span class="team-option-short">${details.shortName || t.short}</span>
           ${scopeTag}
-          <button type="button" class="team-option-only-btn" data-only-team="${t.name}" title="Filter only ${t.name}">Only</button>
+          <button type="button" class="team-option-only-btn" data-only-team="${t.name}" title="Filter only ${short}">Only</button>
         </div>
       </div>
     `;
@@ -1024,11 +1033,11 @@ function updateTeamMultiSelectUI() {
     const teamObj = Object.values(state.teams).find(t => t.name === team);
     const code = teamObj?.code;
     const details = getClubDetails(team) || teamObj;
+    const short = details?.short || details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
     displayEl.innerHTML = `
       <span class="team-option-crest" style="width:18px;height:18px;">${getCrestImg(code, team)}</span>
-      <span class="team-filter-text" style="font-weight:700; color:#fff;" title="${team} (${details?.shortName || ''}) - 🏟️ ${details?.stadium || ''}, ${details?.city || ''}">
-        <span class="team-name-full">${team}</span>
-        <span class="team-name-short">${details?.shortName || team.slice(0, 3).toUpperCase()}</span>
+      <span class="team-filter-text" style="font-weight:700; color:#fff;" title="${team} (${short})">
+        ${short}
       </span>
       <span class="team-filter-pill-remove" data-remove-team="${team}" title="Clear ${team}">✕</span>
     `;
@@ -1038,9 +1047,9 @@ function updateTeamMultiSelectUI() {
       const teamObj = Object.values(state.teams).find(t => t.name === team);
       const code = teamObj?.code;
       const details = getClubDetails(team) || teamObj;
-      const short = details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
+      const short = details?.short || details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
       return `
-        <span class="team-filter-pill" title="${team} - 🏟️ ${details?.stadium || ''}, ${details?.city || ''}">
+        <span class="team-filter-pill" title="${team}">
           <span style="width:14px;height:14px;display:inline-flex;">${getCrestImg(code, team)}</span>
           <span>${short}</span>
           <span class="team-filter-pill-remove" data-remove-team="${team}" title="Remove ${team}">✕</span>
@@ -2023,6 +2032,34 @@ function renderLeaderboard() {
   const tbody = document.getElementById('leaderboardBody');
   if (!tbody) return;
 
+  const selectedTeams = getSelectedTeams();
+  const leaderboardSubtitle = document.getElementById('leaderboardSubtitle');
+  const leaderboardMeta = document.getElementById('leaderboardMeta');
+
+  if (leaderboardSubtitle) {
+    if (selectedTeams.length === 1) {
+      const details = getClubDetails(selectedTeams[0]);
+      const shortLabel = details?.short || details?.shortName || '';
+      leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for matches involving ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}`;
+    } else if (selectedTeams.length > 1) {
+      leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for matches involving ${selectedTeams.length} Selected Teams (${selectedTeams.join(', ')})`;
+    } else {
+      leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for active group`;
+    }
+  }
+
+  if (leaderboardMeta) {
+    if (selectedTeams.length === 1) {
+      const details = getClubDetails(selectedTeams[0]);
+      const shortLabel = details?.short || details?.shortName || '';
+      leaderboardMeta.innerHTML = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}</span>`;
+    } else if (selectedTeams.length > 1) {
+      leaderboardMeta.innerHTML = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`;
+    } else {
+      leaderboardMeta.innerHTML = '';
+    }
+  }
+
   if (state.auth.role === 'guest') {
     tbody.innerHTML = `
       <tr>
@@ -2074,6 +2111,22 @@ function renderCumulativeChart() {
   const legendContainer = document.getElementById('chartLegend');
   if (!wrapper || !legendContainer) return;
 
+  const selectedTeams = getSelectedTeams();
+  const hasTeamFilter = selectedTeams.length > 0;
+  const chartSubtitle = document.getElementById('chartSubtitle');
+
+  if (chartSubtitle) {
+    if (selectedTeams.length === 1) {
+      const details = getClubDetails(selectedTeams[0]);
+      const shortLabel = details?.short || details?.shortName || '';
+      chartSubtitle.textContent = `Cumulative total points for matches involving ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}`;
+    } else if (selectedTeams.length > 1) {
+      chartSubtitle.textContent = `Cumulative total points for matches involving ${selectedTeams.length} Selected Teams (${selectedTeams.join(', ')})`;
+    } else {
+      chartSubtitle.textContent = `Cumulative total points tracked across all completed gameweeks`;
+    }
+  }
+
   if (state.auth.role === 'guest') {
     wrapper.innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--text-muted);">
@@ -2096,8 +2149,8 @@ function renderCumulativeChart() {
 
   const isGWActiveOrFinished = (gw) => {
     const rawGwFixtures = state.fixtures[gw] ?? [];
-    const scopedFixtures = filterFixturesByGroup(rawGwFixtures);
-    const list = scopedFixtures.length > 0 ? scopedFixtures : rawGwFixtures;
+    const scopedFixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
+    const list = scopedFixtures.length > 0 ? scopedFixtures : filterFixturesByGroup(rawGwFixtures);
     return list.some(f => isMatchActiveOrFinished(f));
   };
 
@@ -2114,7 +2167,7 @@ function renderCumulativeChart() {
     for (const gw of state.gwNumbers) {
       let gwPts = 0;
       const rawGwFixtures = state.fixtures[gw] ?? [];
-      const fixtures = filterFixturesByGroup(rawGwFixtures);
+      const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
       for (const f of fixtures) {
         if (f.actual_home_score === null || f.actual_away_score === null) continue;
         const pred = state.predictions[`${f.id}_${p.id}`];
