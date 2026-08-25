@@ -178,7 +178,7 @@ export const TIER_SVGS_ARSENAL = {
   <line x1="23" y1="24" x2="23" y2="25" stroke="#94A3B8" stroke-width="2" />
   <line x1="25" y1="24" x2="25" y2="25" stroke="#94A3B8" stroke-width="2" />
   <rect x="30" y="6" width="14" height="9" rx="2" fill="#F43F5E" />
-  <text x="37" y="13" font-size="7" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="sans-serif">0</text>
+  <text x="37" y="13" font-size="7" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="var(--font-main)">0</text>
 </svg>`
 };
 

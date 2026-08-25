@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&display=swap');
 
 :root {
   --bg-dark: #0b0f19;
@@ -16,8 +16,9 @@
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
-  --font-main: 'Inter', sans-serif;
-  --font-title: 'Outfit', sans-serif;
+  --font-main: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-title: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   --radius-sm: 8px; --radius-md: 14px; --radius-lg: 20px;
   --shadow-card: 0 10px 30px -10px rgba(0,0,0,0.6), 0 0 20px rgba(56,189,248,0.05);
 }
@@ -26,6 +27,7 @@ html {
   box-sizing: border-box;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  font-family: var(--font-main);
 }
 
 *, *::before, *::after {
@@ -33,10 +35,14 @@ html {
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-main);
+}
+
+body, button, input, select, textarea, th, td, h1, h2, h3, h4, h5, h6, option, optgroup {
+  font-family: var(--font-main);
 }
 
 body {
-  font-family: var(--font-main);
   background: var(--bg-dark);
   background-image:
     radial-gradient(circle at 15% 20%, rgba(56,189,248,0.08) 0%, transparent 40%),
