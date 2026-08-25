@@ -24,6 +24,32 @@ export const CLUB_DIRECTORY = Object.entries(FALLBACK_TEAMS).map(([id, name]) =>
   code: FALLBACK_TEAM_CODES[id] || Number(id),
 }));
 
+export function normalizeTeamName(name) {
+  if (!name) return '';
+  const str = String(name).trim().toLowerCase();
+  if (str.includes('arsenal')) return 'Arsenal';
+  if (str.includes('villa')) return 'Aston Villa';
+  if (str.includes('bournemouth')) return 'Bournemouth';
+  if (str.includes('brentford')) return 'Brentford';
+  if (str.includes('brighton')) return 'Brighton';
+  if (str.includes('chelsea')) return 'Chelsea';
+  if (str.includes('crystal') || str.includes('palace')) return 'Crystal Palace';
+  if (str.includes('everton')) return 'Everton';
+  if (str.includes('fulham')) return 'Fulham';
+  if (str.includes('ipswich')) return 'Ipswich Town';
+  if (str.includes('leicester')) return 'Leicester City';
+  if (str.includes('liverpool')) return 'Liverpool';
+  if (str.includes('man city') || str.includes('manchester city')) return 'Man City';
+  if (str.includes('man utd') || str.includes('man united') || str.includes('manchester united')) return 'Man United';
+  if (str.includes('newcastle')) return 'Newcastle';
+  if (str.includes('nott') || str.includes('forest')) return "Nott'm Forest";
+  if (str.includes('southampton')) return 'Southampton';
+  if (str.includes('spurs') || str.includes('tottenham')) return 'Spurs';
+  if (str.includes('west ham')) return 'West Ham';
+  if (str.includes('wolves') || str.includes('wolverhampton')) return 'Wolves';
+  return String(name).trim();
+}
+
 export function getClubDetails(identifier) {
   if (!identifier) return null;
   if (typeof identifier === 'number') {
@@ -36,8 +62,9 @@ export function getClubDetails(identifier) {
       code: FALLBACK_TEAM_CODES[identifier] || identifier,
     };
   }
+  const normalized = normalizeTeamName(identifier);
   const id = Object.keys(FALLBACK_TEAMS).find(
-    k => FALLBACK_TEAMS[k].toLowerCase() === String(identifier).toLowerCase()
+    k => FALLBACK_TEAMS[k] === normalized
   );
   if (id) {
     const numId = Number(id);
@@ -48,7 +75,7 @@ export function getClubDetails(identifier) {
       code: FALLBACK_TEAM_CODES[numId] || numId,
     };
   }
-  return null;
+  return { id: 0, name: identifier, short: identifier.slice(0, 3).toUpperCase(), code: 0 };
 }
 
 export function setAuthToken(token) {

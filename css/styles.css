@@ -791,6 +791,29 @@ body {
   box-shadow: 0 3px 12px var(--accent-purple-glow);
   font-weight: 700;
 }
+.gw-tab.completed {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+.gw-tab.completed:hover {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #6ee7b7;
+}
+.gw-tab.completed.active {
+  background: linear-gradient(135deg, #059669, #10b981);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.45);
+  font-weight: 700;
+}
+.gw-tab-check {
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-left: 3px;
+  color: inherit;
+}
 
 /* ── BUTTONS ─────────────────────────────── */
 .btn {

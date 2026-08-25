@@ -3,6 +3,7 @@ import {
   fetchFixtures,
   getCrestImg,
   getClubDetails,
+  normalizeTeamName,
   CLUB_DIRECTORY,
   getAuthToken,
   apiAdminLogin,
@@ -208,11 +209,18 @@ function getGroupTeamsFilter(group) {
   }
 }
 
+// Helper: check if team matches any team in list (handles aliases like Man Utd vs Man United)
+function isTeamInList(teamName, list) {
+  if (!teamName || !Array.isArray(list)) return false;
+  const targetNorm = normalizeTeamName(teamName);
+  return list.some(item => normalizeTeamName(item) === targetNorm);
+}
+
 // Helper: filter fixtures according to active group's teams_filter
-function filterFixturesByGroup(fixtureList) {
-  const groupFilter = getGroupTeamsFilter(state.activeGroup);
+function filterFixturesByGroup(fixtureList, group = state.activeGroup) {
+  const groupFilter = getGroupTeamsFilter(group);
   if (!groupFilter) return fixtureList;
-  return fixtureList.filter(f => groupFilter.includes(f.home_name) || groupFilter.includes(f.away_name));
+  return fixtureList.filter(f => isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter));
 }
 
 // Helper: filter fixtures according to active group's teams_filter AND active team filter (selectedTeams)
@@ -230,7 +238,7 @@ function isTeamInGroupScope(teamName, group = state.activeGroup) {
   if (!teamName || teamName === 'ALL') return true;
   const groupFilter = getGroupTeamsFilter(group);
   if (!groupFilter) return true; // 'ALL' scope: all teams are in scope
-  return groupFilter.includes(teamName);
+  return isTeamInList(teamName, groupFilter);
 }
 
 // Helper: check if a fixture is within active group's scope
@@ -238,8 +246,87 @@ function isFixtureInGroupScope(fixture, group = state.activeGroup) {
   if (!fixture) return true;
   const groupFilter = getGroupTeamsFilter(group);
   if (!groupFilter) return true; // 'ALL' scope: all fixtures are in scope
-  return groupFilter.includes(fixture.home_name) || groupFilter.includes(fixture.away_name);
+  return isTeamInList(fixture.home_name, groupFilter) || isTeamInList(fixture.away_name, groupFilter);
 }
+
+// Helper: check if all in-scope fixtures for a group in a Gameweek are finished
+function isGWFinishedForGroup(gw, group = state.activeGroup) {
+  const gwNum = Number(gw);
+  if (!state.fixtures || !state.fixtures[gwNum]) return false;
+  const rawGwFixtures = state.fixtures[gwNum] || [];
+  const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group);
+  if (scopedFixtures.length === 0) return false;
+  return scopedFixtures.every(f =>
+    f.finished === true ||
+    f.finished_provisional === true ||
+    (f.actual_home_score !== null && f.actual_away_score !== null)
+  );
+}
+
+// Helper: determine auto active GW (advances 48h before next kickoff if current GW in-scope games are finished)
+function getAutoActiveGW(group = state.activeGroup) {
+  if (!state.gwNumbers || state.gwNumbers.length === 0) return null;
+  const now = Date.now();
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+
+  let chosenGW = state.gwNumbers[0];
+
+  for (let i = 0; i < state.gwNumbers.length; i++) {
+    const currentGW = state.gwNumbers[i];
+    const isFinished = isGWFinishedForGroup(currentGW, group);
+
+    if (!isFinished) {
+      return currentGW;
+    }
+
+    if (i < state.gwNumbers.length - 1) {
+      const nextGW = state.gwNumbers[i + 1];
+      const rawNextFixtures = state.fixtures[nextGW] || [];
+      const scopedNextFixtures = filterFixturesByGroup(rawNextFixtures, group);
+      const listNext = scopedNextFixtures.length > 0 ? scopedNextFixtures : rawNextFixtures;
+
+      let earliestNextKickoff = null;
+      for (const f of listNext) {
+        if (f.kickoff_time) {
+          const kt = new Date(f.kickoff_time).getTime();
+          if (!isNaN(kt)) {
+            if (earliestNextKickoff === null || kt < earliestNextKickoff) {
+              earliestNextKickoff = kt;
+            }
+          }
+        }
+      }
+
+      if (earliestNextKickoff !== null) {
+        if (now >= earliestNextKickoff - FORTY_EIGHT_HOURS_MS) {
+          chosenGW = nextGW;
+        } else {
+          return currentGW;
+        }
+      } else {
+        return currentGW;
+      }
+    } else {
+      return currentGW;
+    }
+  }
+
+  return chosenGW;
+}
+
+function checkAutoGWTransition() {
+  if (!state.gwNumbers || state.gwNumbers.length === 0) return;
+  const autoGW = getAutoActiveGW();
+  const currentNum = Number(state.activeGW);
+  if (autoGW && autoGW !== currentNum) {
+    if (!state.activeGW || (isGWFinishedForGroup(currentNum) && autoGW > currentNum)) {
+      state.activeGW = autoGW;
+      localStorage.setItem('epl_active_gw', autoGW);
+      renderGWTabs();
+    }
+  }
+}
+
 
 // ─── AUTHENTICATION STATE & MODALS ───────────────────────────────────────────
 async function initAuth() {
@@ -835,6 +922,7 @@ function initKickoffAndVisibilityEvents() {
 }
 
 function renderDashboardComponents() {
+  checkAutoGWTransition();
   renderMatrix();
   renderLeaderboard();
   renderSnapshot(calcLeaderboard());
@@ -917,6 +1005,13 @@ function initGroupEvents() {
     localStorage.setItem('epl_active_group_id', groupId);
     await loadActiveGroupData(groupId);
 
+    const autoGW = getAutoActiveGW(group);
+    if (autoGW) {
+      state.activeGW = autoGW;
+      localStorage.setItem('epl_active_gw', autoGW);
+    }
+
+    renderGWTabs();
     renderDashboardComponents();
   });
 }
@@ -1241,16 +1336,22 @@ function renderGWTabs() {
   if (!container) return;
   container.innerHTML = '';
 
+  const activeNum = Number(state.activeGW);
+
   const label = document.getElementById('gwCurrentLabel');
   if (label && state.activeGW) {
-    label.textContent = `GW ${state.activeGW} of ${state.gwNumbers.length}`;
+    label.textContent = `GW ${activeNum} of ${state.gwNumbers.length}`;
   }
 
   for (const gw of state.gwNumbers) {
+    const isFinished = isGWFinishedForGroup(gw);
     const btn = document.createElement('button');
-    btn.className = `gw-tab${gw === state.activeGW ? ' active' : ''}`;
-    btn.textContent = `GW ${gw}`;
+    btn.className = `gw-tab${gw === activeNum ? ' active' : ''}${isFinished ? ' completed' : ''}`;
+    btn.innerHTML = isFinished ? `GW ${gw} <span class="gw-tab-check">✓</span>` : `GW ${gw}`;
     btn.id = `gwTab_${gw}`;
+    if (isFinished) {
+      btn.setAttribute('title', `GW ${gw} (All scoped games finished)`);
+    }
     btn.addEventListener('click', () => {
       state.activeGW = gw;
       localStorage.setItem('epl_active_gw', gw);
@@ -1258,7 +1359,7 @@ function renderGWTabs() {
       renderMatrix();
     });
     container.appendChild(btn);
-    if (gw === state.activeGW) {
+    if (gw === activeNum) {
       setTimeout(() => {
         btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       }, 50);
@@ -1269,7 +1370,8 @@ function renderGWTabs() {
 function initGWSkipControls() {
   document.getElementById('gwPrevBtn')?.addEventListener('click', () => {
     if (!state.gwNumbers.length || !state.activeGW) return;
-    const idx = state.gwNumbers.indexOf(state.activeGW);
+    const activeNum = Number(state.activeGW);
+    const idx = state.gwNumbers.indexOf(activeNum);
     if (idx > 0) {
       state.activeGW = state.gwNumbers[idx - 1];
       localStorage.setItem('epl_active_gw', state.activeGW);
@@ -1280,8 +1382,9 @@ function initGWSkipControls() {
 
   document.getElementById('gwNextBtn')?.addEventListener('click', () => {
     if (!state.gwNumbers.length || !state.activeGW) return;
-    const idx = state.gwNumbers.indexOf(state.activeGW);
-    if (idx < state.gwNumbers.length - 1) {
+    const activeNum = Number(state.activeGW);
+    const idx = state.gwNumbers.indexOf(activeNum);
+    if (idx !== -1 && idx < state.gwNumbers.length - 1) {
       state.activeGW = state.gwNumbers[idx + 1];
       localStorage.setItem('epl_active_gw', state.activeGW);
       renderGWTabs();
@@ -3303,14 +3406,17 @@ async function init() {
     state.fixtures = byGW;
     state.teams = teams;
 
+    const autoGW = getAutoActiveGW();
     const savedGW = parseInt(localStorage.getItem('epl_active_gw'), 10);
     if (savedGW && gwNumbers.includes(savedGW)) {
-      state.activeGW = savedGW;
+      if (isGWFinishedForGroup(savedGW) && autoGW && autoGW > savedGW) {
+        state.activeGW = autoGW;
+        localStorage.setItem('epl_active_gw', autoGW);
+      } else {
+        state.activeGW = savedGW;
+      }
     } else {
-      const now = new Date();
-      state.activeGW = gwNumbers.find(gw =>
-        byGW[gw].some(f => new Date(f.kickoff_time) > now)
-      ) ?? gwNumbers[0];
+      state.activeGW = autoGW ?? gwNumbers[0];
     }
 
     populateTeamFilter();
