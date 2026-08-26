@@ -61,72 +61,125 @@ const state = {
   pendingAdminTargetView: null,
 };
 
-// ─── Session-Randomized Player Color & Shade System ────────────────────────
-const PLAYER_COLOR_PALETTE = [
-  '#a855f7', // Vivid Purple
-  '#06b6d4', // Cyan / Electric Blue
-  '#10b981', // Emerald Green
-  '#f59e0b', // Amber Gold
-  '#f43f5e', // Rose Red
-  '#ec4899', // Hot Pink
-  '#3b82f6', // Bright Blue
-  '#84cc16', // Lime Green
-  '#14b8a6', // Teal
-  '#f97316', // Vivid Orange
-  '#6366f1', // Indigo
-  '#d946ef', // Fuchsia
-  '#0284c7', // Sky Blue
-  '#eab308', // Yellow
-  '#22c55e', // Grass Green
-  '#fb7185', // Coral Pink
-  '#8b5cf6', // Violet
-  '#059669', // Jade Green
-  '#ea580c', // Burnt Orange
-  '#4f46e5'  // Deep Indigo
-];
-
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-const sessionShuffledPalette = shuffleArray(PLAYER_COLOR_PALETTE);
+// ─── Color Theory Golden-Ratio Contrasting Player Palette System ───────────
+/**
+ * Generates perceptually distinct, maximally contrasting tones across players.
+ * Uses the Golden Angle (137.508°) on the HSL color wheel so no two players
+ * in a group have same or similar hues, while tuning lightness and saturation
+ * for high contrast and legibility on dark glass backgrounds.
+ */
+const sessionBaseHue = Math.floor(Math.random() * 360);
 const sessionPlayerColorMap = new Map();
 
-function getPlayerColor(playerOrIdOrName) {
-  if (playerOrIdOrName == null) return sessionShuffledPalette[0];
+/**
+ * Converts HSL values to a 6-digit hex color code.
+ */
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  const sNorm = Math.max(0, Math.min(100, s)) / 100;
+  const lNorm = Math.max(0, Math.min(100, l)) / 100;
+  const a = sNorm * Math.min(lNorm, 1 - lNorm);
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    const color = lNorm - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
 
-  let key = null;
+/**
+ * Fine-tunes saturation and lightness per hue region based on human visual perception (Helmholtz-Kohlrausch effect)
+ * so that colors across the spectrum have balanced perceived brightness on dark backgrounds.
+ */
+function getTunedHsl(hue) {
+  const h = ((hue % 360) + 360) % 360;
+  let s = 88;
+  let l = 60;
+
+  if (h >= 40 && h <= 95) {
+    // Yellows, Ambers, Chartreuse - slightly lower lightness to avoid washed out neon
+    l = 52;
+    s = 92;
+  } else if (h >= 215 && h <= 290) {
+    // Blues, Indigos, Deep Violets - boost lightness for crisp readability on dark glass
+    l = 66;
+    s = 90;
+  } else if (h >= 340 || h <= 25) {
+    // Coral, Crimson, Flame Red
+    l = 60;
+    s = 92;
+  } else if (h >= 140 && h <= 200) {
+    // Emerald, Teal, Cyan
+    l = 56;
+    s = 88;
+  } else {
+    // Magenta, Purple, Rose
+    l = 62;
+    s = 88;
+  }
+
+  return { h, s, l };
+}
+
+/**
+ * Re-indexes all active group players to guarantee maximally distinct,
+ * contrasting hues distributed via Golden Angle stepping.
+ */
+function recalculateGroupPlayerColors(playersList) {
+  if (!Array.isArray(playersList) || playersList.length === 0) return;
+  sessionPlayerColorMap.clear();
+
+  // Stable sort by numeric ID
+  const sorted = [...playersList].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+
+  sorted.forEach((player, idx) => {
+    // Golden angle distribution: (base + idx * 137.507764°) % 360°
+    const hue = (sessionBaseHue + (idx * 137.507764)) % 360;
+    const { h, s, l } = getTunedHsl(hue);
+    const hex = hslToHex(h, s, l);
+
+    if (player.id != null) {
+      sessionPlayerColorMap.set(`id_${player.id}`, hex);
+    }
+    if (player.name) {
+      sessionPlayerColorMap.set(`name_${player.name.toLowerCase().trim()}`, hex);
+    }
+  });
+}
+
+function getPlayerColor(playerOrIdOrName) {
+  if (playerOrIdOrName == null) {
+    const { h, s, l } = getTunedHsl(sessionBaseHue);
+    return hslToHex(h, s, l);
+  }
+
+  let idKey = null;
+  let nameKey = null;
+
   if (typeof playerOrIdOrName === 'object') {
-    key = playerOrIdOrName.id != null ? `id_${playerOrIdOrName.id}` : `name_${playerOrIdOrName.name.toLowerCase()}`;
+    if (playerOrIdOrName.id != null) idKey = `id_${playerOrIdOrName.id}`;
+    if (playerOrIdOrName.name) nameKey = `name_${playerOrIdOrName.name.toLowerCase().trim()}`;
   } else if (typeof playerOrIdOrName === 'number') {
-    key = `id_${playerOrIdOrName}`;
+    idKey = `id_${playerOrIdOrName}`;
   } else if (typeof playerOrIdOrName === 'string') {
-    if (/^\d+$/.test(playerOrIdOrName)) {
-      key = `id_${playerOrIdOrName}`;
+    if (/^\d+$/.test(playerOrIdOrName.trim())) {
+      idKey = `id_${playerOrIdOrName.trim()}`;
     } else {
-      key = `name_${playerOrIdOrName.toLowerCase()}`;
+      nameKey = `name_${playerOrIdOrName.toLowerCase().trim()}`;
     }
   }
 
-  if (!key) return sessionShuffledPalette[0];
+  if (idKey && sessionPlayerColorMap.has(idKey)) return sessionPlayerColorMap.get(idKey);
+  if (nameKey && sessionPlayerColorMap.has(nameKey)) return sessionPlayerColorMap.get(nameKey);
 
-  if (sessionPlayerColorMap.has(key)) {
-    return sessionPlayerColorMap.get(key);
-  }
+  // Dynamic fallback for any unmapped player
+  const nextIdx = sessionPlayerColorMap.size;
+  const hue = (sessionBaseHue + (nextIdx * 137.507764)) % 360;
+  const { h, s, l } = getTunedHsl(hue);
+  const color = hslToHex(h, s, l);
 
-  const assignedIndex = sessionPlayerColorMap.size % sessionShuffledPalette.length;
-  const color = sessionShuffledPalette[assignedIndex];
-  sessionPlayerColorMap.set(key, color);
-
-  if (typeof playerOrIdOrName === 'object' && playerOrIdOrName.id != null && playerOrIdOrName.name) {
-    sessionPlayerColorMap.set(`id_${playerOrIdOrName.id}`, color);
-    sessionPlayerColorMap.set(`name_${playerOrIdOrName.name.toLowerCase()}`, color);
-  }
+  if (idKey) sessionPlayerColorMap.set(idKey, color);
+  if (nameKey) sessionPlayerColorMap.set(nameKey, color);
 
   return color;
 }
@@ -727,6 +780,7 @@ async function loadActiveGroupData(groupId) {
   try {
     const players = await apiFetchGroupPlayers(groupId);
     state.players = players;
+    recalculateGroupPlayerColors(state.players);
 
     const rawPreds = await apiFetchPredictions(groupId);
     const predDict = {};
@@ -1702,7 +1756,7 @@ function renderTeamBreakdown() {
         res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
       }
 
-      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res.total)}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}">${res.total}</span>` : '';
+      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}">${res.total}</span>` : '';
 
       if (!canEdit) {
         return `
@@ -1967,7 +2021,7 @@ function renderMatrix() {
         result = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
       }
 
-      const ptsClass = result ? ptsBadgeClass(result.total) : 'pending';
+      const ptsClass = result ? ptsBadgeClass(result) : 'pending';
       const ptsText = result ? result.total : (locked ? '-' : '?');
       const ptsTitle = result ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') : '';
 
@@ -2135,7 +2189,7 @@ function updatePtsBadge(matchId, playerId) {
   const badge = allBadges[pIdx];
   if (!badge) return;
 
-  const ptsClass = result ? ptsBadgeClass(result.total) : 'pending';
+  const ptsClass = result ? ptsBadgeClass(result) : 'pending';
   const ptsText = result ? result.total : (isLocked(fixture) ? '-' : '?');
   const ptsTitle = result
     ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '')

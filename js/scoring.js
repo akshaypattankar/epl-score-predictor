@@ -87,10 +87,19 @@ export function evaluatePrediction(actH, actA, predH, predA) {
 }
 
 /** CSS class for a points badge */
-export function ptsBadgeClass(total) {
-  if (total === null || total === undefined) return 'pending';
-  const map = { 8:'p8', 7:'p7', 6:'p6', 5:'p5', 4:'p4', 3:'p3', 2:'p2', 1:'p1', 0:'p0' };
-  return map[total] ?? 'p0';
+export function ptsBadgeClass(evalResult) {
+  if (evalResult === null || evalResult === undefined) return 'pending';
+  if (typeof evalResult === 'object') {
+    const tier = evalResult.tier ?? 6;
+    const hasBonus = Boolean(
+      (evalResult.highScoringBonus && evalResult.highScoringBonus > 0) ||
+      (evalResult.drawBonus && evalResult.drawBonus > 0) ||
+      (evalResult.total > evalResult.base)
+    );
+    return `tier-${tier}${hasBonus ? ' has-bonus-border' : ''}`;
+  }
+  const map = { 8:'tier-1 has-bonus-border', 7:'tier-1 has-bonus-border', 6:'tier-1', 5:'tier-2 has-bonus-border', 4:'tier-2', 3:'tier-3', 2:'tier-4', 1:'tier-5', 0:'tier-6' };
+  return map[evalResult] ?? 'tier-6';
 }
 
 /** Human-readable tier label */

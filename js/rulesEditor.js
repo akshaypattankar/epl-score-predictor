@@ -229,7 +229,7 @@ function buildSingleRuleCard(rule, idx) {
   const badgeClass = rule.badge_class || (isTier ? `p${rule.pts}` : 'p-bonus');
 
   return `
-    <div class="rule-card-editor glass-card ${isTier ? `tier-card-theme tier-${rule.id}` : 'bonus-card-theme'}" data-rule-type="${rule.rule_type}" data-rule-id="${rule.id}">
+    <div class="rule-card-editor glass-card ${isTier ? `tier-card-theme tier-${rule.id}` : `bonus-card-theme bonus-${rule.id}`}" data-rule-type="${rule.rule_type}" data-rule-id="${rule.id}">
       
       <!-- Card Top Bar: Icon Badge, Title, Points, Type, Delete -->
       <div class="rule-card-top-bar">

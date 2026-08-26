@@ -188,10 +188,10 @@ export function exportRulesToPdf() {
         .pts-pill.p6 { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
         .pts-pill.p4 { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .pts-pill.p3 { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-        .pts-pill.p2 { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+        .pts-pill.p2 { background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
         .pts-pill.p1 { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-        .pts-pill.p0 { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
-        .pts-pill.p-bonus { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+        .pts-pill.p0 { background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3; }
+        .pts-pill.p-bonus { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
 
         .icon-cell { text-align: center; width: 34px; }
         .tier-cell { width: 70px; }
@@ -467,12 +467,12 @@ export async function exportRulesToJpeg() {
       ctx.font = '12px sans-serif';
       ctx.fillText((b.short_desc || b.desc || '').slice(0, 60), 96, cardY + 48);
 
-      // Points pill
-      ctx.fillStyle = '#f59e0b';
+      // Points pill (Single light yellow theme)
+      ctx.fillStyle = '#fef08a';
       ctx.beginPath();
       ctx.roundRect(width - 240, cardY + 18, 64, 28, 6);
       ctx.fill();
-      ctx.fillStyle = '#451a03';
+      ctx.fillStyle = '#713f12';
       ctx.font = 'bold 13px sans-serif';
       ctx.fillText(`+${b.pts} Pt`, width - 228, cardY + 37);
 
