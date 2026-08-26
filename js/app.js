@@ -57,89 +57,103 @@ const state = {
   pendingAdminTargetView: null,
 };
 
-// ─── Deterministic Player Color System ───────────────────────────────────────
-const PLAYER_ACCENT_COLORS = [
+// ─── Session-Randomized Player Color & Shade System ────────────────────────
+const PLAYER_COLOR_PALETTE = [
   '#a855f7', // Vivid Purple
-  '#06b6d4', // Cyan
+  '#06b6d4', // Cyan / Electric Blue
   '#10b981', // Emerald Green
-  '#f59e0b', // Amber / Gold
-  '#f43f5e', // Rose
-  '#3b82f6', // Cobalt Blue
+  '#f59e0b', // Amber Gold
+  '#f43f5e', // Rose Red
   '#ec4899', // Hot Pink
-  '#f97316', // Bright Orange
-  '#14b8a6', // Deep Teal
+  '#3b82f6', // Bright Blue
   '#84cc16', // Lime Green
+  '#14b8a6', // Teal
+  '#f97316', // Vivid Orange
   '#6366f1', // Indigo
   '#d946ef', // Fuchsia
   '#0284c7', // Sky Blue
   '#eab308', // Yellow
   '#22c55e', // Grass Green
   '#fb7185', // Coral Pink
-  '#8b5cf6', // Violet Blue
+  '#8b5cf6', // Violet
   '#059669', // Jade Green
-  '#ea580c', // Dark Orange
+  '#ea580c', // Burnt Orange
   '#4f46e5'  // Deep Indigo
 ];
 
-function getColorByIndex(index) {
-  const i = Math.abs(index);
-  if (i < PLAYER_ACCENT_COLORS.length) {
-    return PLAYER_ACCENT_COLORS[i];
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  const hue = Math.round((i * 137.508) % 360);
-  return `hsl(${hue}, 80%, 60%)`;
+  return arr;
 }
 
+const sessionShuffledPalette = shuffleArray(PLAYER_COLOR_PALETTE);
+const sessionPlayerColorMap = new Map();
+
 function getPlayerColor(playerOrIdOrName) {
-  if (playerOrIdOrName == null) return PLAYER_ACCENT_COLORS[0];
+  if (playerOrIdOrName == null) return sessionShuffledPalette[0];
 
-  let pId = null;
-  let pName = null;
-
+  let key = null;
   if (typeof playerOrIdOrName === 'object') {
-    pId = playerOrIdOrName.id;
-    pName = playerOrIdOrName.name;
+    key = playerOrIdOrName.id != null ? `id_${playerOrIdOrName.id}` : `name_${playerOrIdOrName.name.toLowerCase()}`;
   } else if (typeof playerOrIdOrName === 'number') {
-    pId = playerOrIdOrName;
+    key = `id_${playerOrIdOrName}`;
   } else if (typeof playerOrIdOrName === 'string') {
     if (/^\d+$/.test(playerOrIdOrName)) {
-      pId = parseInt(playerOrIdOrName, 10);
+      key = `id_${playerOrIdOrName}`;
     } else {
-      pName = playerOrIdOrName;
+      key = `name_${playerOrIdOrName.toLowerCase()}`;
     }
   }
 
-  // 1. Look up in masterPlayers (stable global directory order)
-  if (state.masterPlayers && state.masterPlayers.length > 0) {
-    if (pId != null) {
-      const idx = state.masterPlayers.findIndex(p => p.id === pId);
-      if (idx !== -1) return getColorByIndex(idx);
-    }
-    if (pName) {
-      const idx = state.masterPlayers.findIndex(p => p.name.toLowerCase() === pName.toLowerCase());
-      if (idx !== -1) return getColorByIndex(idx);
-    }
+  if (!key) return sessionShuffledPalette[0];
+
+  if (sessionPlayerColorMap.has(key)) {
+    return sessionPlayerColorMap.get(key);
   }
 
-  // 2. Look up in active group players (sorted by id for stability)
-  if (state.players && state.players.length > 0) {
-    const sortedGroupPlayers = [...state.players].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-    if (pId != null) {
-      const idx = sortedGroupPlayers.findIndex(p => p.id === pId);
-      if (idx !== -1) return getColorByIndex(idx);
-    }
-    if (pName) {
-      const idx = sortedGroupPlayers.findIndex(p => p.name.toLowerCase() === pName.toLowerCase());
-      if (idx !== -1) return getColorByIndex(idx);
-    }
+  const assignedIndex = sessionPlayerColorMap.size % sessionShuffledPalette.length;
+  const color = sessionShuffledPalette[assignedIndex];
+  sessionPlayerColorMap.set(key, color);
+
+  if (typeof playerOrIdOrName === 'object' && playerOrIdOrName.id != null && playerOrIdOrName.name) {
+    sessionPlayerColorMap.set(`id_${playerOrIdOrName.id}`, color);
+    sessionPlayerColorMap.set(`name_${playerOrIdOrName.name.toLowerCase()}`, color);
   }
 
-  // 3. Fallback: if numeric id / index provided
-  if (typeof pId === 'number') {
-    return getColorByIndex(Math.max(0, pId - 1));
-  }
+  return color;
+}
 
-  return PLAYER_ACCENT_COLORS[0];
+function hexToRgba(hex, alpha) {
+  if (!hex || typeof hex !== 'string') return `rgba(56, 189, 248, ${alpha})`;
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return `rgba(56, 189, 248, ${alpha})`;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getPlayerColorShades(playerOrIdOrName) {
+  const primary = getPlayerColor(playerOrIdOrName);
+  return {
+    primary,
+    border: hexToRgba(primary, 0.45),
+    glow: hexToRgba(primary, 0.25),
+    subtleGlow: hexToRgba(primary, 0.15),
+    bgSubtle: hexToRgba(primary, 0.08),
+    bgCardTop: hexToRgba(primary, 0.18),
+    badgeBg: `radial-gradient(circle at 35% 35%, ${hexToRgba(primary, 0.35)} 0%, ${hexToRgba(primary, 0.08)} 100%)`,
+    badgeBorder: hexToRgba(primary, 0.55),
+    chipBg: hexToRgba(primary, 0.14),
+    chipBorder: hexToRgba(primary, 0.35),
+    textGradient: `linear-gradient(135deg, #ffffff 25%, ${primary} 100%)`
+  };
 }
 
 function isLocked(fixture) {
@@ -371,7 +385,7 @@ function renderAuthHeader() {
 
   if (state.auth.role === 'admin') {
     badge.className = 'auth-status-badge admin';
-    const playingText = state.auth.activePlayerId ? ` • ⚽ ${state.auth.activePlayerName}` : '';
+    const playingText = state.auth.activePlayerId ? ` • 👤 ${state.auth.activePlayerName}` : '';
     badge.textContent = `👑 Admin${playingText}`;
     loginBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-block';
@@ -384,7 +398,7 @@ function renderAuthHeader() {
     }
   } else if (state.auth.role === 'player') {
     badge.className = 'auth-status-badge player';
-    badge.textContent = `⚽ Logged in: ${state.auth.activePlayerName}`;
+    badge.textContent = `👤 Logged in: ${state.auth.activePlayerName}`;
     loginBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-block';
     if (guestBanner) guestBanner.style.display = 'none';
@@ -620,6 +634,9 @@ function initThemeSelector() {
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
+  if (typeof renderCumulativeChart === 'function') {
+    renderCumulativeChart();
+  }
 }
 
 // ─── Leaderboard Calculation ──────────────────────────────────────────────────
@@ -987,8 +1004,7 @@ function populateGroupDropdown() {
   if (!select) return;
 
   select.innerHTML = state.groups.map(g => {
-    const scopeLabel = getGroupTeamsFilter(g) ? ` [${getGroupTeamsFilter(g).length} Teams]` : '';
-    return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>👥 ${g.name}${scopeLabel} (${g.player_count ?? 0} players)</option>`;
+    return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>${g.name}</option>`;
   }).join('');
 }
 
@@ -1415,7 +1431,7 @@ function renderSnapshot(lb) {
   const medals = ['🥇', '🥈', '🥉'];
   container.innerHTML = lb.slice(0, 3).map(r => {
     const isYou = state.auth.activePlayerId === r.id;
-    const playerColor = getPlayerColor(r);
+    const shades = getPlayerColorShades(r);
 
     const activeTiers = [
       { icon: getTierIconSvg(1, 15) || '🔮', count: r.t1, cls: 't1', title: '🔮 The Vishwaguru (Exact Score)' },
@@ -1427,22 +1443,22 @@ function renderSnapshot(lb) {
 
     const tierChipsHtml = activeTiers.length > 0
       ? `<div class="snapshot-tier-counts">
-          ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" title="${t.title}: ${t.count}">${t.icon} <strong>${t.count}</strong></span>`).join('')}
+          ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon} <strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
         </div>`
       : '';
 
     return `
-      <div class="snapshot-card rank-${r.rank} ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${playerColor};">
-        <div class="rank-medal-badge rank-${r.rank}" title="Rank #${r.rank}">
+      <div class="snapshot-card rank-${r.rank} ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
+        <div class="rank-medal-badge rank-${r.rank}" style="background:${shades.badgeBg}; border-color:${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="Rank #${r.rank}">
           <span class="rank-medal-icon">${medals[r.rank - 1] ?? `#${r.rank}`}</span>
         </div>
         <div class="snapshot-info">
           <div class="snapshot-header-row">
-            <span class="snapshot-name" style="color: ${playerColor};" title="${r.name}">${r.name}</span>
-            ${isYou ? '<span class="you-tag">You</span>' : ''}
+            <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${r.name}">${r.name}</span>
+            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
           </div>
           <div class="snapshot-pts-row">
-            <span class="snapshot-pts">${r.total}</span>
+            <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${r.total}</span>
             <span class="snapshot-pts-unit">pts</span>
           </div>
           <div class="snapshot-meta">GW ${state.activeGW ?? '?'}</div>
@@ -1602,21 +1618,30 @@ function renderTeamBreakdown() {
         else if (res.isCorrectOutcome) correct++;
       }
 
-      const pColor = getPlayerColor(p);
+      const shades = getPlayerColorShades(p);
       const isYou = state.auth.activePlayerId === p.id;
+      const initials = p.name ? p.name.slice(0, 2).toUpperCase() : '??';
 
       return `
-        <div class="participant-card ${isYou ? 'you-card' : ''}" style="border-top: 3px solid ${pColor};">
-          <div class="participant-header">
-            <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${pColor};margin-right:4px;"></span>
-            <span class="participant-name">${p.name}</span>
-            ${isYou ? '<span class="you-tag">You</span>' : ''}
+        <div class="snapshot-card ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
+          <div class="rank-medal-badge" style="background: ${shades.badgeBg}; border-color: ${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="${p.name}">
+            <span class="rank-medal-icon" style="font-size: 0.85rem; font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
           </div>
-          <div class="participant-score" style="color:${pColor};">${pts}<span class="pts-unit">pts</span></div>
-          <div class="participant-breakdown">
-            <span class="mini-badge bullseye" title="Exact scorelines">🎯 ${bullseyes}</span>
-            <span class="mini-badge correct" title="Correct outcome only">✅ ${correct}</span>
-            <span class="mini-badge played" title="Finished matches">${played} m</span>
+          <div class="snapshot-info">
+            <div class="snapshot-header-row">
+              <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${p.name}">${p.name}</span>
+              ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+            </div>
+            <div class="snapshot-pts-row">
+              <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${pts}</span>
+              <span class="snapshot-pts-unit">pts</span>
+            </div>
+            <div class="snapshot-meta">${played} match${played === 1 ? '' : 'es'}</div>
+          </div>
+          <div class="snapshot-tier-counts">
+            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Exact scorelines: ${bullseyes}">🎯 <strong style="color:${shades.primary};">${bullseyes}</strong></span>
+            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Correct outcome: ${correct}">✅ <strong style="color:${shades.primary};">${correct}</strong></span>
+            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Matches played: ${played}">⚽ <strong style="color:${shades.primary};">${played}</strong></span>
           </div>
         </div>
       `;
@@ -1631,10 +1656,10 @@ function renderTeamBreakdown() {
     <th class="col-result" style="white-space:nowrap; min-width:85px; text-align:center;">Status</th>
     ${players.map((p) => {
     const isYou = state.auth.activePlayerId === p.id;
-    const playerColor = getPlayerColor(p);
-    return `<th style="text-align:center; color:${playerColor}!important; white-space:nowrap;">
-        <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:5px;vertical-align:middle;"></span>
-        ${p.name}${isYou ? '<span class="you-tag">You</span>' : ''}
+    const shades = getPlayerColorShades(p);
+    return `<th style="text-align:center; color:${shades.primary}!important; background:${shades.bgSubtle}; border-bottom:2px solid ${shades.border}; white-space:nowrap;">
+        <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:5px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
+        ${p.name}${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
       </th>`;
   }).join('')}
   `;
@@ -1704,7 +1729,7 @@ function renderTeamBreakdown() {
     const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
 
     return `
-      <tr>
+      <tr class="${!isMatchInScope ? 'row-out-of-scope' : ''}">
         <td class="gw-cell" style="font-weight:700; color:var(--accent-purple); white-space:nowrap; text-align:center;">GW ${f.event}</td>
         <td class="col-match">
           <div class="match-info">
@@ -1834,12 +1859,12 @@ function renderMatrix() {
         <th class="col-match" rowspan="2">Match</th>
         <th class="col-status" rowspan="2">Status</th>
         ${players.map((p) => {
+      const shades = getPlayerColorShades(p);
       const isYou = state.auth.activePlayerId === p.id;
-      const playerColor = getPlayerColor(p);
       return `
-            <th colspan="3" class="th-friend-group" style="color:${playerColor}!important; border-bottom: 2px solid ${playerColor}55; background:${playerColor}12 !important;">
-              <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:6px;vertical-align:middle;box-shadow:0 0 6px ${playerColor}88;"></span>
-              <span class="player-header-name">${p.name}</span>${isYou ? '<span class="you-tag">You</span>' : ''}
+            <th colspan="3" class="th-friend-group" style="color:${shades.primary}!important; border-bottom: 2px solid ${shades.border}; background:${shades.bgSubtle} !important;">
+              <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:6px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
+              <span class="player-header-name">${p.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
             </th>
           `;
     }).join('')}
@@ -1891,7 +1916,7 @@ function renderMatrix() {
 
     if (isGuest) {
       return `
-        <tr>
+        <tr class="${!isMatchInScope ? 'row-out-of-scope' : ''}">
           <td class="col-match">
             <div class="match-info">
               <div class="match-teams">
@@ -1977,7 +2002,7 @@ function renderMatrix() {
     }).join('');
 
     return `
-      <tr>
+      <tr class="${!isMatchInScope ? 'row-out-of-scope' : ''}">
         <td class="col-match">
           <div class="match-info">
             <div class="match-teams">
@@ -2188,13 +2213,13 @@ function renderLeaderboard() {
 
   tbody.innerHTML = lb.map(r => {
     const isYou = state.auth.activePlayerId === r.id;
-    const playerColor = getPlayerColor(r);
+    const shades = getPlayerColorShades(r);
     return `
-      <tr class="${isYou ? 'active-player-row' : ''}">
+      <tr class="${isYou ? 'active-player-row' : ''}" style="${isYou ? `background:${shades.bgSubtle}; border-left:3px solid ${shades.primary};` : ''}">
         <td class="lb-rank">${medals[r.rank - 1] ?? `#${r.rank}`}</td>
         <td class="lb-name">
-          <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${playerColor};margin-right:8px;vertical-align:middle;"></span>
-          <span style="color:${playerColor};font-weight:600;">${r.name}</span>${isYou ? '<span class="you-tag">You</span>' : ''}
+          <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:8px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
+          <span style="color:${shades.primary};font-weight:700;">${r.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
         </td>
         <td class="lb-tier-cell ${r.t1 === 0 ? 'lb-zero' : ''}" data-tier="1" data-player-name="${r.name}" data-count="${r.t1}" tabindex="0" role="button" aria-label="Tier 1 (The Vishwaguru) count for ${r.name}: ${r.t1}" title="Click or tap to learn what Tier 1 (The Vishwaguru) means">${r.t1}</td>
         <td class="lb-tier-cell ${r.t2 === 0 ? 'lb-zero' : ''}" data-tier="2" data-player-name="${r.name}" data-count="${r.t2}" tabindex="0" role="button" aria-label="Tier 2 (The Manager) count for ${r.name}: ${r.t2}" title="Click or tap to learn what Tier 2 (The Manager) means">${r.t2}</td>

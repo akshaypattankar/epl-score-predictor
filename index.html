@@ -29,7 +29,9 @@
 
         <!-- Brand -->
         <div class="brand">
-          <span class="brand-icon">⚽</span>
+          <span class="brand-icon" title="Barclays Premier League">
+            <img src="assets/pl-logo.png" alt="Premier League" class="pl-brand-logo-img" />
+          </span>
           <div class="brand-text">
             <h1>EPL Predictor</h1>
             <span class="brand-tag">2026/27 Premier League</span>
@@ -38,7 +40,7 @@
 
         <!-- Main Navigation View Tabs -->
         <nav class="nav-view-tabs">
-          <button class="nav-tab active" id="navDashboardBtn">⚽ Dashboard</button>
+          <button class="nav-tab active" id="navDashboardBtn">📊 Dashboard</button>
           <button class="nav-tab" id="navScoringBtn">📖 Rules & Scoring</button>
           <button class="nav-tab" id="navManagementBtn" style="display: none;">⚙️ Manage Leagues & Players</button>
         </nav>
@@ -49,8 +51,10 @@
           <div class="header-pref-group">
             <select id="themeSelect" class="control-dropdown theme-dropdown" title="Change Visual Theme">
               <option value="midnight">🌙 Midnight Slate</option>
+              <option value="light">☀️ Premier Light</option>
               <option value="emerald">🌲 Obsidian Emerald</option>
               <option value="indigo">🔮 Deep Indigo</option>
+              <option value="barclays">🦁 Barclays Purple</option>
             </select>
             <select id="timezoneSelect" class="control-dropdown timezone-dropdown"
               title="Select Match Kickoff Timezone">
