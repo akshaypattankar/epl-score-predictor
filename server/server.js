@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import db, { generatePasscode, getFplCache, setFplCache, getAdminPassword, syncCredentialsFile } from './db.js';
+import fs from 'fs';
+import path from 'path';
+import db, { generatePasscode, getFplCache, setFplCache, getAdminPassword, syncCredentialsFile, getScoringRules, saveScoringRules, resetScoringRules } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -688,6 +690,63 @@ app.post('/api/predictions', requirePlayerOrAdmin, (req, res) => {
   }
 });
 
+// ─── SCORING RULES ENDPOINTS ────────────────────────────────────────────────
+// Get active scoring tiers and bonus rules (Public)
+app.get('/api/scoring-rules', (req, res) => {
+  try {
+    const rules = getScoringRules();
+    res.json(rules);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update scoring tiers and bonus rules (Admin only)
+app.put('/api/scoring-rules', requireAdmin, (req, res) => {
+  const { rules } = req.body;
+  if (!Array.isArray(rules) || rules.length === 0) {
+    return res.status(400).json({ error: 'A non-empty rules array is required' });
+  }
+  try {
+    const updated = saveScoringRules(rules);
+    res.json({ success: true, rules: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List all available SVG assets dynamically from assets folder
+app.get('/api/svg-assets', (req, res) => {
+  try {
+    const assetsDir = path.resolve(process.cwd(), 'assets');
+    const iconsDir = path.resolve(process.cwd(), 'assets', 'icons');
+    const svgFiles = [];
+
+    if (fs.existsSync(iconsDir)) {
+      const files = fs.readdirSync(iconsDir);
+      for (const f of files) {
+        if (f.endsWith('.svg')) {
+          svgFiles.push(`assets/icons/${f}`);
+        }
+      }
+    }
+
+    if (fs.existsSync(assetsDir)) {
+      const files = fs.readdirSync(assetsDir);
+      for (const f of files) {
+        if (f.endsWith('.svg') && !svgFiles.includes(`assets/${f}`)) {
+          svgFiles.push(`assets/${f}`);
+        }
+      }
+    }
+
+    res.json(svgFiles);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`EPL Predictor Server running on port ${PORT}`);
 });
+

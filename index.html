@@ -335,7 +335,7 @@
     <div id="scoringView" style="display: none;">
 
       <!-- Section Header -->
-      <div class="mgmt-page-header">
+      <div class="mgmt-page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
           <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
             📖 Official Scoring Engine Specification
@@ -345,10 +345,21 @@
             and exact draw predictions.
           </p>
         </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="exportScoringRulesPdfBtn" style="padding: 9px 15px; font-size: 0.88rem;">
+            📄 Export PDF
+          </button>
+          <button class="btn btn-secondary" id="exportScoringRulesJpgBtn" style="padding: 9px 15px; font-size: 0.88rem;">
+            🖼️ Export JPEG
+          </button>
+          <button class="btn btn-primary" id="openScoringRulesEditorBtn" style="display: none; padding: 9px 18px; font-size: 0.88rem;">
+            ✏️ Edit Scoring Rules
+          </button>
+        </div>
       </div>
 
       <!-- Point Tiers Summary Grid -->
-      <div class="scoring-rules-grid"
+      <div class="scoring-rules-grid" id="scoringTiersSummaryGrid"
         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
         <div class="glass-card scoring-rule-card tier-1">
           <div class="rule-icon"><img src="assets/icons/oracle.svg" width="36" height="36" alt="The Vishwaguru" /></div>
@@ -496,7 +507,7 @@
         </div>
       </div>
 
-      <div class="scoring-rules-grid"
+      <div class="scoring-rules-grid" id="scoringBonusesSummaryGrid"
         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
         <div class="glass-card scoring-rule-card bonus-1">
           <div class="rule-icon">🔥</div>
@@ -545,129 +556,119 @@
         </div>
       </div>
 
-      <!-- Worked Examples Table -->
+      <!-- INTERACTIVE SCORE SIMULATOR -->
+      <section class="glass-card score-simulator-section" style="margin-top: 24px;">
+        <div class="section-header" style="margin-bottom: 16px;">
+          <div>
+            <h3 style="font-family: var(--font-title); font-size: 1.3rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+              <span>🎮</span> Interactive Score Simulator
+            </h3>
+            <p style="color: var(--text-muted); font-size: 0.84rem;">
+              Test any actual vs. predicted match scoreline to see live tier evaluation and additive bonus points.
+            </p>
+          </div>
+        </div>
+
+        <div class="score-simulator-grid">
+          <!-- Inputs Card -->
+          <div class="sim-card sim-inputs-card">
+            <div class="sim-scores-row">
+              <!-- Actual Score Box -->
+              <div class="sim-score-box">
+                <span class="sim-box-label">⚽ Actual Match Score</span>
+                <div class="sim-steppers-pair">
+                  <div class="sim-input-team">
+                    <label>Home</label>
+                    <div class="sim-stepper">
+                      <button type="button" class="sim-step-btn" data-target="simActHome" data-delta="-1">−</button>
+                      <input type="number" id="simActHome" class="sim-num-input" value="3" min="0" max="20" />
+                      <button type="button" class="sim-step-btn" data-target="simActHome" data-delta="1">+</button>
+                    </div>
+                  </div>
+                  <span class="sim-vs-divider">–</span>
+                  <div class="sim-input-team">
+                    <label>Away</label>
+                    <div class="sim-stepper">
+                      <button type="button" class="sim-step-btn" data-target="simActAway" data-delta="-1">−</button>
+                      <input type="number" id="simActAway" class="sim-num-input" value="1" min="0" max="20" />
+                      <button type="button" class="sim-step-btn" data-target="simActAway" data-delta="1">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Predicted Score Box -->
+              <div class="sim-score-box">
+                <span class="sim-box-label">🎯 Predicted Score</span>
+                <div class="sim-steppers-pair">
+                  <div class="sim-input-team">
+                    <label>Home</label>
+                    <div class="sim-stepper">
+                      <button type="button" class="sim-step-btn" data-target="simPredHome" data-delta="-1">−</button>
+                      <input type="number" id="simPredHome" class="sim-num-input" value="3" min="0" max="20" />
+                      <button type="button" class="sim-step-btn" data-target="simPredHome" data-delta="1">+</button>
+                    </div>
+                  </div>
+                  <span class="sim-vs-divider">–</span>
+                  <div class="sim-input-team">
+                    <label>Away</label>
+                    <div class="sim-stepper">
+                      <button type="button" class="sim-step-btn" data-target="simPredAway" data-delta="-1">−</button>
+                      <input type="number" id="simPredAway" class="sim-num-input" value="1" min="0" max="20" />
+                      <button type="button" class="sim-step-btn" data-target="simPredAway" data-delta="1">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Presets -->
+            <div class="sim-presets-bar">
+              <span class="sim-presets-label">⚡ Presets:</span>
+              <div class="sim-presets-chips">
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="3" data-pred-a="1">Bullseye (3–1 vs 3–1)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="2" data-act-a="2" data-pred-h="2" data-pred-a="2">Draw + High Score (2–2 vs 2–2)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="1" data-act-a="1" data-pred-h="1" data-pred-a="1">Exact Draw (1–1 vs 1–1)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="2" data-pred-a="0">Same Margin (3–1 vs 2–0)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="3" data-pred-a="0">One Team (3–1 vs 3–0)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="4" data-pred-a="0">Outcome Only (3–1 vs 4–0)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="1" data-pred-a="1">Consolation (3–1 vs 1–1)</button>
+                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="0" data-pred-a="2">Miss (3–1 vs 0–2)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Result Card -->
+          <div class="sim-card sim-results-card" id="simResultContainer">
+            <!-- Rendered dynamically by updateScoreSimulator() -->
+          </div>
+        </div>
+      </section>
+
+      <!-- COMPREHENSIVE SCENARIOS MATRIX (Sorted by Points) -->
       <section class="glass-card" style="margin-top: 24px;">
         <div class="section-header">
           <div>
             <h3>📊 Comprehensive Scenarios Matrix</h3>
-            <p>Detailed point breakdown for sample match results and predictions</p>
+            <p>Sample match results and predictions sorted by total points earned</p>
           </div>
         </div>
 
         <div class="table-responsive">
-          <table class="data-table">
+          <table class="data-table scenarios-matrix-table">
             <thead>
               <tr>
                 <th>Actual Score</th>
                 <th>Predicted Score</th>
-                <th>Base Tier Met</th>
-                <th>Base Pts</th>
-                <th>High-Scoring (+1)</th>
-                <th>Draw Premium (+1)</th>
-                <th>Total Earned</th>
+                <th>Rule Met</th>
+                <th style="text-align:center;">Base Pts</th>
+                <th style="text-align:center;">High-Scoring</th>
+                <th style="text-align:center;">Draw Premium</th>
+                <th style="text-align:center;">Total Earned</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>3 – 1</td>
-                <td><span class="pts-badge p7">🔮 The Vishwaguru</span></td>
-                <td>6 Pts</td>
-                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">7 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>2 – 0</td>
-                <td><span class="pts-badge p4">📋 The Manager</span></td>
-                <td>4 Pts</td>
-                <td>0 (Pred &lt; 4 goals)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">4 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>3 – 0</td>
-                <td><span class="pts-badge p3">🎙️ The Fan</span></td>
-                <td>3 Pts</td>
-                <td>0 (Pred &lt; 4 goals)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">3 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>4 – 0</td>
-                <td><span class="pts-badge p3">📣 The Pundit</span></td>
-                <td>2 Pts</td>
-                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">3 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>1 – 1</td>
-                <td><span class="pts-badge p1">🎲 The Casual</span></td>
-                <td>1 Pt</td>
-                <td>0 (Wrong outcome)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">1 Pt</strong></td>
-              </tr>
-              <tr>
-                <td><strong>3 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>0 – 2</td>
-                <td><span class="pts-badge p0">🛋️ The Infantino</span></td>
-                <td>0 Pts</td>
-                <td>0</td>
-                <td>-</td>
-                <td><strong style="color:var(--text-muted);">0 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>2 – 2</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>2 – 2</td>
-                <td><span class="pts-badge p8">🔮 The Vishwaguru (Exact Draw)</span></td>
-                <td>6 Pts</td>
-                <td>🔥 +1 (Actual &amp; Pred &ge; 4)</td>
-                <td>✨ +1 (Exact Draw)</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">8 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>1 – 1</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 2)</span>
-                </td>
-                <td>1 – 1</td>
-                <td><span class="pts-badge p7">🔮 The Vishwaguru (Exact Draw)</span></td>
-                <td>6 Pts</td>
-                <td>0 (Goals &lt; 4)</td>
-                <td>✨ +1 (Exact Draw)</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">7 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>2 – 2</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 4)</span>
-                </td>
-                <td>1 – 1</td>
-                <td><span class="pts-badge p4">📋 The Manager</span></td>
-                <td>4 Pts</td>
-                <td>0 (Pred &lt; 4 goals)</td>
-                <td>0 (Not exact)</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">4 Pts</strong></td>
-              </tr>
-              <tr>
-                <td><strong>1 – 0</strong> <span style="color:var(--text-muted); font-size:0.8rem;">(Total 1)</span>
-                </td>
-                <td>1 – 0</td>
-                <td><span class="pts-badge p6">🔮 The Vishwaguru</span></td>
-                <td>6 Pts</td>
-                <td>0 (Goals &lt; 4)</td>
-                <td>-</td>
-                <td><strong style="color:var(--accent-green); font-size:1.1rem;">6 Pts</strong></td>
-              </tr>
+            <tbody id="scoringWorkedExamplesBody">
+              <!-- Rendered dynamically by renderComprehensiveScenariosMatrix() -->
             </tbody>
           </table>
         </div>
@@ -708,6 +709,22 @@
           </p>
         </div>
       </div>
+
+      <!-- SCORING RULES CONFIGURATION SECTION -->
+      <section class="glass-card" style="margin-bottom: 24px;">
+        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+          <div>
+            <h3>⚡ Scoring Rules & Tiers Configuration</h3>
+            <p>Customize tier names, point values, icons, and bonus parameters across the app</p>
+          </div>
+          <button class="btn btn-primary" id="mgmtOpenScoringRulesBtn" style="padding: 10px 18px;">
+            ✏️ Edit Scoring Rules & Tiers
+          </button>
+        </div>
+        <div id="mgmtScoringRulesSummaryGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px;">
+          <!-- Dynamically populated summary chips of active rules by JS -->
+        </div>
+      </section>
 
       <!-- GROUPS HUB SECTION -->
       <section class="glass-card" style="margin-bottom: 24px;">
@@ -878,6 +895,52 @@
         <button type="submit" class="btn btn-primary"
           style="margin-top: 8px; justify-content: center; padding: 12px;">Authenticate Admin</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ── SCORING RULES EDITOR MODAL ────────────────────────────────────── -->
+  <div class="modal-overlay" id="scoringRulesModal" style="display: none;">
+    <div class="modal-card glass-card rules-editor-modal-card" style="max-width: 880px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; padding: 24px;">
+      <div class="modal-header" style="padding-bottom: 14px; border-bottom: 1px solid var(--border-glass);">
+        <div>
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 800;">
+            <span style="font-size: 1.5rem;">⚙️</span> Scoring Rules & Tiers Studio
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+            Customize tier names, point values, visual icons (Emoji or SVG), and condition thresholds with live preview.
+          </p>
+        </div>
+        <button class="modal-close-btn" id="closeScoringRulesModalBtn" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body rules-editor-modal-body" style="overflow-y: auto; padding: 16px 2px; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+        <div id="scoringRulesEditorRoot">
+          <!-- Rendered dynamically by rulesEditor.js -->
+        </div>
+        <div id="scoringRulesSaveError" class="rules-editor-error-banner" style="display: none;"></div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-glass); margin-top: 6px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn" id="resetScoringRulesBtn" style="background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.3); font-size: 0.88rem;">
+            🔄 Reset to Defaults
+          </button>
+          <button type="button" class="btn btn-secondary" id="modalExportPdfBtn" style="font-size: 0.88rem;">
+            📄 PDF
+          </button>
+          <button type="button" class="btn btn-secondary" id="modalExportJpgBtn" style="font-size: 0.88rem;">
+            🖼️ JPEG
+          </button>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn" id="cancelScoringRulesBtn" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass);">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" id="saveScoringRulesBtn" style="padding: 10px 22px; font-weight: 700;">
+            💾 Save Scoring Rules
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

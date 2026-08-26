@@ -1218,7 +1218,7 @@ body {
 .snapshot-tier-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 0.74rem;
   font-weight: 700;
   padding: 3px 7px;
@@ -1230,6 +1230,20 @@ body {
   line-height: 1;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   transition: all 0.15s ease;
+}
+.snapshot-tier-chip .rule-icon-asset,
+.snapshot-tier-chip img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  vertical-align: middle;
+  display: inline-block;
+}
+.snapshot-tier-chip .rule-icon-emoji-char {
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: middle;
+  display: inline-block;
 }
 .snapshot-tier-chip strong {
   color: var(--text-main);
@@ -4084,6 +4098,1065 @@ tr.row-out-of-scope:hover {
   50% { transform: scale(1.3); opacity: 0.6; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+
+/* ── SCORING RULES EDITOR MODAL ─────────────────────────────────── */
+#scoringRulesModal .modal-card {
+  animation: fadeInUp 0.22s ease forwards;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.scoring-rule-editor-row {
+  position: relative;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.scoring-rule-editor-row:hover {
+  border-color: var(--border-active);
+  background: rgba(124, 58, 237, 0.04) !important;
+}
+
+/* Responsive stacking for editor rows */
+@media (max-width: 640px) {
+  .scoring-rule-editor-row {
+    grid-template-columns: 28px 1fr 80px !important;
+  }
+}
+
+/* p-bonus badge color */
+.pts-badge.p-bonus {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+/* Scoring rules editor form inputs */
+#scoringRulesModal .form-input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+#scoringRulesModal .form-input:focus {
+  border-color: var(--accent-purple);
+  background: rgba(124, 58, 237, 0.08);
+  box-shadow: 0 0 10px var(--accent-purple-glow);
+}
+
+/* Textarea in scoring rule editor */
+#scoringRulesModal textarea.form-input {
+  min-height: 52px;
+}
+
+/* Modal footer styling */
+#scoringRulesModal .modal-footer {
+  padding-top: 12px;
+}
+
+/* Mgmt scoring rules summary grid */
+#mgmtScoringRulesSummaryGrid > div {
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  cursor: default;
+}
+#mgmtScoringRulesSummaryGrid > div:hover {
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.05) !important;
+  transform: translateY(-1px);
+}
+
+/* Scoring view admin button */
+#openScoringRulesEditorBtn {
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+/* Rule type badge (tier / bonus indicator circle in editor rows) */
+.rule-type-badge {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.78rem; font-weight: 800;
+  flex-shrink: 0;
+  user-select: none;
+}
+.rule-type-tier {
+  background: rgba(124, 58, 237, 0.2);
+  color: var(--accent-purple);
+}
+.rule-type-bonus {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCORING RULES & TIERS STUDIO (MODULAR EDITOR)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rules-editor-modal-card {
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: radial-gradient(circle at top right, rgba(30, 27, 75, 0.5), rgba(15, 23, 42, 0.96) 70%);
+}
+
+.rules-editor-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: 16px;
+}
+
+.rules-editor-tabs {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-glass);
+  gap: 4px;
+}
+
+.rules-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rules-tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rules-tab-btn.active {
+  background: var(--grad-primary);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+}
+
+.rules-tab-badge {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.rules-editor-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rules-add-btn {
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  color: var(--accent-purple);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rules-add-btn:hover {
+  background: rgba(124, 58, 237, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.rules-add-bonus-btn {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+}
+
+.rules-add-bonus-btn:hover {
+  background: rgba(251, 191, 36, 0.25);
+  color: #fff;
+}
+
+.rules-editor-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rules-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border-glass);
+  border-radius: var(--radius-md);
+}
+
+/* Single Rule Editor Card */
+.rule-card-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-glass);
+  background: rgba(15, 23, 42, 0.65);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.rule-card-editor:hover {
+  border-color: rgba(167, 139, 250, 0.35);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.5);
+}
+
+.rule-card-editor.tier-card-theme {
+  border-left: 4px solid var(--accent-purple);
+}
+
+.rule-card-editor.bonus-card-theme {
+  border-left: 4px solid #fbbf24;
+}
+
+/* Card Top Bar */
+.rule-card-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rule-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.rule-card-icon-preview {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.rule-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.rule-type-pill {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rule-type-pill.pill-tier {
+  background: rgba(124, 58, 237, 0.25);
+  color: #c4b5fd;
+  border: 1px solid rgba(124, 58, 237, 0.4);
+}
+
+.rule-type-pill.pill-bonus {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.rule-name-input {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-glass);
+  padding: 6px 10px;
+}
+
+.rule-name-input:focus {
+  border-color: var(--accent-purple);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.rule-input-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rule-card-pts-stepper-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.rule-pts-stepper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.rule-pts-step-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: var(--text-main);
+  font-weight: 800;
+  font-size: 1.1rem;
+  width: 28px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.rule-pts-step-btn:hover {
+  background: rgba(124, 58, 237, 0.3);
+  color: #fff;
+}
+
+.rule-pts-input {
+  width: 44px;
+  height: 32px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--accent-green);
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.rule-card-badge-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.rule-card-actions {
+  display: flex;
+  align-items: center;
+}
+
+.rule-remove-btn {
+  font-size: 1.1rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: var(--accent-rose);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rule-remove-btn:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: rgba(244, 63, 94, 0.5);
+  transform: scale(1.05);
+}
+
+.rule-remove-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* Icon Selector Section */
+.rule-card-icon-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.rule-icon-switcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rule-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #c4b5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.icon-type-segmented-control {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border-glass);
+  gap: 3px;
+}
+
+.icon-segment-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.icon-segment-btn.active {
+  background: rgba(124, 58, 237, 0.35);
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.3);
+}
+
+/* Freeform Emoji Input */
+.emoji-freeform-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.emoji-input-with-preview,
+.svg-input-with-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.emoji-preview-avatar,
+.svg-preview-avatar {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  flex-shrink: 0;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.emoji-direct-input {
+  font-size: 1.15rem;
+  padding: 8px 12px;
+  font-weight: 600;
+  width: 100%;
+}
+
+/* Freeform SVG Input */
+.svg-freeform-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.svg-path-direct-input {
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  font-family: monospace;
+  width: 100%;
+}
+
+.svg-detected-files-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.svg-detected-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.svg-file-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.svg-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.svg-file-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(167, 139, 250, 0.4);
+  transform: translateY(-1px);
+}
+
+.svg-file-chip.selected {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: var(--accent-purple);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.25);
+}
+
+/* Conditions Section */
+.rule-card-conditions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.rule-conditions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.rule-condition-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  transition: all 0.2s ease;
+}
+
+.rule-condition-box.enabled {
+  background: rgba(56, 189, 248, 0.04);
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+.condition-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.condition-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.condition-status-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.condition-status-pill.on {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.condition-status-pill.off {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+}
+
+.condition-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.condition-controls-row select {
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.condition-value-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.condition-math-symbol {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+
+.condition-number-input {
+  width: 44px;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 4px;
+}
+
+.condition-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.condition-disabled-note {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.condition-label-text {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Descriptions & Examples */
+.rule-card-descriptions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.descriptions-input-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.desc-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.desc-field-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.desc-field-group input {
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+.input-hint {
+  font-size: 0.7rem;
+  font-weight: normal;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+/* Live Preview inside Rule Card */
+.rule-card-preview-section {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.preview-section-header {
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.preview-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.rules-editor-error-banner {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #fda4af;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* ── SCORE SIMULATOR WIDGET ─────────────────────── */
+.score-simulator-section {
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.08), transparent 70%), var(--bg-glass);
+}
+
+.score-simulator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 840px) {
+  .score-simulator-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.sim-scores-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 580px) {
+  .sim-scores-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-score-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.sim-box-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.sim-steppers-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.sim-input-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sim-input-team label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.sim-stepper {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-glass);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sim-step-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: var(--text-main);
+  font-weight: 800;
+  font-size: 1.1rem;
+  width: 28px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.sim-step-btn:hover {
+  background: rgba(124, 58, 237, 0.35);
+  color: #fff;
+}
+
+.sim-num-input {
+  width: 38px;
+  height: 32px;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.sim-vs-divider {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  margin-top: 14px;
+}
+
+.sim-presets-bar {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sim-presets-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.sim-presets-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sim-preset-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.sim-preset-btn:hover {
+  background: rgba(124, 58, 237, 0.2);
+  color: var(--text-main);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.sim-preset-btn.active {
+  background: rgba(124, 58, 237, 0.35);
+  color: #ffffff;
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+}
+
+/* Simulator Results Card */
+.sim-results-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: radial-gradient(circle at top left, rgba(0, 255, 135, 0.05), transparent 70%), rgba(0, 0, 0, 0.3);
+  border-color: rgba(0, 255, 135, 0.2);
+}
+
+.sim-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sim-result-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--accent-green);
+  letter-spacing: 0.5px;
+  background: rgba(0, 255, 135, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 255, 135, 0.25);
+}
+
+.sim-total-pts-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1.5px solid var(--accent-green);
+  padding: 4px 14px;
+  border-radius: 20px;
+  box-shadow: 0 0 14px rgba(0, 255, 135, 0.2);
+}
+
+.sim-pts-number {
+  font-family: var(--font-title);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.sim-pts-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  text-transform: uppercase;
+}
+
+.sim-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sim-breakdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-breakdown-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.sim-rule-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-base-pts-tag {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.sim-bonuses-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sim-bonus-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fde68a;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sim-bonus-add {
+  color: #fbbf24;
+  font-weight: 800;
+  font-size: 0.84rem;
+}
+
+.sim-no-bonus {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.sim-formula-bar {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.sim-formula-item { color: var(--text-main); font-weight: 600; }
+.sim-formula-plus { color: var(--text-dim); font-weight: 800; }
+.sim-formula-bonus { color: #fbbf24; font-weight: 700; }
+.sim-formula-equals { color: var(--text-dim); font-weight: 800; }
+.sim-formula-total { color: var(--accent-green); font-size: 0.95rem; font-weight: 800; }
 
 
 

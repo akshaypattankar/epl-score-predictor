@@ -1,0 +1,9 @@
+rule_type,id,name,pts,icon,badge_class,short_desc,desc,example
+tier,1,The Vishwaguru,6,🔮,p6,Exact match scoreline,Correctly predicted the exact final scoreline for both teams.,Actual 3–1 | Predicted 3–1
+tier,2,The Manager,4,📋,p4,Correct winner/draw + exact GD,Correct match outcome (Home/Away/Draw) AND exact goal difference matched.,Actual 3–1 (GD +2) | Predicted 2–0 (GD +2)
+tier,3,The Fan,3,🎙️,p3,Correct winner/draw + 1 team score,"Correct match outcome, incorrect GD, but correctly predicted either home or away score.",Actual 3–1 | Predicted 3–0 or 2–1
+tier,4,The Pundit,2,📣,p2,Correct winner/draw only,Correct match outcome only; goal difference and individual team scores are incorrect.,Actual 3–1 | Predicted 4–0 or 1–0
+tier,5,The Casual,1,🎲,p1,"Wrong outcome, 1 team score matched","Incorrect match outcome, but correctly predicted one team's exact goal tally.",Actual 3–1 (Home Win) | Predicted 3–3 (Draw) or 0–1 (Away Win)
+tier,6,The Infantino,0,🛋️,p0,Incorrect outcome & 0 team goals,Incorrect match outcome and neither team's score was predicted correctly.,Actual 3–1 | Predicted 0–2
+bonus,highScoring,High-Scoring Thriller Bonus,1,🔥,p-bonus,Actual & predicted goals both >= 4 + correct outcome,"Awarded when both total actual goals and total predicted goals are 4 or more, and you predicted the correct outcome.",Actual 3–1 (4 goals) | Predicted 4–0 (4 goals)
+bonus,drawBonus,Exact Draw Premium,1,✨,p-bonus,Exact draw scoreline predicted,Awarded when match ends in a draw and you predicted the exact draw scoreline (The Vishwaguru on a draw).,Actual 2–2 | Predicted 2–2 (Total: 6+1+1 = 8 pts)

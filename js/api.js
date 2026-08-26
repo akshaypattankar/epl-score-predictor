@@ -15,7 +15,7 @@ const FALLBACK_TEAM_CODES = {
 };
 
 let teamMap = null;
-let authToken = localStorage.getItem('epl_auth_token') || null;
+let authToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('epl_auth_token') : null);
 
 export const CLUB_DIRECTORY = Object.entries(FALLBACK_TEAMS).map(([id, name]) => ({
   id: Number(id),
@@ -448,3 +448,44 @@ export async function apiSavePrediction(matchId, playerId, groupId, homeScore, a
   if (!res.ok) throw new Error(data.error || 'Failed to save prediction');
   return data;
 }
+
+// ─── SCORING RULES API ───────────────────────────────────────────────────────
+export async function apiFetchScoringRules() {
+  const res = await fetch('/api/scoring-rules');
+  if (!res.ok) throw new Error('Failed to fetch scoring rules');
+  return res.json();
+}
+
+export async function apiUpdateScoringRules(rules) {
+  const res = await fetch('/api/scoring-rules', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ rules }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update scoring rules');
+  return data;
+}
+
+export async function apiResetScoringRules() {
+  const res = await fetch('/api/scoring-rules/reset', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to reset scoring rules');
+  return data;
+}
+
+export async function apiFetchSvgAssets() {
+  try {
+    const res = await fetch('/api/svg-assets');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.warn('Could not fetch dynamic SVG assets list:', err.message);
+    return [];
+  }
+}
+
+

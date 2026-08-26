@@ -27,10 +27,14 @@ import {
   apiSavePrediction,
   apiSaveTimezone,
   getFplCacheMeta,
-  resetFplCacheMetaToNormal
+  resetFplCacheMetaToNormal,
+  apiFetchScoringRules,
+  apiUpdateScoringRules,
+  apiResetScoringRules
 } from './api.js';
-import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer } from './scoring.js';
-import { getTierIconSvg, TIER_TITLES } from './tierIcons.js';
+import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
+import { initRulesEditorModal, openRulesEditorModal, renderIconElement } from './rulesEditor.js';
+import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
@@ -975,6 +979,7 @@ function renderViewByName(targetView) {
   } else if (targetView === 'scoring') {
     scoringBtn?.classList.add('active');
     if (scoringView) scoringView.style.display = 'block';
+    renderScoringViewSummary();
   } else if (targetView === 'management') {
     mgmtBtn?.classList.add('active');
     if (mgmtView) mgmtView.style.display = 'block';
@@ -1433,13 +1438,15 @@ function renderSnapshot(lb) {
     const isYou = state.auth.activePlayerId === r.id;
     const shades = getPlayerColorShades(r);
 
-    const activeTiers = [
-      { icon: getTierIconSvg(1, 15) || '🔮', count: r.t1, cls: 't1', title: '🔮 The Vishwaguru (Exact Score)' },
-      { icon: getTierIconSvg(2, 15) || '📋', count: r.t2, cls: 't2', title: '📋 The Manager (Outcome + GD)' },
-      { icon: getTierIconSvg(3, 15) || '🎙️', count: r.t3, cls: 't3', title: '🎙️ The Fan (Outcome + Single Team)' },
-      { icon: getTierIconSvg(4, 15) || '📣', count: r.t4, cls: 't4', title: '📣 The Pundit (Outcome Only)' },
-      { icon: getTierIconSvg(5, 15) || '🎲', count: r.t5, cls: 't5', title: '🎲 The Casual (Goals Only)' },
-    ].filter(t => t.count > 0);
+    const activeTiers = SCORING_TIERS.map(t => {
+      const count = r[`t${t.tier}`] || 0;
+      return {
+        icon: renderIconElement(t.icon, t.icon_type, 14),
+        count,
+        cls: `t${t.tier}`,
+        title: `${t.name} (${t.pts} pts)`
+      };
+    }).filter(t => t.count > 0);
 
     const tierChipsHtml = activeTiers.length > 0
       ? `<div class="snapshot-tier-counts">
@@ -2209,6 +2216,26 @@ function renderLeaderboard() {
     return;
   }
 
+  const thead = document.querySelector('#leaderboardTable thead tr');
+  if (thead) {
+    thead.innerHTML = `
+      <th style="width: 50px; text-align: center;">Rank</th>
+      <th>Player</th>
+      ${SCORING_TIERS.map(t => `
+        <th class="lb-tier-th" data-tier="${t.tier}" tabindex="0" role="button" aria-label="Tier ${t.tier} Rules: ${t.name}" title="Click or tap to learn what Tier ${t.tier} means">
+          <div class="th-tier-title" style="display:flex; align-items:center; justify-content:center; gap:4px;">
+            ${renderIconElement(t.icon, t.icon_type, 16)} <span>Tier ${t.tier}</span>
+          </div>
+          <div class="th-tier-sub">${t.pts} ${t.pts === 1 ? 'pt' : 'pts'}</div>
+        </th>
+      `).join('')}
+      <th class="lb-total-th" title="Total Cumulative Points">
+        <div class="th-tier-title">Total</div>
+        <div class="th-tier-sub">Pts</div>
+      </th>
+    `;
+  }
+
   const medals = ['🥇', '🥈', '🥉'];
 
   tbody.innerHTML = lb.map(r => {
@@ -2221,12 +2248,10 @@ function renderLeaderboard() {
           <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:8px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
           <span style="color:${shades.primary};font-weight:700;">${r.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
         </td>
-        <td class="lb-tier-cell ${r.t1 === 0 ? 'lb-zero' : ''}" data-tier="1" data-player-name="${r.name}" data-count="${r.t1}" tabindex="0" role="button" aria-label="Tier 1 (The Vishwaguru) count for ${r.name}: ${r.t1}" title="Click or tap to learn what Tier 1 (The Vishwaguru) means">${r.t1}</td>
-        <td class="lb-tier-cell ${r.t2 === 0 ? 'lb-zero' : ''}" data-tier="2" data-player-name="${r.name}" data-count="${r.t2}" tabindex="0" role="button" aria-label="Tier 2 (The Manager) count for ${r.name}: ${r.t2}" title="Click or tap to learn what Tier 2 (The Manager) means">${r.t2}</td>
-        <td class="lb-tier-cell ${r.t3 === 0 ? 'lb-zero' : ''}" data-tier="3" data-player-name="${r.name}" data-count="${r.t3}" tabindex="0" role="button" aria-label="Tier 3 (The Fan) count for ${r.name}: ${r.t3}" title="Click or tap to learn what Tier 3 (The Fan) means">${r.t3}</td>
-        <td class="lb-tier-cell ${r.t4 === 0 ? 'lb-zero' : ''}" data-tier="4" data-player-name="${r.name}" data-count="${r.t4}" tabindex="0" role="button" aria-label="Tier 4 (The Pundit) count for ${r.name}: ${r.t4}" title="Click or tap to learn what Tier 4 (The Pundit) means">${r.t4}</td>
-        <td class="lb-tier-cell ${r.t5 === 0 ? 'lb-zero' : ''}" data-tier="5" data-player-name="${r.name}" data-count="${r.t5}" tabindex="0" role="button" aria-label="Tier 5 (The Casual) count for ${r.name}: ${r.t5}" title="Click or tap to learn what Tier 5 (The Casual) means">${r.t5}</td>
-        <td class="lb-tier-cell ${r.t6 === 0 ? 'lb-zero' : ''}" data-tier="6" data-player-name="${r.name}" data-count="${r.t6}" tabindex="0" role="button" aria-label="Tier 6 (The Infantino) count for ${r.name}: ${r.t6}" title="Click or tap to learn what Tier 6 (The Infantino) means">${r.t6}</td>
+        ${SCORING_TIERS.map(t => {
+          const count = r[`t${t.tier}`] || 0;
+          return `<td class="lb-tier-cell ${count === 0 ? 'lb-zero' : ''}" data-tier="${t.tier}" data-player-name="${r.name}" data-count="${count}" tabindex="0" role="button" aria-label="Tier ${t.tier} (${t.name}) count for ${r.name}: ${count}" title="Click or tap to learn what Tier ${t.tier} (${t.name}) means">${count}</td>`;
+        }).join('')}
         <td class="lb-pts">${r.total}</td>
       </tr>
     `;
@@ -2675,7 +2700,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
         <div class="pts-rules-list">
           ${SCORING_TIERS.map(t => `
             <div class="pts-rule-row tier-${t.tier}">
-              <div class="pts-rule-icon-box tier-${t.tier}">${getTierIconSvg(t.tier, 22) || t.icon}</div>
+              <div class="pts-rule-icon-box tier-${t.tier}">${renderIconElement(t.icon, t.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${t.name}</span>
@@ -2695,7 +2720,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
         <div class="pts-rules-list">
           ${SCORING_BONUSES.map(b => `
             <div class="pts-rule-row bonus-row">
-              <div class="pts-rule-icon-box bonus-box">${b.icon}</div>
+              <div class="pts-rule-icon-box bonus-box">${renderIconElement(b.icon, b.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${b.name}</span>
@@ -2750,9 +2775,9 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   let formulaHtml = '';
   if (breakdown.status === 'evaluated') {
     const items = [];
-    items.push(`<span class="pts-formula-item">${breakdown.tierInfo.icon} ${breakdown.tierInfo.name} (+${breakdown.eval.base} pts)</span>`);
+    items.push(`<span class="pts-formula-item">${renderIconElement(breakdown.tierInfo.icon, breakdown.tierInfo.icon_type, 16)} ${breakdown.tierInfo.name} (+${breakdown.eval.base} pts)</span>`);
     for (const b of breakdown.bonuses) {
-      items.push(`<span class="pts-formula-item bonus">${b.icon} ${b.name} (+${b.pts} pt)</span>`);
+      items.push(`<span class="pts-formula-item bonus">${renderIconElement(b.icon, b.icon_type, 16)} ${b.name} (+${b.pts} pt)</span>`);
     }
     formulaHtml = `
       <div class="pts-breakdown-card">
@@ -2825,7 +2850,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
     const isAchieved = breakdown.tierInfo && breakdown.tierInfo.tier === t.tier;
     return `
             <div class="pts-rule-row ${isAchieved ? 'active-tier' : ''} tier-${t.tier}">
-              <div class="pts-rule-icon-box tier-${t.tier}">${getTierIconSvg(t.tier, 22) || t.icon}</div>
+              <div class="pts-rule-icon-box tier-${t.tier}">${renderIconElement(t.icon, t.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${t.name}</span>
@@ -2849,7 +2874,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
     const isAchieved = breakdown.bonuses && breakdown.bonuses.some(ab => ab.type === b.type);
     return `
             <div class="pts-rule-row ${isAchieved ? 'active-tier bonus-row' : 'bonus-row'}">
-              <div class="pts-rule-icon-box bonus-box">${b.icon}</div>
+              <div class="pts-rule-icon-box bonus-box">${renderIconElement(b.icon, b.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${b.name}</span>
@@ -2877,7 +2902,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
       <div class="pts-tooltip-header-left">
         <div class="pts-tooltip-title-wrap">
           <div class="pts-tooltip-icon-badge tier-${tier.tier}">
-            <span>${getTierIconSvg(tier.tier, 24) || tier.icon}</span>
+            <span>${renderIconElement(tier.icon, tier.icon_type, 24)}</span>
           </div>
           <div class="pts-tooltip-title-meta">
             <div class="pts-tooltip-title-row">
@@ -2918,7 +2943,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
     const isActive = t.tier === tierNumber;
     return `
             <div class="pts-rule-row ${isActive ? 'active-tier' : ''} tier-${t.tier}">
-              <div class="pts-rule-icon-box tier-${t.tier}">${t.icon}</div>
+              <div class="pts-rule-icon-box tier-${t.tier}">${renderIconElement(t.icon, t.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${t.name}</span>
@@ -3093,6 +3118,344 @@ function renderTeamSelectionGrid() {
   });
 }
 
+// ─── SCORING RULES ENGINE & VIEWS ───────────────────────────────────────────
+/**
+ * Load scoring rules from the API and hydrate SCORING_TIERS / SCORING_BONUSES.
+ */
+async function loadAndApplyScoringRules() {
+  try {
+    const rules = await apiFetchScoringRules();
+    if (Array.isArray(rules) && rules.length > 0) {
+      updateScoringRulesState(rules);
+    }
+  } catch (err) {
+    console.warn('Could not load scoring rules from API — using defaults:', err.message);
+  }
+}
+
+/**
+ * Render the static scoring view (scoringView page) — tiers + bonuses summary grid.
+ * Called when navigating to the scoring tab.
+ */
+function renderScoringViewSummary() {
+  const tiersGrid = document.getElementById('scoringTiersSummaryGrid');
+  const bonusesGrid = document.getElementById('scoringBonusesSummaryGrid');
+  const editBtn = document.getElementById('openScoringRulesEditorBtn');
+
+  // Show/hide admin edit button
+  if (editBtn) {
+    editBtn.style.display = state.auth?.role === 'admin' ? 'flex' : 'none';
+  }
+
+  if (tiersGrid) {
+    tiersGrid.innerHTML = SCORING_TIERS.map(t => `
+      <div class="glass-card scoring-rule-card tier-${t.tier}">
+        <div class="rule-icon" style="font-size: 2rem; line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
+        <div class="rule-title">Tier ${t.tier} — ${t.name}</div>
+        <div class="rule-pts">${t.pts} ${t.pts === 1 ? 'Pt' : 'Pts'}</div>
+        <p class="rule-desc">${t.desc || t.shortDesc || ''}</p>
+        <div class="rule-example-box">
+          <div class="rule-example-header">
+            <span class="rule-example-icon">💡</span>
+            <span class="rule-example-title">Example Scenario</span>
+          </div>
+          <div class="rule-example-body">
+            ${renderExampleChipsFromString(t.example)}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  if (bonusesGrid) {
+    bonusesGrid.innerHTML = SCORING_BONUSES.map((b, idx) => `
+      <div class="glass-card scoring-rule-card bonus-${idx + 1}">
+        <div class="rule-icon" style="font-size: 2rem;">${renderIconElement(b.icon, b.icon_type, 36)}</div>
+        <div class="rule-title">${b.name}</div>
+        <div class="rule-pts">+${b.pts} ${b.pts === 1 ? 'Pt' : 'Pts'}</div>
+        <p class="rule-desc">${b.desc || b.shortDesc || ''}</p>
+        <div class="rule-example-box">
+          <div class="rule-example-header">
+            <span class="rule-example-icon">💡</span>
+            <span class="rule-example-title">Example Scenario</span>
+          </div>
+          <div class="rule-example-body">
+            ${renderExampleChipsFromString(b.example)}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Render Simulator and Scenarios Matrix
+  updateScoreSimulator();
+  renderComprehensiveScenariosMatrix();
+}
+
+/**
+ * Render example "Actual VS Predicted" chips from a string like "Actual 3–1 | Predicted 3–1"
+ */
+function renderExampleChipsFromString(exStr) {
+  if (!exStr) return '';
+  const parts = exStr.split('|');
+  if (parts.length < 2) {
+    return `<div style="font-size:0.85rem; color:var(--text-muted);">${exStr}</div>`;
+  }
+  const actualPart = (parts[0] || '').replace(/^Actual\s*/i, '').trim();
+  const predPart = (parts[1] || '').replace(/^Predicted\s*/i, '').trim();
+  const extraCalc = parts[2] ? `<span class="example-calc-pill">${parts[2].trim()}</span>` : '';
+  return `
+    <div class="example-flex-row">
+      <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span class="example-chip-val">${actualPart}</span></div>
+      <span class="example-vs-badge">VS</span>
+      <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span class="example-chip-val">${predPart}</span></div>
+      ${extraCalc}
+    </div>`;
+}
+
+/**
+ * Comprehensive scenarios dataset for sample matrix evaluation.
+ */
+const SCENARIO_SAMPLES = [
+  { actH: 2, actA: 2, predH: 2, predA: 2, note: 'Exact draw scoreline with high goals' },
+  { actH: 3, actA: 1, predH: 3, predA: 1, note: 'Exact scoreline with 4 total goals' },
+  { actH: 1, actA: 1, predH: 1, predA: 1, note: 'Exact draw scoreline' },
+  { actH: 1, actA: 0, predH: 1, predA: 0, note: 'Exact match scoreline' },
+  { actH: 3, actA: 2, predH: 2, predA: 1, note: 'Correct winner & goal margin (+1 GD) in 5-goal match' },
+  { actH: 3, actA: 1, predH: 2, predA: 0, note: 'Correct winner & goal margin (+2 GD)' },
+  { actH: 2, actA: 2, predH: 1, predA: 1, note: 'Correct draw outcome, different score' },
+  { actH: 3, actA: 1, predH: 3, predA: 0, note: 'Correct outcome & exact home team goals' },
+  { actH: 3, actA: 1, predH: 4, predA: 0, note: 'Correct outcome with high scoring prediction' },
+  { actH: 2, actA: 0, predH: 3, predA: 0, note: 'Correct outcome only' },
+  { actH: 3, actA: 1, predH: 1, predA: 1, note: 'Incorrect outcome, exact away goals matched' },
+  { actH: 3, actA: 1, predH: 0, predA: 2, note: 'Incorrect outcome and zero goals matched' }
+];
+
+/**
+ * Dynamically render the Comprehensive Scenarios Matrix sorted by points in descending order.
+ */
+function renderComprehensiveScenariosMatrix() {
+  const tbody = document.getElementById('scoringWorkedExamplesBody');
+  if (!tbody) return;
+
+  // Evaluate and dynamically build scenario results
+  const evaluatedScenarios = SCENARIO_SAMPLES.map(s => {
+    const res = evaluatePrediction(s.actH, s.actA, s.predH, s.predA);
+    const tierObj = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[SCORING_TIERS.length - 1];
+    return {
+      ...s,
+      res,
+      tierObj,
+      total: res.total
+    };
+  });
+
+  // Sort strictly by total points descending
+  evaluatedScenarios.sort((a, b) => b.total - a.total);
+
+  tbody.innerHTML = evaluatedScenarios.map(item => {
+    const { actH, actA, predH, predA, res, tierObj, total, note } = item;
+    const totalGoals = actH + actA;
+
+    const highScoringHtml = res.highScoringBonus > 0
+      ? `<span class="pts-pill p-bonus">+${res.highScoringBonus}</span>`
+      : `<span style="color:var(--text-dim);">—</span>`;
+
+    const drawBonusHtml = res.drawBonus > 0
+      ? `<span class="pts-pill p-bonus">+${res.drawBonus}</span>`
+      : `<span style="color:var(--text-dim);">—</span>`;
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">${actH} – ${actA}</div>
+          <div style="color:var(--text-muted); font-size:0.75rem;">Total ${totalGoals} goals</div>
+        </td>
+        <td>
+          <div style="font-weight:700; font-size:0.95rem; color:var(--accent-cyan);">${predH} – ${predA}</div>
+          <div style="color:var(--text-muted); font-size:0.75rem;">${note}</div>
+        </td>
+        <td>
+          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.82rem; padding:4px 10px;">
+            ${renderIconElement(tierObj.icon, tierObj.icon_type, 18)}
+            <span>${tierObj.name}</span>
+          </span>
+        </td>
+        <td style="text-align:center; font-weight:700; font-size:0.9rem; color:var(--text-main);">
+          ${res.base} ${res.base === 1 ? 'Pt' : 'Pts'}
+        </td>
+        <td style="text-align:center;">
+          ${highScoringHtml}
+        </td>
+        <td style="text-align:center;">
+          ${drawBonusHtml}
+        </td>
+        <td style="text-align:center;">
+          <strong style="color:var(--accent-green); font-size:1.15rem; font-family:var(--font-title);">${total} ${total === 1 ? 'Pt' : 'Pts'}</strong>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Score Simulator State and Event Handling
+ */
+function initScoreSimulator() {
+  // Steppers
+  document.querySelectorAll('.sim-step-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const delta = parseInt(btn.dataset.delta, 10) || 0;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const current = parseInt(input.value, 10) || 0;
+      input.value = Math.max(0, Math.min(20, current + delta));
+      updateScoreSimulator();
+    });
+  });
+
+  // Number input change
+  ['simActHome', 'simActAway', 'simPredHome', 'simPredAway'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateScoreSimulator);
+  });
+
+  // Presets
+  document.querySelectorAll('.sim-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const actH = document.getElementById('simActHome');
+      const actA = document.getElementById('simActAway');
+      const predH = document.getElementById('simPredHome');
+      const predA = document.getElementById('simPredAway');
+
+      if (actH) actH.value = btn.dataset.actH;
+      if (actA) actA.value = btn.dataset.actA;
+      if (predH) predH.value = btn.dataset.predH;
+      if (predA) predA.value = btn.dataset.predA;
+
+      // Active preset chip highlight
+      document.querySelectorAll('.sim-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      updateScoreSimulator();
+    });
+  });
+
+  updateScoreSimulator();
+}
+
+/**
+ * Update the simulator result card dynamically.
+ */
+function updateScoreSimulator() {
+  const container = document.getElementById('simResultContainer');
+  if (!container) return;
+
+  const actH = parseInt(document.getElementById('simActHome')?.value, 10) || 0;
+  const actA = parseInt(document.getElementById('simActAway')?.value, 10) || 0;
+  const predH = parseInt(document.getElementById('simPredHome')?.value, 10) || 0;
+  const predA = parseInt(document.getElementById('simPredAway')?.value, 10) || 0;
+
+  const res = evaluatePrediction(actH, actA, predH, predA);
+  const tierObj = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[SCORING_TIERS.length - 1];
+
+  const bonusesList = [];
+  if (res.highScoringBonus > 0) {
+    const bDef = SCORING_BONUSES.find(b => b.id === 'highScoring') || {};
+    bonusesList.push({
+      icon: bDef.icon || '🔥',
+      icon_type: bDef.icon_type || 'emoji',
+      name: bDef.name || 'High-Scoring Thriller',
+      pts: res.highScoringBonus
+    });
+  }
+  if (res.drawBonus > 0) {
+    const bDef = SCORING_BONUSES.find(b => b.id === 'drawBonus') || {};
+    bonusesList.push({
+      icon: bDef.icon || '✨',
+      icon_type: bDef.icon_type || 'emoji',
+      name: bDef.name || 'Exact Draw Premium',
+      pts: res.drawBonus
+    });
+  }
+
+  const bonusChipsHtml = bonusesList.length > 0
+    ? bonusesList.map(b => `
+        <span class="sim-bonus-pill">
+          ${renderIconElement(b.icon, b.icon_type, 16)}
+          <span>${b.name}</span>
+          <strong class="sim-bonus-add">+${b.pts}</strong>
+        </span>
+      `).join('')
+    : '<span class="sim-no-bonus">No additive bonuses triggered</span>';
+
+  container.innerHTML = `
+    <div class="sim-result-header">
+      <span class="sim-result-tag">Live Evaluation</span>
+      <div class="sim-total-pts-badge">
+        <span class="sim-pts-number">${res.total}</span>
+        <span class="sim-pts-label">${res.total === 1 ? 'Point' : 'Points'}</span>
+      </div>
+    </div>
+
+    <div class="sim-result-body">
+      <!-- Base Tier Met -->
+      <div class="sim-breakdown-row">
+        <span class="sim-breakdown-label">Base Rule Met:</span>
+        <div class="sim-rule-badge-wrap">
+          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.9rem; padding:5px 12px;">
+            ${renderIconElement(tierObj.icon, tierObj.icon_type, 20)}
+            <span>${tierObj.name}</span>
+          </span>
+          <span class="sim-base-pts-tag">${res.base} ${res.base === 1 ? 'pt' : 'pts'}</span>
+        </div>
+      </div>
+
+      <!-- Additive Bonuses -->
+      <div class="sim-breakdown-row">
+        <span class="sim-breakdown-label">Additive Bonuses:</span>
+        <div class="sim-bonuses-group">
+          ${bonusChipsHtml}
+        </div>
+      </div>
+
+      <!-- Summary Formula -->
+      <div class="sim-formula-bar">
+        <span class="sim-formula-item">${res.base} base</span>
+        ${bonusesList.map(b => `<span class="sim-formula-plus">+</span><span class="sim-formula-bonus">+${b.pts}</span>`).join('')}
+        <span class="sim-formula-equals">=</span>
+        <strong class="sim-formula-total">${res.total} ${res.total === 1 ? 'Pt' : 'Pts'}</strong>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render scoring rules summary chips in management view.
+ */
+function renderMgmtScoringRulesSummary() {
+  const grid = document.getElementById('mgmtScoringRulesSummaryGrid');
+  if (!grid) return;
+
+  const all = [...SCORING_TIERS, ...SCORING_BONUSES];
+  grid.innerHTML = all.map(r => {
+    const tierNum = r.tier ?? null;
+    const pts = r.pts;
+    const icon = r.icon;
+    const name = r.name;
+    const badgeClass = r.badgeClass || (tierNum ? `p${pts}` : 'p-bonus');
+    return `
+      <div style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border-glass); border-radius:var(--radius-sm); padding:10px 14px;">
+        <span style="font-size:1.4rem;">${renderIconElement(icon, r.icon_type, 24)}</span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:0.82rem; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+          ${tierNum ? `<div style="font-size:0.75rem; color:var(--text-muted);">Tier ${tierNum}</div>` : `<div style="font-size:0.75rem; color:var(--accent-purple);">Bonus</div>`}
+        </div>
+        <span class="pts-badge ${badgeClass}" style="flex-shrink:0;">${pts >= 0 ? `${tierNum ? '' : '+'}${pts}` : pts} pts</span>
+      </div>`;
+  }).join('');
+}
+
 function initManagementEvents() {
   const teamModeRadios = document.getElementsByName('mgmtTeamMode');
   const chipGrid = document.getElementById('mgmtTeamChipGrid');
@@ -3167,6 +3530,7 @@ function initManagementEvents() {
 }
 
 function renderManagementPage() {
+  renderMgmtScoringRulesSummary();
   renderTeamSelectionGrid();
   renderGroupsGrid();
   renderMasterPlayersTable();
@@ -3408,6 +3772,19 @@ async function init() {
   initGroupEvents();
   initGWSkipControls();
   initManagementEvents();
+  initRulesEditorModal({
+    onRulesUpdated: () => {
+      renderScoringViewSummary();
+      renderMgmtScoringRulesSummary();
+      if (state.activeView === 'dashboard') {
+        renderLeaderboardSnapshot();
+        renderLeaderboard();
+      }
+    }
+  });
+  document.getElementById('exportScoringRulesPdfBtn')?.addEventListener('click', exportRulesToPdf);
+  document.getElementById('exportScoringRulesJpgBtn')?.addEventListener('click', exportRulesToJpeg);
+  initScoreSimulator();
   initCopyBtn();
   startLockRefresh();
   initPointsTooltip();
@@ -3418,6 +3795,7 @@ async function init() {
     </td></tr>`;
 
   try {
+    await loadAndApplyScoringRules();
     await initAuth();
     await reloadMasterData();
     populateGroupDropdown();
