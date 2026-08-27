@@ -8,8 +8,11 @@ const __dirname = path.dirname(__filename);
 
 let dataDir = process.env.DATA_DIR;
 if (!dataDir) {
+  const hostDockerVolumeDir = '/var/lib/docker/volumes/epl_score_predictor_epl-db-data/_data';
   if (fs.existsSync('/app/data')) {
     dataDir = '/app/data';
+  } else if (fs.existsSync(path.join(hostDockerVolumeDir, 'epl_predictor.db'))) {
+    dataDir = hostDockerVolumeDir;
   } else if (fs.existsSync(path.join(__dirname, 'data'))) {
     dataDir = path.join(__dirname, 'data');
   } else {

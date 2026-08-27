@@ -33,6 +33,7 @@ services:
     network_mode: service:ts-epl
     volumes:
       - epl-db-data:/app/data
+      - ./user_credentials.txt:/app/user_credentials.txt
     environment:
       - PORT=3000
       - DATA_DIR=/app/data

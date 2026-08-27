@@ -612,6 +612,7 @@ app.post('/api/players/:id/groups', requireAdmin, (req, res) => {
   try {
     const stmt = db.prepare('INSERT OR IGNORE INTO group_players (group_id, player_id) VALUES (?, ?)');
     stmt.run(group_id, playerId);
+    syncCredentialsFile();
     res.json({ success: true, player_id: playerId, group_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -626,6 +627,7 @@ app.delete('/api/players/:id/groups/:groupId', requireAdmin, (req, res) => {
   try {
     const stmt = db.prepare('DELETE FROM group_players WHERE group_id = ? AND player_id = ?');
     stmt.run(groupId, playerId);
+    syncCredentialsFile();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dump-credentials": "node server/dump_credentials.js"
   },
   "dependencies": {
     "dexie": "^3.2.7",
