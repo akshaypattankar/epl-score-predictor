@@ -477,7 +477,27 @@ export const DEFAULT_SCORING_RULES = [
     short_desc: 'Actual & predicted goals both >= 4 + correct outcome',
     desc: 'Awarded when both total actual goals and total predicted goals are 4 or more, and you predicted the correct outcome.',
     example: 'Actual 3–1 (4 goals) | Predicted 4–0 (4 goals)',
-    min_goals: 4
+    min_goals: 4,
+    min_goals_mode: 'BOTH',
+    min_goals_enabled: 1,
+    goal_diff: null,
+    goal_diff_enabled: 0
+  },
+  {
+    rule_type: 'bonus',
+    id: 'goalRush',
+    name: 'Goal Rush Bonus',
+    pts: 1,
+    icon: '⚡',
+    badge_class: 'p-bonus',
+    short_desc: 'Either team goals >= 5 & GD >= 3 + correct outcome',
+    desc: 'Awarded when either team scores 5 or more goals with a goal difference of 3 or more, and you predicted the correct outcome.',
+    example: 'Actual 5–0 (GD +5) | Predicted 5–2 (GD +3)',
+    min_goals: 5,
+    min_goals_mode: 'EITHER',
+    min_goals_enabled: 1,
+    goal_diff: 3,
+    goal_diff_enabled: 1
   },
   {
     rule_type: 'bonus',

@@ -39,6 +39,7 @@ export function evaluatePrediction(actH, actA, predH, predA) {
   let highScoringBonus = 0;
   let drawBonus = 0;
   let customBonusesTotal = 0;
+  const activeBonuses = [];
 
   for (const b of SCORING_BONUSES) {
     let qualified = true;
@@ -70,20 +71,33 @@ export function evaluatePrediction(actH, actA, predH, predA) {
     }
 
     // Rule specific built-in requirements
-    if (b.id === 'highScoring') {
-      qualified = qualified && isCorrectOutcome;
-      if (qualified) highScoringBonus += b.pts;
-    } else if (b.id === 'drawBonus') {
+    if (b.id === 'drawBonus' || b.condition_type === 'exact_draw') {
       qualified = qualified && (actH === actA && isExactScore);
-      if (qualified) drawBonus += b.pts;
     } else {
-      if (qualified) customBonusesTotal += b.pts;
+      // Non-draw bonus rules require predicting correct match outcome
+      qualified = qualified && isCorrectOutcome;
+    }
+
+    if (qualified) {
+      if (b.id === 'highScoring') highScoringBonus += b.pts;
+      else if (b.id === 'drawBonus') drawBonus += b.pts;
+      else customBonusesTotal += b.pts;
+
+      activeBonuses.push({
+        id: b.id,
+        name: b.name,
+        pts: b.pts,
+        icon: b.icon || '⭐',
+        icon_type: b.icon_type || 'emoji',
+        shortDesc: b.shortDesc || b.short_desc || '',
+        desc: b.desc || ''
+      });
     }
   }
 
   const total = base + highScoringBonus + drawBonus + customBonusesTotal;
 
-  return { base, highScoringBonus, drawBonus, total, tier, isExactScore, isCorrectOutcome };
+  return { base, highScoringBonus, drawBonus, customBonusesTotal, activeBonuses, total, tier, isExactScore, isCorrectOutcome };
 }
 
 /** CSS class for a points badge */
@@ -200,12 +214,28 @@ export let SCORING_BONUSES = [
     badgeClass: 'p-bonus',
     shortDesc: 'Actual & predicted goals both ≥ 4 + correct outcome',
     desc: 'Awarded when both total actual goals and total predicted goals are 4 or more, and you predicted the correct outcome.',
-    example: 'Actual 3–1 (4 goals) | Predicted 3–1 (4 goals)',
+    example: 'Actual 3–1 (4 goals) | Predicted 4–0 (4 goals)',
     minGoals: 4,
     minGoalsMode: 'BOTH',
     minGoalsEnabled: true,
     goalDiff: null,
     goalDiffEnabled: false
+  },
+  {
+    id: 'goalRush',
+    name: 'Goal Rush Bonus',
+    pts: 1,
+    icon: '⚡',
+    icon_type: 'emoji',
+    badgeClass: 'p-bonus',
+    shortDesc: 'Either team goals ≥ 5 & GD ≥ 3 + correct outcome',
+    desc: 'Awarded when either team scores 5 or more goals with a goal difference of 3 or more, and you predicted the correct outcome.',
+    example: 'Actual 5–0 (GD +5) | Predicted 5–2 (GD +3)',
+    minGoals: 5,
+    minGoalsMode: 'EITHER',
+    minGoalsEnabled: true,
+    goalDiff: 3,
+    goalDiffEnabled: true
   },
   {
     id: 'drawBonus',
@@ -425,27 +455,13 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
   }
 
   const tierInfo = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[5];
-  const bonuses = [];
-
-  if (res.highScoringBonus > 0) {
-    bonuses.push({
-      id: 'highScoring',
-      name: 'High-Scoring Thriller',
-      pts: 1,
-      icon: '🔥',
-      reason: `Both actual (${actH + actA}) and predicted (${predH + predA}) totals were ≥ 4 goals with correct outcome.`
-    });
-  }
-
-  if (res.drawBonus > 0) {
-    bonuses.push({
-      id: 'drawBonus',
-      name: 'Exact Draw Premium',
-      pts: 1,
-      icon: '✨',
-      reason: `Match ended in a draw (${actH}–${actA}) and exact score was predicted.`
-    });
-  }
+  const bonuses = (res.activeBonuses || []).map(b => ({
+    id: b.id,
+    name: b.name,
+    pts: b.pts,
+    icon: b.icon || '⭐',
+    reason: b.shortDesc || b.desc || `${b.name} criteria met.`
+  }));
 
   // Explanation construction
   let explanation = '';

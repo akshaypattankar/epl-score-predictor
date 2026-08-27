@@ -33,7 +33,7 @@ import {
   apiResetScoringRules
 } from './api.js';
 import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
-import { initRulesEditorModal, openRulesEditorModal, renderIconElement } from './rulesEditor.js';
+import { initRulesEditorModal, openRulesEditorModal, renderIconElement, generateLowestScenarioPreset } from './rulesEditor.js';
 import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -1948,6 +1948,7 @@ function renderMatrix() {
       ? 'No players found in this group yet. Click "Manage Leagues & Players" to add people!'
       : 'No players found in this group yet. Ask your league admin to add players!';
     tbody.innerHTML = `<tr><td colspan="10" class="loading-state">${msg}</td></tr>`;
+    renderMatrixFooter(players, fixtures, isGuest);
     return;
   }
 
@@ -1956,6 +1957,7 @@ function renderMatrix() {
       ? (hasTeamFilter ? `No fixtures found for selected team(s) in GW ${gw}.` : `No fixtures found for GW ${gw}.`)
       : `No fixtures matching current scope/filter for GW ${gw}.`;
     tbody.innerHTML = `<tr><td colspan="${isGuest ? 4 : (4 + players.length * 3)}" class="loading-state">${emptyMsg}</td></tr>`;
+    renderMatrixFooter(players, fixtures, isGuest);
     return;
   }
 
@@ -2098,6 +2100,85 @@ function renderMatrix() {
 
   if (!isGuest) attachInputHandlers();
   attachTeamLinkHandlers();
+  renderMatrixFooter(players, fixtures, isGuest);
+}
+
+function renderMatrixFooter(players, fixtures, isGuest) {
+  const foot = document.getElementById('matrixFoot');
+  if (!foot) return;
+
+  if (isGuest || !players || players.length === 0 || !fixtures || fixtures.length === 0) {
+    foot.innerHTML = '';
+    return;
+  }
+
+  // Calculate cumulative total points for each player across all fixtures in active matrix
+  const playerTotals = {};
+  players.forEach(p => { playerTotals[p.id] = 0; });
+
+  fixtures.forEach(f => {
+    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
+    if (!hasResult) return;
+
+    players.forEach(p => {
+      const pred = state.predictions[`${f.id}_${p.id}`];
+      if (pred && pred.predicted_home !== null && pred.predicted_away !== null &&
+        pred.predicted_home !== undefined && pred.predicted_away !== undefined) {
+        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        if (res && res.total) {
+          playerTotals[p.id] += res.total;
+        }
+      }
+    });
+  });
+
+  foot.innerHTML = `
+    <tr class="matrix-foot-row">
+      <td colspan="2" class="matrix-foot-label-cell">
+        <div class="matrix-foot-label">
+          <span>Total Points</span>
+        </div>
+      </td>
+      ${players.map(p => {
+        const shades = getPlayerColorShades(p);
+        const total = playerTotals[p.id] || 0;
+        return `
+          <td colspan="3" class="matrix-foot-player-cell" style="background:${shades.bgSubtle}; border-top:2px solid ${shades.border}; border-right:1px solid rgba(255, 255, 255, 0.08);">
+            <div class="matrix-foot-pts-badge" style="color:${shades.primary}; border-color:${shades.chipBorder}; background:${shades.chipBg};">
+              <span class="matrix-foot-pts-num">${total}</span>
+              <span class="matrix-foot-pts-unit">pts</span>
+            </div>
+          </td>
+        `;
+      }).join('')}
+      <td class="matrix-foot-empty-cell"></td>
+    </tr>
+  `;
+}
+
+function updateMatrixTotals() {
+  const gw = state.activeGW;
+  if (!gw) return;
+  const isGuest = state.auth.role === 'guest';
+  if (isGuest) return;
+
+  const rawFixtures = state.fixtures[gw] ?? [];
+  const selectedTeams = getSelectedTeams();
+  let fixtures = isGuest ? rawFixtures : filterFixturesByGroup(rawFixtures);
+  if (selectedTeams.length > 0) {
+    fixtures = rawFixtures.filter(f => selectedTeams.includes(f.home_name) || selectedTeams.includes(f.away_name));
+  }
+
+  let players = [...state.players];
+  if (state.auth.activePlayerId) {
+    const youIdx = players.findIndex(p => p.id === state.auth.activePlayerId);
+    if (youIdx > 0) {
+      const [youPlayer] = players.splice(youIdx, 1);
+      players.unshift(youPlayer);
+    }
+  }
+
+  renderMatrixFooter(players, fixtures, isGuest);
 }
 
 // ─── Input Handlers (Server Auto-Save) ────────────────────────────────────────
@@ -2155,6 +2236,7 @@ async function handleInputBlur(e) {
     showSaveToast();
 
     updatePtsBadge(matchId, playerId);
+    updateMatrixTotals();
     renderLeaderboard();
     renderSnapshot(calcLeaderboard());
     renderCumulativeChart();
@@ -3191,6 +3273,10 @@ async function loadAndApplyScoringRules() {
  * Render the static scoring view (scoringView page) — tiers + bonuses summary grid.
  * Called when navigating to the scoring tab.
  */
+/**
+ * Render the static scoring view (scoringView page) — tiers + bonuses summary grid.
+ * Called when navigating to the scoring tab.
+ */
 function renderScoringViewSummary() {
   const tiersGrid = document.getElementById('scoringTiersSummaryGrid');
   const bonusesGrid = document.getElementById('scoringBonusesSummaryGrid');
@@ -3202,46 +3288,77 @@ function renderScoringViewSummary() {
   }
 
   if (tiersGrid) {
-    tiersGrid.innerHTML = SCORING_TIERS.map(t => `
-      <div class="glass-card scoring-rule-card tier-${t.tier}">
-        <div class="rule-icon" style="font-size: 2rem; line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
-        <div class="rule-title">Tier ${t.tier} — ${t.name}</div>
-        <div class="rule-pts">${t.pts} ${t.pts === 1 ? 'Pt' : 'Pts'}</div>
-        <p class="rule-desc">${t.desc || t.shortDesc || ''}</p>
-        <div class="rule-example-box">
-          <div class="rule-example-header">
-            <span class="rule-example-icon">💡</span>
-            <span class="rule-example-title">Example Scenario</span>
-          </div>
-          <div class="rule-example-body">
-            ${renderExampleChipsFromString(t.example)}
+    tiersGrid.innerHTML = SCORING_TIERS.map(t => {
+      const ruleObj = {
+        rule_type: 'tier',
+        min_goals_enabled: t.minGoalsEnabled,
+        min_goals: t.minGoals,
+        min_goals_mode: t.minGoalsMode,
+        goal_diff_enabled: t.goalDiffEnabled,
+        goal_diff: t.goalDiff,
+        short_desc: t.shortDesc,
+        desc: t.desc
+      };
+      const exPreset = generateLowestScenarioPreset(ruleObj);
+      const exDisplay = t.example || exPreset.exampleStr;
+
+      return `
+        <div class="glass-card scoring-rule-card tier-${t.tier}">
+          <div class="rule-icon" style="font-size: 2rem; line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
+          <div class="rule-title">Tier ${t.tier} — ${t.name}</div>
+          <div class="rule-pts">${t.pts} ${t.pts === 1 ? 'Pt' : 'Pts'}</div>
+          <p class="rule-desc">${t.desc || t.shortDesc || ''}</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Lowest score threshold)</span></span>
+            </div>
+            <div class="rule-example-body">
+              ${renderExampleChipsFromString(exDisplay)}
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   if (bonusesGrid) {
-    bonusesGrid.innerHTML = SCORING_BONUSES.map((b, idx) => `
-      <div class="glass-card scoring-rule-card bonus-${idx + 1}">
-        <div class="rule-icon" style="font-size: 2rem;">${renderIconElement(b.icon, b.icon_type, 36)}</div>
-        <div class="rule-title">${b.name}</div>
-        <div class="rule-pts">+${b.pts} ${b.pts === 1 ? 'Pt' : 'Pts'}</div>
-        <p class="rule-desc">${b.desc || b.shortDesc || ''}</p>
-        <div class="rule-example-box">
-          <div class="rule-example-header">
-            <span class="rule-example-icon">💡</span>
-            <span class="rule-example-title">Example Scenario</span>
-          </div>
-          <div class="rule-example-body">
-            ${renderExampleChipsFromString(b.example)}
+    bonusesGrid.innerHTML = SCORING_BONUSES.map((b, idx) => {
+      const ruleObj = {
+        rule_type: 'bonus',
+        min_goals_enabled: b.minGoalsEnabled,
+        min_goals: b.minGoals,
+        min_goals_mode: b.minGoalsMode,
+        goal_diff_enabled: b.goalDiffEnabled,
+        goal_diff: b.goalDiff,
+        short_desc: b.shortDesc,
+        desc: b.desc
+      };
+      const exPreset = generateLowestScenarioPreset(ruleObj);
+      const exDisplay = b.example || exPreset.exampleStr;
+
+      return `
+        <div class="glass-card scoring-rule-card bonus-${idx + 1}">
+          <div class="rule-icon" style="font-size: 2rem;">${renderIconElement(b.icon, b.icon_type, 36)}</div>
+          <div class="rule-title">${b.name}</div>
+          <div class="rule-pts">+${b.pts} ${b.pts === 1 ? 'Pt' : 'Pts'}</div>
+          <p class="rule-desc">${b.desc || b.shortDesc || ''}</p>
+          <div class="rule-example-box">
+            <div class="rule-example-header">
+              <span class="rule-example-icon">💡</span>
+              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Lowest score threshold)</span></span>
+            </div>
+            <div class="rule-example-body">
+              ${renderExampleChipsFromString(exDisplay)}
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   // Render Simulator and Scenarios Matrix
+  renderSimulatorPresets();
   updateScoreSimulator();
   renderComprehensiveScenariosMatrix();
 }
@@ -3353,6 +3470,76 @@ function renderComprehensiveScenariosMatrix() {
 }
 
 /**
+ * Dynamically render the Score Simulator preset buttons based on active rules.
+ */
+function renderSimulatorPresets() {
+  const container = document.querySelector('.sim-presets-chips');
+  if (!container) return;
+
+  const presets = [
+    { label: '🎯 Bullseye (3–1 vs 3–1)', actH: 3, actA: 1, predH: 3, predA: 1 }
+  ];
+
+  // Dynamically generate lowest score threshold presets for all active bonus rules!
+  SCORING_BONUSES.forEach(b => {
+    const presetInfo = generateLowestScenarioPreset({
+      rule_type: 'bonus',
+      min_goals_enabled: b.minGoalsEnabled,
+      min_goals: b.minGoals,
+      min_goals_mode: b.minGoalsMode,
+      goal_diff_enabled: b.goalDiffEnabled,
+      goal_diff: b.goalDiff
+    });
+    const match = presetInfo.exampleStr.match(/Actual\s+(\d+)–(\d+)/i);
+    if (match) {
+      const h = parseInt(match[1], 10);
+      const a = parseInt(match[2], 10);
+      presets.push({
+        label: `${renderIconElement(b.icon, b.icon_type, 16)} ${b.name} (${h}–${a})`,
+        actH: h,
+        actA: a,
+        predH: h,
+        predA: a
+      });
+    }
+  });
+
+  // Standard test scenario presets
+  presets.push(
+    { label: '✨ Exact Draw (1–1)', actH: 1, actA: 1, predH: 1, predA: 1 },
+    { label: '📊 Same Margin (3–1 vs 2–0)', actH: 3, actA: 1, predH: 2, predA: 0 },
+    { label: '❌ Outcome Only (3–1 vs 4–0)', actH: 3, actA: 1, predH: 4, predA: 0 },
+    { label: '🛋️ Miss (3–1 vs 0–2)', actH: 3, actA: 1, predH: 0, predA: 2 }
+  );
+
+  container.innerHTML = presets.map(p => `
+    <button type="button" class="sim-preset-btn" data-act-h="${p.actH}" data-act-a="${p.actA}" data-pred-h="${p.predH}" data-pred-a="${p.predA}">
+      ${p.label}
+    </button>
+  `).join('');
+
+  // Attach click handlers
+  container.querySelectorAll('.sim-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const actH = document.getElementById('simActHome');
+      const actA = document.getElementById('simActAway');
+      const predH = document.getElementById('simPredHome');
+      const predA = document.getElementById('simPredAway');
+
+      if (actH) actH.value = btn.dataset.actH;
+      if (actA) actA.value = btn.dataset.actA;
+      if (predH) predH.value = btn.dataset.predH;
+      if (predA) predA.value = btn.dataset.predA;
+
+      container.querySelectorAll('.sim-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      updateScoreSimulator();
+    });
+  });
+}
+
+/**
  * Score Simulator State and Event Handling
  */
 function initScoreSimulator() {
@@ -3374,27 +3561,7 @@ function initScoreSimulator() {
     document.getElementById(id)?.addEventListener('input', updateScoreSimulator);
   });
 
-  // Presets
-  document.querySelectorAll('.sim-preset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const actH = document.getElementById('simActHome');
-      const actA = document.getElementById('simActAway');
-      const predH = document.getElementById('simPredHome');
-      const predA = document.getElementById('simPredAway');
-
-      if (actH) actH.value = btn.dataset.actH;
-      if (actA) actA.value = btn.dataset.actA;
-      if (predH) predH.value = btn.dataset.predH;
-      if (predA) predA.value = btn.dataset.predA;
-
-      // Active preset chip highlight
-      document.querySelectorAll('.sim-preset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      updateScoreSimulator();
-    });
-  });
-
+  renderSimulatorPresets();
   updateScoreSimulator();
 }
 

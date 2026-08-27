@@ -25,9 +25,13 @@ Bonus points stack on top of base points when their criteria are met:
 
 ### 1. High-Scoring Thriller Bonus (+1 pt)
 * **Trigger**: Total actual match goals $\ge 4$ (e.g., `3–1`, `2–2`, `4–0`, `4–3`).
-* **Condition**: Player must have earned at least Tier 1, 2, 3, or 4 base points (must have correctly predicted the match outcome).
+* **Condition**: Total actual goals $\ge 4$ and total predicted goals $\ge 4$, with correct outcome predicted.
 
-### 2. Exact Draw Premium (+1 pt)
+### 2. Goal Rush Bonus (+1 pt)
+* **Trigger**: Either team scores $\ge 5$ goals AND maintains a goal difference $\ge 3$ (e.g., `5–0`, `5–1`, `5–2`, `6–1`).
+* **Condition**: Player's prediction must also predict either team scoring $\ge 5$ goals with a goal difference $\ge 3$, alongside predicting the correct match outcome.
+
+### 3. Exact Draw Premium (+1 pt)
 * **Trigger**: Match ends in a draw, and the player correctly predicts the exact draw scoreline (e.g., actual `2–2`, predicted `2–2`).
 * **Stacking**: An exact draw yields $6\text{ (The Oracle)} + 1\text{ (Draw Premium)} = \mathbf{7\text{ pts}}$ (or $\mathbf{8\text{ pts}}$ if total goals $\ge 4$, e.g., `2–2` or `3–3`).
 

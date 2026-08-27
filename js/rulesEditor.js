@@ -101,24 +101,33 @@ export async function openRulesEditorModal() {
       goal_diff: t.goalDiff ?? null,
       goal_diff_enabled: Boolean(t.goalDiffEnabled)
     })),
-    ...SCORING_BONUSES.map(b => ({
-      rule_type: 'bonus',
-      id: String(b.id),
-      name: b.name || 'Bonus Rule',
-      pts: Number(b.pts ?? 1),
-      icon: b.icon || '⭐',
-      icon_type: b.icon_type === 'svg' || (b.icon && b.icon.includes('.svg')) ? 'svg' : 'emoji',
-      badge_class: b.badgeClass || 'p-bonus',
-      short_desc: b.shortDesc || '',
-      desc: b.desc || '',
-      example: b.example || '',
-      condition_type: null,
-      min_goals: b.minGoals ?? null,
-      min_goals_mode: b.minGoalsMode || 'BOTH',
-      min_goals_enabled: b.minGoalsEnabled != null ? Boolean(b.minGoalsEnabled) : (b.minGoals != null),
-      goal_diff: b.goalDiff ?? null,
-      goal_diff_enabled: Boolean(b.goalDiffEnabled)
-    }))
+    ...SCORING_BONUSES.map(b => {
+      const r = {
+        rule_type: 'bonus',
+        id: String(b.id),
+        name: b.name || 'Bonus Rule',
+        pts: Number(b.pts ?? 1),
+        icon: b.icon || '⭐',
+        icon_type: b.icon_type === 'svg' || (b.icon && b.icon.includes('.svg')) ? 'svg' : 'emoji',
+        badge_class: b.badgeClass || 'p-bonus',
+        short_desc: b.shortDesc || '',
+        desc: b.desc || '',
+        example: b.example || '',
+        condition_type: null,
+        min_goals: b.minGoals ?? null,
+        min_goals_mode: b.minGoalsMode || 'BOTH',
+        min_goals_enabled: Boolean(b.minGoalsEnabled),
+        goal_diff: b.goalDiff ?? null,
+        goal_diff_enabled: Boolean(b.goalDiffEnabled)
+      };
+      if (!r.example || r.example.trim() === '') {
+        const preset = generateLowestScenarioPreset(r);
+        r.example = preset.exampleStr;
+        if (!r.short_desc) r.short_desc = preset.shortDesc;
+        if (!r.desc) r.desc = preset.desc;
+      }
+      return r;
+    })
   ];
 
   clearError();
@@ -394,7 +403,12 @@ function buildSingleRuleCard(rule, idx) {
 
       <!-- Explanations & Examples Section -->
       <div class="rule-card-descriptions-section">
-        <span class="rule-section-label">📝 Description & Example</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <span class="rule-section-label" style="margin-bottom:0;">📝 Description & Example Preset</span>
+          <button type="button" class="btn btn-xs rule-auto-preset-btn" data-rule-type="${rule.rule_type}" data-rule-id="${rule.id}" title="Calculate lowest possible scoreline scenario preset based on active filters" style="background:rgba(99,102,241,0.15); color:#a5b4fc; border:1px solid rgba(99,102,241,0.3); border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer;">
+            ⚡ Auto-Preset (Lowest Score Scenario)
+          </button>
+        </div>
         
         <div class="descriptions-input-grid">
           <div class="desc-field-group">
@@ -412,7 +426,7 @@ function buildSingleRuleCard(rule, idx) {
           </div>
 
           <div class="desc-field-group full-width">
-            <label class="rule-input-label">Example Scenario <span class="input-hint">(Format: Actual X–Y | Predicted X–Y)</span></label>
+            <label class="rule-input-label">Example Scenario <span class="input-hint">(Lowest boundary scoreline scenario)</span></label>
             <input type="text" class="form-input rule-editor-field" data-field="example"
               value="${escapeHtml(rule.example || '')}"
               placeholder="Actual 3–1 | Predicted 3–1" maxlength="140" />
@@ -552,6 +566,24 @@ function attachEventHandlers() {
     });
   });
 
+  // Auto-Preset Button Handler (Calculates Lowest Score Scenario Boundary)
+  root.querySelectorAll('.rule-auto-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.rule-card-editor');
+      if (!card) return;
+      const { ruleType, ruleId } = card.dataset;
+      const rule = findRule(ruleType, ruleId);
+      if (!rule) return;
+
+      const preset = generateLowestScenarioPreset(rule);
+      rule.short_desc = preset.shortDesc;
+      rule.desc = preset.desc;
+      rule.example = preset.exampleStr;
+
+      renderModalContent();
+    });
+  });
+
   // Input Field Changes
   root.querySelectorAll('.rule-editor-field').forEach(input => {
     const handler = (e) => {
@@ -573,6 +605,16 @@ function attachEventHandlers() {
       }
 
       rule[field] = val;
+
+      // Auto update scenario preset if conditions change
+      if (field === 'min_goals_enabled' || field === 'goal_diff_enabled' || field === 'min_goals_mode') {
+        const preset = generateLowestScenarioPreset(rule);
+        rule.short_desc = preset.shortDesc;
+        rule.desc = preset.desc;
+        rule.example = preset.exampleStr;
+        renderModalContent();
+        return;
+      }
 
       // Re-render if structural condition toggles change
       if (field === 'min_goals_enabled' || field === 'goal_diff_enabled') {
@@ -623,7 +665,7 @@ function attachEventHandlers() {
 }
 
 /**
- * Add a new tier or bonus rule.
+ * Add a new tier or bonus rule with automated lowest threshold preset.
  */
 function addNewRule(ruleType) {
   clearError();
@@ -632,7 +674,7 @@ function addNewRule(ruleType) {
     const existingTiers = _editorRules.filter(r => r.rule_type === 'tier');
     const newId = String(existingTiers.length + 1);
 
-    _editorRules.push({
+    const newRule = {
       rule_type: 'tier',
       id: newId,
       name: `New Tier ${newId}`,
@@ -649,11 +691,18 @@ function addNewRule(ruleType) {
       min_goals_enabled: false,
       goal_diff: null,
       goal_diff_enabled: false
-    });
+    };
+
+    const preset = generateLowestScenarioPreset(newRule);
+    newRule.short_desc = preset.shortDesc;
+    newRule.desc = preset.desc;
+    newRule.example = preset.exampleStr;
+
+    _editorRules.push(newRule);
     _activeCategoryTab = 'tiers';
   } else {
     const newId = `bonus_${Date.now()}`;
-    _editorRules.push({
+    const newRule = {
       rule_type: 'bonus',
       id: newId,
       name: 'New Bonus Rule',
@@ -665,12 +714,19 @@ function addNewRule(ruleType) {
       desc: '',
       example: '',
       condition_type: null,
-      min_goals: null,
+      min_goals: 4,
       min_goals_mode: 'BOTH',
-      min_goals_enabled: false,
+      min_goals_enabled: true,
       goal_diff: null,
       goal_diff_enabled: false
-    });
+    };
+
+    const preset = generateLowestScenarioPreset(newRule);
+    newRule.short_desc = preset.shortDesc;
+    newRule.desc = preset.desc;
+    newRule.example = preset.exampleStr;
+
+    _editorRules.push(newRule);
     _activeCategoryTab = 'bonuses';
   }
 
@@ -728,8 +784,14 @@ export async function saveScoringRules() {
     return;
   }
 
-  // Validate rules
+  // Validate rules and auto-populate missing preset scenarios
   for (const r of _editorRules) {
+    if (!r.example || !r.example.trim()) {
+      const preset = generateLowestScenarioPreset(r);
+      r.example = preset.exampleStr;
+      if (!r.short_desc) r.short_desc = preset.shortDesc;
+      if (!r.desc) r.desc = preset.desc;
+    }
     const label = r.name?.trim() || `${r.rule_type} ${r.id}`;
     if (!r.name || !r.name.trim()) {
       showError(`"${label}" must have a rule name.`);
@@ -846,4 +908,101 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/**
+ * Automatically calculate the lowest possible scoreline boundary and scenario preset for a scoring rule.
+ * @param {Object} rule
+ * @returns {{ exampleStr: string, shortDesc: string, desc: string }}
+ */
+export function generateLowestScenarioPreset(rule) {
+  const isTier = rule.rule_type === 'tier';
+  const minGoalsEnabled = Boolean(rule.min_goals_enabled);
+  const minGoalsVal = Math.max(1, parseInt(rule.min_goals, 10) || 1);
+  const minGoalsMode = rule.min_goals_mode || 'BOTH';
+
+  const goalDiffEnabled = Boolean(rule.goal_diff_enabled);
+  const goalDiffVal = Math.max(1, parseInt(rule.goal_diff, 10) || 1);
+
+  if (!minGoalsEnabled && !goalDiffEnabled) {
+    if (isTier) {
+      return {
+        exampleStr: 'Actual 1–0 | Predicted 1–0',
+        shortDesc: rule.short_desc || 'Base tier scoring',
+        desc: rule.desc || 'Applies to match predictions.'
+      };
+    } else {
+      return {
+        exampleStr: 'Actual 2–2 | Predicted 2–2',
+        shortDesc: rule.short_desc || 'Exact draw scoreline predicted',
+        desc: rule.desc || 'Awarded when match ends in a draw and exact draw scoreline is predicted.'
+      };
+    }
+  }
+
+  let actH = 1;
+  let actA = 0;
+
+  if (minGoalsEnabled && goalDiffEnabled) {
+    const D = goalDiffVal;
+    const T = minGoalsVal;
+
+    if (minGoalsMode === 'HOME') {
+      actH = Math.max(T, D);
+      actA = Math.max(0, actH - D);
+    } else if (minGoalsMode === 'AWAY') {
+      actA = T;
+      actH = actA + D;
+    } else if (minGoalsMode === 'EITHER') {
+      actH = T;
+      actA = Math.max(0, actH - D);
+    } else { // 'BOTH'
+      actH = Math.ceil((T + D) / 2);
+      actA = Math.max(0, actH - D);
+      if (actH + actA < T) {
+        actA = Math.max(0, T - actH);
+      }
+    }
+  } else if (minGoalsEnabled) {
+    const T = minGoalsVal;
+    if (minGoalsMode === 'HOME') {
+      actH = T;
+      actA = 0;
+    } else if (minGoalsMode === 'AWAY') {
+      actH = 0;
+      actA = T;
+    } else if (minGoalsMode === 'EITHER') {
+      actH = T;
+      actA = 0;
+    } else { // 'BOTH'
+      actH = Math.ceil(T / 2);
+      actA = Math.floor(T / 2);
+    }
+  } else if (goalDiffEnabled) {
+    const D = goalDiffVal;
+    actH = D;
+    actA = 0;
+  }
+
+  const predH = actH;
+  const predA = actA;
+  const gd = Math.abs(actH - actA);
+
+  let exampleStr = `Actual ${actH}–${actA}${goalDiffEnabled ? ` (GD +${gd})` : ''} | Predicted ${predH}–${predA}${goalDiffEnabled ? ` (GD +${gd})` : ''}`;
+  
+  let shortParts = [];
+  if (minGoalsEnabled) {
+    if (minGoalsMode === 'HOME') shortParts.push(`Home goals ≥ ${minGoalsVal}`);
+    else if (minGoalsMode === 'AWAY') shortParts.push(`Away goals ≥ ${minGoalsVal}`);
+    else if (minGoalsMode === 'EITHER') shortParts.push(`Either team goals ≥ ${minGoalsVal}`);
+    else shortParts.push(`Match total goals ≥ ${minGoalsVal}`);
+  }
+  if (goalDiffEnabled) {
+    shortParts.push(`GD ≥ ${goalDiffVal}`);
+  }
+
+  const shortDesc = shortParts.join(' & ') + ' + correct outcome';
+  const desc = `Lowest threshold scenario: Awarded when ${shortParts.join(' and ')} (lowest score: ${actH}–${actA}), and correct outcome is predicted.`;
+
+  return { exampleStr, shortDesc, desc };
 }
