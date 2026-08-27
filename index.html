@@ -215,7 +215,7 @@
           </div>
         </div>
 
-        <div class="team-participant-grid" id="teamParticipantGrid">
+        <div class="snapshot-grid team-participant-grid" id="teamParticipantGrid">
           <!-- Rendered by JS -->
         </div>
 
@@ -814,9 +814,14 @@
 
     <!-- Dashboard Mode & Data Freshness Indicator Footer -->
     <footer class="dashboard-footer">
-      <div id="fplModeIndicator" class="fpl-mode-indicator">
-        <span class="mode-dot"></span>
-        <span class="mode-label">Checking match data status…</span>
+      <div id="fplModeIndicator" class="fpl-mode-indicator standard">
+        <span class="mode-pill">
+          <span class="mode-dot"></span>
+          <span class="mode-title">Standard Mode</span>
+          <span class="mode-badge-sub">Kickoff trigger</span>
+        </span>
+        <span class="mode-divider">•</span>
+        <span class="mode-sync-text">Checking status…</span>
       </div>
     </footer>
 

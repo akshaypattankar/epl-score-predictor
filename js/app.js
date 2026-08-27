@@ -698,21 +698,21 @@ function applyTheme(theme) {
 
 // ─── Leaderboard Calculation ──────────────────────────────────────────────────
 function calcLeaderboard() {
-  const results = state.players.map((p) => ({
-    id: p.id,
-    name: p.name,
-    color: getPlayerColor(p),
-    total: 0,
-    bullseyes: 0,
-    correctOutcomes: 0,
-    t1: 0,
-    t2: 0,
-    t3: 0,
-    t4: 0,
-    t5: 0,
-    t6: 0,
-    gwPts: {},
-  }));
+  const results = state.players.map((p) => {
+    const row = {
+      id: p.id,
+      name: p.name,
+      color: getPlayerColor(p),
+      total: 0,
+      bullseyes: 0,
+      correctOutcomes: 0,
+      gwPts: {},
+    };
+    for (const t of SCORING_TIERS) {
+      row[`t${t.tier}`] = 0;
+    }
+    return row;
+  });
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
     const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
@@ -731,17 +731,14 @@ function calcLeaderboard() {
         if (res.isExactScore) r.bullseyes++;
         if (res.isCorrectOutcome) r.correctOutcomes++;
 
-        if (res.tier === 1) r.t1++;
-        else if (res.tier === 2) r.t2++;
-        else if (res.tier === 3) r.t3++;
-        else if (res.tier === 4) r.t4++;
-        else if (res.tier === 5) r.t5++;
-        else if (res.tier === 6) r.t6++;
+        if (res.tier) {
+          r[`t${res.tier}`] = (r[`t${res.tier}`] || 0) + 1;
+        }
       }
     }
   }
 
-  results.sort((a, b) => b.total - a.total || b.bullseyes - a.bullseyes || b.t2 - a.t2 || b.t3 - a.t3);
+  results.sort((a, b) => b.total - a.total || (b.t1 || 0) - (a.t1 || 0) || (b.t2 || 0) - (a.t2 || 0) || (b.t3 || 0) - (a.t3 || 0));
   results.forEach((r, i) => r.rank = i + 1);
   return results;
 }
@@ -816,19 +813,16 @@ function renderModeIndicator() {
   const isLive = meta.state === 'LIVE';
   const timeAgo = formatTimeAgo(meta.updatedAt);
 
-  if (isLive) {
-    indicatorEl.className = 'fpl-mode-indicator live';
-    indicatorEl.innerHTML = `
+  indicatorEl.className = `fpl-mode-indicator ${isLive ? 'live' : 'standard'}`;
+  indicatorEl.innerHTML = `
+    <span class="mode-pill">
       <span class="mode-dot"></span>
-      <span class="mode-label">🔴 <strong>Live Mode</strong> (5m sync) • Synced ${timeAgo}</span>
-    `;
-  } else {
-    indicatorEl.className = 'fpl-mode-indicator';
-    indicatorEl.innerHTML = `
-      <span class="mode-dot"></span>
-      <span class="mode-label">⚪ <strong>Standard Mode</strong> (Kickoff trigger) • Synced ${timeAgo}</span>
-    `;
-  }
+      <span class="mode-title">${isLive ? 'Live Mode' : 'Standard Mode'}</span>
+      <span class="mode-badge-sub">${isLive ? '5m sync' : 'Kickoff trigger'}</span>
+    </span>
+    <span class="mode-divider">•</span>
+    <span class="mode-sync-text">Synced ${timeAgo}</span>
+  `;
 }
 
 let livePollInterval = null;
@@ -1664,7 +1658,11 @@ function renderTeamBreakdown() {
       </div>`;
   } else {
     participantGrid.innerHTML = players.map((p) => {
-      let pts = 0, bullseyes = 0, correct = 0, played = 0;
+      let pts = 0, played = 0;
+      const tierCounts = {};
+      for (const t of SCORING_TIERS) {
+        tierCounts[t.tier] = 0;
+      }
 
       for (const f of allTeamFixtures) {
         if (f.actual_home_score === null || f.actual_away_score === null) continue;
@@ -1675,13 +1673,30 @@ function renderTeamBreakdown() {
         if (!res) continue;
         pts += res.total;
         played++;
-        if (res.isExactScore) bullseyes++;
-        else if (res.isCorrectOutcome) correct++;
+        if (res.tier) {
+          tierCounts[res.tier] = (tierCounts[res.tier] || 0) + 1;
+        }
       }
 
       const shades = getPlayerColorShades(p);
       const isYou = state.auth.activePlayerId === p.id;
       const initials = p.name ? p.name.slice(0, 2).toUpperCase() : '??';
+
+      const activeTiers = SCORING_TIERS.map(t => {
+        const count = tierCounts[t.tier] || 0;
+        return {
+          icon: renderIconElement(t.icon, t.icon_type, 14),
+          count,
+          cls: `t${t.tier}`,
+          title: `${t.name} (${t.pts} pts)`
+        };
+      }).filter(t => t.count > 0);
+
+      const tierChipsHtml = activeTiers.length > 0
+        ? `<div class="snapshot-tier-counts">
+            ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon} <strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
+          </div>`
+        : '';
 
       return `
         <div class="snapshot-card ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
@@ -1699,11 +1714,7 @@ function renderTeamBreakdown() {
             </div>
             <div class="snapshot-meta">${played} match${played === 1 ? '' : 'es'}</div>
           </div>
-          <div class="snapshot-tier-counts">
-            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Exact scorelines: ${bullseyes}">🎯 <strong style="color:${shades.primary};">${bullseyes}</strong></span>
-            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Correct outcome: ${correct}">✅ <strong style="color:${shades.primary};">${correct}</strong></span>
-            <span class="snapshot-tier-chip active" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="Matches played: ${played}">⚽ <strong style="color:${shades.primary};">${played}</strong></span>
-          </div>
+          ${tierChipsHtml}
         </div>
       `;
     }).join('');
@@ -3997,9 +4008,10 @@ function initCopyBtn() {
   document.getElementById('copyLeaderboardBtn')?.addEventListener('click', () => {
     const lb = calcLeaderboard();
     const medals = ['🥇', '🥈', '🥉'];
-    const text = lb.map(r =>
-      `${medals[r.rank - 1] ?? '#' + r.rank} ${r.name}: ${r.total} pts (🎯 T1: ${r.t1} | ✅ T2: ${r.t2} | ⚽ T3: ${r.t3} | 👍 T4: ${r.t4} | 🎗️ T5: ${r.t5} | ❌ T6: ${r.t6})`
-    ).join('\n');
+    const text = lb.map(r => {
+      const tierParts = SCORING_TIERS.map(t => `${t.icon_type === 'emoji' ? t.icon : '•'} T${t.tier}: ${r['t' + t.tier] || 0}`).join(' | ');
+      return `${medals[r.rank - 1] ?? '#' + r.rank} ${r.name}: ${r.total} pts (${tierParts})`;
+    }).join('\n');
     navigator.clipboard.writeText(text).catch(() => { });
   });
 }
@@ -4024,8 +4036,10 @@ async function init() {
       renderScoringViewSummary();
       renderMgmtScoringRulesSummary();
       if (state.activeView === 'dashboard') {
-        renderLeaderboardSnapshot();
+        renderSnapshot(calcLeaderboard());
         renderLeaderboard();
+        if (hasActiveTeamFilter()) renderTeamBreakdown();
+        renderMatrix();
       }
     }
   });
