@@ -671,6 +671,22 @@ app.post('/api/predictions', requirePlayerOrAdmin, (req, res) => {
     return res.status(403).json({ error: 'You are only authorized to edit your own score predictions.' });
   }
 
+  // Kickoff lock check: Regular players cannot modify predictions once kickoff has passed (Admins are exempt)
+  if (req.session.role !== 'admin') {
+    const cachedFixtures = getFplCache('fixtures');
+    if (cachedFixtures && cachedFixtures.data) {
+      try {
+        const fixtures = JSON.parse(cachedFixtures.data);
+        const match = fixtures.find(f => f.id === Number(match_id));
+        if (match && match.kickoff_time) {
+          if (new Date() >= new Date(match.kickoff_time)) {
+            return res.status(403).json({ error: 'Predictions are locked because kickoff has passed.' });
+          }
+        }
+      } catch (e) { }
+    }
+  }
+
   const hScore = (home_score !== null && home_score !== '' && home_score !== undefined) ? parseInt(home_score, 10) : null;
   const aScore = (away_score !== null && away_score !== '' && away_score !== undefined) ? parseInt(away_score, 10) : null;
 

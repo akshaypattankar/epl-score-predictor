@@ -1749,7 +1749,8 @@ function renderTeamBreakdown() {
       const pred = state.predictions[`${f.id}_${p.id}`];
       const pH = pred?.predicted_home ?? '';
       const pA = pred?.predicted_away ?? '';
-      const canEdit = !locked && isPlayerEditable(p.id) && isMatchInScope;
+      const isAdmin = state.auth.role === 'admin';
+      const canEdit = (isAdmin || !timeLocked) && isPlayerEditable(p.id) && (isMatchInScope || isAdmin);
 
       let res = null;
       if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
@@ -1888,7 +1889,12 @@ function renderMatrix() {
     filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`;
   }
 
+  const adminChip = state.auth.role === 'admin'
+    ? `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)" title="Admin Override Active: You can edit predictions for any player & completed matches">👑 Admin Edits Enabled</span>`
+    : '';
+
   document.getElementById('matrixMeta').innerHTML = `
+    ${adminChip}
     ${scopeChip}
     ${filterChip}
     <span class="meta-chip">🔒 ${locked} locked</span>
@@ -2015,7 +2021,8 @@ function renderMatrix() {
       const pred = state.predictions[`${f.id}_${p.id}`];
       const pH = pred?.predicted_home ?? '';
       const pA = pred?.predicted_away ?? '';
-      const canEdit = !locked && isPlayerEditable(p.id) && isMatchInScope;
+      const isAdmin = state.auth.role === 'admin';
+      const canEdit = (isAdmin || !timeLocked) && isPlayerEditable(p.id) && (isMatchInScope || isAdmin);
 
       let result = null;
       if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null &&
@@ -2027,6 +2034,15 @@ function renderMatrix() {
       const ptsText = result ? result.total : (locked ? '-' : '?');
       const ptsTitle = result ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') : '';
 
+      const inputTitle = (type, teamName) => {
+        if (isAdmin && timeLocked) {
+          return `Admin Override: Edit ${type} score prediction for ${teamName} (past/completed match)`;
+        }
+        if (!isMatchInScope && !isAdmin) return 'Locked: Outside group scope';
+        if (timeLocked && !isAdmin) return 'Locked: Kickoff passed';
+        return `Enter predicted ${type} score for ${teamName}`;
+      };
+
       return `
         <td class="col-score col-score-h">
           <div class="score-inputs">
@@ -2036,7 +2052,7 @@ function renderMatrix() {
               data-match="${f.id}" data-player="${p.id}" data-side="h"
               ${!canEdit ? 'disabled' : ''}
               style="${!canEdit ? 'opacity: 0.65; cursor: not-allowed;' : ''}"
-              title="${!isMatchInScope ? 'Locked: Outside group scope' : (timeLocked ? 'Locked: Kickoff passed' : 'Enter predicted home score')}"
+              title="${inputTitle('home', f.home_name)}"
               aria-label="${p.name} home score for ${f.home_name}">
           </div>
         </td>
@@ -2048,7 +2064,7 @@ function renderMatrix() {
               data-match="${f.id}" data-player="${p.id}" data-side="a"
               ${!canEdit ? 'disabled' : ''}
               style="${!canEdit ? 'opacity: 0.65; cursor: not-allowed;' : ''}"
-              title="${!isMatchInScope ? 'Locked: Outside group scope' : (timeLocked ? 'Locked: Kickoff passed' : 'Enter predicted away score')}"
+              title="${inputTitle('away', f.away_name)}"
               aria-label="${p.name} away score for ${f.away_name}">
           </div>
         </td>
@@ -2204,9 +2220,10 @@ async function handleInputBlur(e) {
   // Scope & Lock validation
   const fixture = state.fixtures[state.activeGW]?.find(f => f.id === matchId) ||
     Object.values(state.fixtures).flat().find(f => f.id === matchId);
+  const isAdmin = state.auth.role === 'admin';
   if (fixture) {
-    if (isLocked(fixture)) return;
-    if (!isFixtureInGroupScope(fixture)) {
+    if (isLocked(fixture) && !isAdmin) return;
+    if (!isFixtureInGroupScope(fixture) && !isAdmin) {
       console.warn('Prediction rejected: Match is outside group scope.');
       return;
     }
