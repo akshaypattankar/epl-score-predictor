@@ -209,7 +209,7 @@ function getPlayerColorShades(playerOrIdOrName) {
     badgeBorder: hexToRgba(primary, 0.55),
     chipBg: hexToRgba(primary, 0.14),
     chipBorder: hexToRgba(primary, 0.35),
-    textGradient: `linear-gradient(135deg, #ffffff 25%, ${primary} 100%)`
+    textGradient: `linear-gradient(135deg, var(--text-main) 25%, ${primary} 100%)`
   };
 }
 
@@ -1205,8 +1205,8 @@ function updateTeamMultiSelectUI() {
     const details = getClubDetails(team) || teamObj;
     const short = details?.short || details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
     displayEl.innerHTML = `
-      <span class="team-option-crest" style="width:18px;height:18px;">${getCrestImg(code, team)}</span>
-      <span class="team-filter-text" style="font-weight:700; color:#fff;" title="${team} (${short})">
+      <span class="team-option-crest" style="width:20px;height:20px;">${getCrestImg(code, team)}</span>
+      <span class="team-filter-text" style="font-weight:700; color:var(--text-main);" title="${team} (${short})">
         ${short}
       </span>
       <span class="team-filter-pill-remove" data-remove-team="${team}" title="Clear ${team}">✕</span>
@@ -1220,7 +1220,7 @@ function updateTeamMultiSelectUI() {
       const short = details?.short || details?.shortName || teamObj?.short || team.slice(0, 3).toUpperCase();
       return `
         <span class="team-filter-pill" title="${team}">
-          <span style="width:14px;height:14px;display:inline-flex;">${getCrestImg(code, team)}</span>
+          <span class="team-option-crest" style="width:14px;height:14px;">${getCrestImg(code, team)}</span>
           <span>${short}</span>
           <span class="team-filter-pill-remove" data-remove-team="${team}" title="Remove ${team}">✕</span>
         </span>
@@ -2351,7 +2351,7 @@ function renderLeaderboard() {
   if (state.auth.role === 'guest') {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align:center; padding: 30px; color: var(--text-muted);">
+        <td colspan="${2 + SCORING_TIERS.length}" style="text-align:center; padding: 30px; color: var(--text-muted);">
           🔒 <strong>Leaderboard Table Hidden for Guests:</strong> Log in with a 6-character player passcode or admin password to view rankings and point totals.
         </td>
       </tr>`;
@@ -2362,7 +2362,7 @@ function renderLeaderboard() {
   if (lb.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align:center; padding: 24px; color: var(--text-muted);">
+        <td colspan="${2 + SCORING_TIERS.length}" style="text-align:center; padding: 24px; color: var(--text-muted);">
           No player data available for this group.
         </td>
       </tr>`;
@@ -2372,8 +2372,7 @@ function renderLeaderboard() {
   const thead = document.querySelector('#leaderboardTable thead tr');
   if (thead) {
     thead.innerHTML = `
-      <th style="width: 50px; text-align: center;">Rank</th>
-      <th>Player</th>
+      <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
       ${SCORING_TIERS.map(t => `
         <th class="lb-tier-th" data-tier="${t.tier}" tabindex="0" role="button" aria-label="Tier ${t.tier} Rules: ${t.name}" title="Click or tap to learn what Tier ${t.tier} means">
           <div class="th-tier-title" style="display:flex; align-items:center; justify-content:center; gap:4px;">
@@ -2394,12 +2393,16 @@ function renderLeaderboard() {
   tbody.innerHTML = lb.map(r => {
     const isYou = state.auth.activePlayerId === r.id;
     const shades = getPlayerColorShades(r);
+    const rankDisplay = medals[r.rank - 1] ?? `#${r.rank}`;
     return `
       <tr class="${isYou ? 'active-player-row' : ''}" style="${isYou ? `background:${shades.bgSubtle}; border-left:3px solid ${shades.primary};` : ''}">
-        <td class="lb-rank">${medals[r.rank - 1] ?? `#${r.rank}`}</td>
-        <td class="lb-name">
-          <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:8px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
-          <span style="color:${shades.primary};font-weight:700;">${r.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+        <td class="lb-player-cell" style="white-space:nowrap;">
+          <div class="lb-player-info" style="display:inline-flex; align-items:center; gap:8px; white-space:nowrap; flex-wrap:nowrap;">
+            <span class="lb-rank-badge rank-${r.rank}">${rankDisplay}</span>
+            <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;min-width:8px;border-radius:50%;background:${shades.primary};box-shadow:0 0 6px ${shades.glow};flex-shrink:0;"></span>
+            <span class="lb-player-name" style="color:${shades.primary};font-weight:700;white-space:nowrap;">${r.name}</span>
+            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};flex-shrink:0;">You</span>` : ''}
+          </div>
         </td>
         ${SCORING_TIERS.map(t => {
           const count = r[`t${t.tier}`] || 0;
@@ -2522,12 +2525,13 @@ function renderCumulativeChart() {
   }).join('');
 
   const numGWs = state.gwNumbers.length;
-  const padLeft = 65;
-  const padRight = 25;
-  const padTop = 26;
-  const padBottom = 48;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const padLeft = isMobile ? 55 : 65;
+  const padRight = isMobile ? 20 : 25;
+  const padTop = isMobile ? 30 : 28;
+  const padBottom = isMobile ? 52 : 48;
   const svgWidth = 1000;
-  const svgHeight = 280;
+  const svgHeight = isMobile ? 420 : 340;
 
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
@@ -2545,13 +2549,13 @@ function renderCumulativeChart() {
     const val = Math.round((maxPts / ySteps) * i);
     const y = getY(val);
     gridLinesSvg += `
-      <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
+      <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'var(--border-active)' : 'var(--border-glass)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
       <text class="chart-axis-tick" x="${padLeft - 10}" y="${y + 4}" fill="var(--text-dim)" font-size="11" font-weight="600" text-anchor="end" font-family="var(--font-main)">${val}</text>
     `;
   }
 
   // Y-Axis Baseline line
-  const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />`;
+  const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
   // Y-Axis Label
   const yLabelX = 20;
@@ -2561,14 +2565,14 @@ function renderCumulativeChart() {
   `;
 
   // 2. X-Axis Baseline & Gameweek Ticks
-  const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" />`;
+  const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
   let xLabelsSvg = '';
   gwList.forEach((gw, i) => {
     const x = getX(i);
     const isPlayed = i <= maxPlayedGwIdx;
     xLabelsSvg += `
-      <line x1="${x}" y1="${padTop + chartH}" x2="${x}" y2="${padTop + chartH + 5}" stroke="${isPlayed ? 'rgba(56, 189, 248, 0.45)' : 'rgba(255,255,255,0.12)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+      <line x1="${x}" y1="${padTop + chartH}" x2="${x}" y2="${padTop + chartH + 5}" stroke="${isPlayed ? 'var(--accent-purple)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
       <text class="chart-axis-tick" x="${x}" y="${padTop + chartH + 18}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${gw}</text>
     `;
   });
@@ -3234,10 +3238,15 @@ function initPointsTooltip() {
 
   tooltipBackdropEl.addEventListener('click', () => hidePointsTooltip());
 
+  let chartResizeTimer;
   window.addEventListener('resize', () => {
     if (activeTooltipTarget && tooltipPopoverEl.style.display !== 'none') {
       positionTooltipPopover(activeTooltipTarget);
     }
+    clearTimeout(chartResizeTimer);
+    chartResizeTimer = setTimeout(() => {
+      renderCumulativeChart();
+    }, 150);
   });
 }
 

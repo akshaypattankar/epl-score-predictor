@@ -50,11 +50,13 @@
           <!-- Theme & Timezone Selectors -->
           <div class="header-pref-group">
             <select id="themeSelect" class="control-dropdown theme-dropdown" title="Change Visual Theme">
-              <option value="midnight">🌙 Midnight Slate</option>
-              <option value="light">☀️ Premier Light</option>
-              <option value="emerald">🌲 Obsidian Emerald</option>
-              <option value="indigo">🔮 Deep Indigo</option>
-              <option value="barclays">🦁 Barclays Purple</option>
+              <option value="midnight">Midnight</option>
+              <option value="light">Light</option>
+              <option value="barclays">Barclays</option>
+              <option value="emerald">Emerald</option>
+              <option value="indigo">Indigo</option>
+              <option value="crimson">Crimson</option>
+              <option value="gold">Gold</option>
             </select>
             <select id="timezoneSelect" class="control-dropdown timezone-dropdown"
               title="Select Match Kickoff Timezone">
@@ -268,8 +270,7 @@
           <table class="data-table" id="leaderboardTable">
             <thead>
               <tr>
-                <th style="width: 50px; text-align: center;">Rank</th>
-                <th>Player</th>
+                <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
                 <th class="lb-tier-th" data-tier="1" tabindex="0" role="button" aria-label="Tier 1 Rules: The Vishwaguru"
                   title="Click or tap to learn what Tier 1 means">
                   <div class="th-tier-title">🔮 Tier 1</div>
