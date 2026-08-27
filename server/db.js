@@ -385,6 +385,8 @@ export function setFplCache(key, dataString, dynamic_ttl, match_state = 'NORMAL'
       ON CONFLICT(key) DO UPDATE SET
         data = excluded.data,
         updated_at = excluded.updated_at,
+        dynamic_ttl = excluded.dynamic_ttl,
+        match_state = excluded.match_state
     `).run(key, dataString, now, dynamic_ttl, match_state);
   } catch (err) {
     console.error('Error saving FPL cache:', err.message);
