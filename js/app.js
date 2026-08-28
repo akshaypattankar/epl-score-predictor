@@ -213,7 +213,55 @@ function getPlayerColorShades(playerOrIdOrName) {
   };
 }
 
+function isMatchFinished(fixture) {
+  if (!fixture) return false;
+  return Boolean(fixture.finished === true || fixture.finished_provisional === true);
+}
+
+function isMatchOngoing(fixture) {
+  if (!fixture) return false;
+  if (isMatchFinished(fixture)) return false;
+  if (fixture.started === true) return true;
+  if (fixture.kickoff_time && new Date() >= new Date(fixture.kickoff_time)) return true;
+  return false;
+}
+
+function getMatchScoreInfo(fixture) {
+  if (!fixture) return { home: null, away: null, hasScore: false, isLive: false, isFinished: false };
+  if (isMatchFinished(fixture)) {
+    const h = fixture.actual_home_score !== null && fixture.actual_home_score !== undefined ? Number(fixture.actual_home_score) : null;
+    const a = fixture.actual_away_score !== null && fixture.actual_away_score !== undefined ? Number(fixture.actual_away_score) : null;
+    return {
+      home: h,
+      away: a,
+      hasScore: h !== null && a !== null,
+      isLive: false,
+      isFinished: true
+    };
+  }
+  if (isMatchOngoing(fixture)) {
+    const h = (fixture.actual_home_score !== null && fixture.actual_home_score !== undefined) ? Number(fixture.actual_home_score) : 0;
+    const a = (fixture.actual_away_score !== null && fixture.actual_away_score !== undefined) ? Number(fixture.actual_away_score) : 0;
+    return {
+      home: h,
+      away: a,
+      hasScore: true,
+      isLive: true,
+      isFinished: false
+    };
+  }
+  return {
+    home: null,
+    away: null,
+    hasScore: false,
+    isLive: false,
+    isFinished: false
+  };
+}
+
 function isLocked(fixture) {
+  if (!fixture) return false;
+  if (fixture.started === true || fixture.finished === true || fixture.finished_provisional === true) return true;
   return new Date() >= new Date(fixture.kickoff_time);
 }
 
@@ -327,11 +375,7 @@ function isGWFinishedForGroup(gw, group = state.activeGroup) {
   const rawGwFixtures = state.fixtures[gwNum] || [];
   const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group);
   if (scopedFixtures.length === 0) return false;
-  return scopedFixtures.every(f =>
-    f.finished === true ||
-    f.finished_provisional === true ||
-    (f.actual_home_score !== null && f.actual_away_score !== null)
-  );
+  return scopedFixtures.every(f => isMatchFinished(f));
 }
 
 // Helper: determine auto active GW (advances 48h before next kickoff if current GW in-scope games are finished)
@@ -717,13 +761,14 @@ function calcLeaderboard() {
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
     const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
     for (const f of fixtures) {
-      if (f.actual_home_score === null || f.actual_away_score === null) continue;
+      const scoreInfo = getMatchScoreInfo(f);
+      if (!scoreInfo.hasScore) continue;
       for (const r of results) {
         const pred = state.predictions[`${f.id}_${r.id}`];
-        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
         const res = evaluatePrediction(
-          f.actual_home_score, f.actual_away_score,
-          pred.predicted_home, pred.predicted_away
+          scoreInfo.home, scoreInfo.away,
+          Number(pred.predicted_home), Number(pred.predicted_away)
         );
         if (!res) continue;
         r.total += res.total;
@@ -1510,11 +1555,11 @@ function renderSnapshot(lb) {
         <div class="snapshot-info">
           <div class="snapshot-header-row">
             <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${r.name}">${r.name}</span>
-            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
           </div>
           <div class="snapshot-pts-row">
             <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${r.total}</span>
             <span class="snapshot-pts-unit">pts</span>
+            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
           </div>
           <div class="snapshot-meta">GW ${state.activeGW ?? '?'}</div>
         </div>
@@ -1541,7 +1586,7 @@ function getStatusLogoHtml(f, isGuest = false) {
       pred.predicted_away !== null && pred.predicted_away !== undefined && pred.predicted_away !== '';
   }
 
-  // 1. Grey locked: predictions not allowed because match is out of group scope
+  // 1. Grey locked: predictions not allowed because match is outside active group scope
   if (!isMatchInScope) {
     return `<span class="status-logo status-out-of-scope status-grey-locked" title="Locked - Match is outside active group scope (Predictions disabled)" aria-label="Locked: Out of Scope" role="img">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
@@ -1552,7 +1597,27 @@ function getStatusLogoHtml(f, isGuest = false) {
     </span>`;
   }
 
-  // 2. Red locked: player missed entering predictions before kickoff
+  // 2. Finished Match (Full Time)
+  if (isMatchFinished(f)) {
+    return `<span class="status-logo status-finished" title="Full Time / Match Concluded (${koFormatted})" aria-label="Match Concluded" role="img">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+    </span>`;
+  }
+
+  // 3. Live / Ongoing Match in progress
+  if (isMatchOngoing(f)) {
+    return `<span class="status-logo status-live" title="Live Match In Progress (${koFormatted})" aria-label="Live Match In Progress" role="img">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"></polygon>
+      </svg>
+    </span>`;
+  }
+
+  // 4. Red locked: player missed entering predictions before kickoff
   if (timeLocked) {
     if (!hasActivePrediction && !isGuest && activePlayerId) {
       return `<span class="status-logo status-locked status-red-locked" title="Locked - Missed prediction deadline (${koFormatted})" aria-label="Locked: Missed Deadline" role="img">
@@ -1570,7 +1635,7 @@ function getStatusLogoHtml(f, isGuest = false) {
     </span>`;
   }
 
-  // 3. Green unlocked: unlocked and allowed for entry (prediction entered & saved)
+  // 5. Green unlocked: unlocked and allowed for entry (prediction entered & saved)
   if (hasActivePrediction) {
     return `<span class="status-logo status-open status-green-unlocked" title="Unlocked & Saved - Prediction entered (Kickoff: ${koFormatted})" aria-label="Unlocked and prediction entered" role="img">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
@@ -1580,7 +1645,7 @@ function getStatusLogoHtml(f, isGuest = false) {
     </span>`;
   }
 
-  // 4. Yellow unlocked: open for entry based on established rules (prediction pending)
+  // 6. Yellow unlocked: open for entry based on established rules (prediction pending)
   return `<span class="status-logo status-open-rules status-yellow-unlocked" title="Open for entry - Prediction pending (Kickoff: ${koFormatted})" aria-label="Open for entry" role="img">
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -1665,11 +1730,12 @@ function renderTeamBreakdown() {
       }
 
       for (const f of allTeamFixtures) {
-        if (f.actual_home_score === null || f.actual_away_score === null) continue;
+        const scoreInfo = getMatchScoreInfo(f);
+        if (!scoreInfo.hasScore) continue;
         const pred = state.predictions[`${f.id}_${p.id}`];
-        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
 
-        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
         if (!res) continue;
         pts += res.total;
         played++;
@@ -1706,11 +1772,11 @@ function renderTeamBreakdown() {
           <div class="snapshot-info">
             <div class="snapshot-header-row">
               <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${p.name}">${p.name}</span>
-              ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
             </div>
             <div class="snapshot-pts-row">
               <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${pts}</span>
               <span class="snapshot-pts-unit">pts</span>
+              ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
             </div>
             <div class="snapshot-meta">${played} match${played === 1 ? '' : 'es'}</div>
           </div>
@@ -1747,11 +1813,13 @@ function renderTeamBreakdown() {
     const fixtureInScope = isFixtureInGroupScope(f);
     const isMatchInScope = isGuest || fixtureInScope;
     const locked = timeLocked || !isMatchInScope;
-    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
+    const scoreInfo = getMatchScoreInfo(f);
 
     let resultText = '';
-    if (hasResult) {
-      resultText = `<span class="actual-score-badge" title="Official Premier League Result">${f.actual_home_score}&nbsp;–&nbsp;${f.actual_away_score}</span>`;
+    if (scoreInfo.isFinished && scoreInfo.hasScore) {
+      resultText = `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    } else if (scoreInfo.isLive) {
+      resultText = `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
     } else {
       resultText = getStatusLogoHtml(f, isGuest);
     }
@@ -1762,13 +1830,16 @@ function renderTeamBreakdown() {
       const pA = pred?.predicted_away ?? '';
       const isAdmin = state.auth.role === 'admin';
       const canEdit = (isAdmin || !timeLocked) && isPlayerEditable(p.id) && (isMatchInScope || isAdmin);
+      const hasPred = pH !== '' && pA !== '' && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined;
 
       let res = null;
-      if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
-        res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+      if (scoreInfo.hasScore && hasPred) {
+        res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pH), Number(pA));
+      } else if (scoreInfo.hasScore && !hasPred && (timeLocked || scoreInfo.isLive || scoreInfo.isFinished)) {
+        res = { total: 0, tier: 6, isExactScore: false, isCorrectOutcome: false, base: 0, highScoringBonus: 0, drawBonus: 0 };
       }
 
-      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}">${res.total}</span>` : '';
+      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}${scoreInfo.isLive ? ' pts-live' : ''}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}" title="${(scoreInfo.isLive ? '[LIVE] ' : '')}${tierLabel(res.tier)} (${res.total} pts against ${scoreInfo.home}–${scoreInfo.away})">${res.total}</span>` : '';
 
       if (!canEdit) {
         return `
@@ -1878,10 +1949,9 @@ function renderMatrix() {
     titleAddon = ` (${selectedTeams.length} Teams)`;
   }
 
-  const groupAddon = (!isGuest && state.activeGroup) ? ` - ${state.activeGroup.name}` : '';
   const subtitleText = isGuest
     ? '📌 Premier League Fixture Schedule & Official Scores'
-    : `📅 GW ${gw} Predictions${titleAddon}${groupAddon}`;
+    : `📅 GW ${gw} Predictions${titleAddon}`;
 
   document.getElementById('matrixTitle').textContent = subtitleText;
 
@@ -1983,13 +2053,18 @@ function renderMatrix() {
     const fixtureInScope = isFixtureInGroupScope(f);
     const isMatchInScope = isGuest || fixtureInScope;
     const locked = timeLocked || !isMatchInScope;
-    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
+    const scoreInfo = getMatchScoreInfo(f);
 
     const statusHtml = getStatusLogoHtml(f, isGuest);
 
-    const actualHtml = hasResult
-      ? `<span class="actual-score-badge" title="Official Premier League Result">${f.actual_home_score}&nbsp;–&nbsp;${f.actual_away_score}</span>`
-      : `<span class="actual-score-badge pending" title="${timeLocked ? 'Match awaiting official result' : (!isMatchInScope ? 'Locked: Outside group scope' : 'Open for predictions')}">${timeLocked ? 'TBD' : '-'}</span>`;
+    let actualHtml = '';
+    if (scoreInfo.isFinished && scoreInfo.hasScore) {
+      actualHtml = `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    } else if (scoreInfo.isLive) {
+      actualHtml = `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    } else {
+      actualHtml = `<span class="actual-score-badge pending" title="${!isMatchInScope ? 'Locked: Outside group scope' : 'Open for predictions'}">-</span>`;
+    }
 
     const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
     const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
@@ -2034,16 +2109,20 @@ function renderMatrix() {
       const pA = pred?.predicted_away ?? '';
       const isAdmin = state.auth.role === 'admin';
       const canEdit = (isAdmin || !timeLocked) && isPlayerEditable(p.id) && (isMatchInScope || isAdmin);
+      const hasPred = pH !== '' && pA !== '' && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined;
 
       let result = null;
-      if (hasResult && pred?.predicted_home !== null && pred?.predicted_away !== null &&
-        pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
-        result = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+      if (scoreInfo.hasScore && hasPred) {
+        result = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pH), Number(pA));
+      } else if (scoreInfo.hasScore && !hasPred && (timeLocked || scoreInfo.isLive || scoreInfo.isFinished)) {
+        result = { total: 0, tier: 6, isExactScore: false, isCorrectOutcome: false, base: 0, highScoringBonus: 0, drawBonus: 0 };
       }
 
-      const ptsClass = result ? ptsBadgeClass(result) : 'pending';
+      const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
       const ptsText = result ? result.total : (locked ? '-' : '?');
-      const ptsTitle = result ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') : '';
+      const ptsTitle = result
+        ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
+        : (locked ? 'Awaiting kickoff' : 'Open for predictions');
 
       const inputTitle = (type, teamName) => {
         if (isAdmin && timeLocked) {
@@ -2144,14 +2223,15 @@ function renderMatrixFooter(players, fixtures, isGuest) {
   players.forEach(p => { playerTotals[p.id] = 0; });
 
   fixtures.forEach(f => {
-    const hasResult = f.actual_home_score !== null && f.actual_away_score !== null;
-    if (!hasResult) return;
+    const scoreInfo = getMatchScoreInfo(f);
+    if (!scoreInfo.hasScore) return;
 
     players.forEach(p => {
       const pred = state.predictions[`${f.id}_${p.id}`];
       if (pred && pred.predicted_home !== null && pred.predicted_away !== null &&
-        pred.predicted_home !== undefined && pred.predicted_away !== undefined) {
-        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        pred.predicted_home !== undefined && pred.predicted_away !== undefined &&
+        pred.predicted_home !== '' && pred.predicted_away !== '') {
+        const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
         if (res && res.total) {
           playerTotals[p.id] += res.total;
         }
@@ -2285,25 +2365,30 @@ function updatePtsBadge(matchId, playerId) {
   const row = document.querySelector(`[id="inp_${matchId}_${playerId}_h"]`)?.closest('tr');
   if (!row) return;
 
+  const scoreInfo = getMatchScoreInfo(fixture);
+  const pH = pred?.predicted_home ?? '';
+  const pA = pred?.predicted_away ?? '';
+  const hasPred = pH !== '' && pA !== '' && pred?.predicted_home !== null && pred?.predicted_away !== null && pred?.predicted_home !== undefined && pred?.predicted_away !== undefined;
+
   let result = null;
-  if (fixture.actual_home_score !== null && fixture.actual_away_score !== null &&
-    pred?.predicted_home !== null && pred?.predicted_away !== null &&
-    pred?.predicted_home !== undefined && pred?.predicted_away !== undefined) {
+  if (scoreInfo.hasScore && hasPred) {
     result = evaluatePrediction(
-      fixture.actual_home_score, fixture.actual_away_score,
-      pred.predicted_home, pred.predicted_away
+      scoreInfo.home, scoreInfo.away,
+      Number(pH), Number(pA)
     );
+  } else if (scoreInfo.hasScore && !hasPred && (isLocked(fixture) || scoreInfo.isLive || scoreInfo.isFinished)) {
+    result = { total: 0, tier: 6, isExactScore: false, isCorrectOutcome: false, base: 0, highScoringBonus: 0, drawBonus: 0 };
   }
 
   const allBadges = row.querySelectorAll('.pts-badge');
   const badge = allBadges[pIdx];
   if (!badge) return;
 
-  const ptsClass = result ? ptsBadgeClass(result) : 'pending';
+  const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
   const ptsText = result ? result.total : (isLocked(fixture) ? '-' : '?');
   const ptsTitle = result
-    ? tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '')
-    : '';
+    ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
+    : (isLocked(fixture) ? 'Awaiting kickoff' : 'Open for predictions');
 
   badge.className = `pts-badge pts-interactive ${ptsClass}`;
   badge.textContent = ptsText;
@@ -2489,11 +2574,12 @@ function renderCumulativeChart() {
       const rawGwFixtures = state.fixtures[gw] ?? [];
       const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
       for (const f of fixtures) {
-        if (f.actual_home_score === null || f.actual_away_score === null) continue;
+        const scoreInfo = getMatchScoreInfo(f);
+        if (!scoreInfo.hasScore) continue;
         const pred = state.predictions[`${f.id}_${p.id}`];
-        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined) continue;
+        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
 
-        const res = evaluatePrediction(f.actual_home_score, f.actual_away_score, pred.predicted_home, pred.predicted_away);
+        const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
         if (res) gwPts += res.total;
       }
       cumulative += gwPts;
@@ -2918,13 +3004,17 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
 
   // Prediction data
   const pred = state.predictions[`${matchId}_${playerId}`];
-  const pH = pred?.predicted_home ?? null;
-  const pA = pred?.predicted_away ?? null;
+  const pH = (pred?.predicted_home !== null && pred?.predicted_home !== undefined && pred?.predicted_home !== '') ? Number(pred.predicted_home) : null;
+  const pA = (pred?.predicted_away !== null && pred?.predicted_away !== undefined && pred?.predicted_away !== '') ? Number(pred.predicted_away) : null;
 
-  const actH = fixture?.actual_home_score ?? null;
-  const actA = fixture?.actual_away_score ?? null;
+  const scoreInfo = getMatchScoreInfo(fixture);
+  const isLive = scoreInfo.isLive;
+  const isFinished = scoreInfo.isFinished;
 
-  const breakdown = getPredictionBreakdown(actH, actA, pH, pA);
+  const actH = scoreInfo.home;
+  const actA = scoreInfo.away;
+
+  const breakdown = getPredictionBreakdown(actH, actA, pH, pA, isLive);
 
   const homeCrest = fixture ? getCrestImg(fixture.home_code, fixture.home_name) : '';
   const awayCrest = fixture ? getCrestImg(fixture.away_code, fixture.away_name) : '';
@@ -2933,11 +3023,15 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
 
   let earnedPtsHtml = '';
   if (breakdown.status === 'evaluated') {
-    earnedPtsHtml = `<div class="pts-score-total-val">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:var(--accent-green); text-transform:uppercase;">Points</span>`;
+    if (isLive) {
+      earnedPtsHtml = `<div class="pts-score-total-val live" style="color:#ff5572;">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:#ff5572; text-transform:uppercase;"><span class="live-pulse-dot" style="width:5px;height:5px;display:inline-block;margin-right:3px;"></span>Live Pts</span>`;
+    } else {
+      earnedPtsHtml = `<div class="pts-score-total-val">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:var(--accent-green); text-transform:uppercase;">Points</span>`;
+    }
   } else if (breakdown.status === 'no_prediction') {
     earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-rose);">0</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">No Pred</span>`;
   } else {
-    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-cyan); font-size:1.05rem;">TBD</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Pending</span>`;
+    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--text-dim); font-size:1.05rem;">-</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Upcoming</span>`;
   }
 
   let formulaHtml = '';
@@ -2947,10 +3041,12 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
     for (const b of breakdown.bonuses) {
       items.push(`<span class="pts-formula-item bonus">${renderIconElement(b.icon, b.icon_type, 16)} ${b.name} (+${b.pts} pt)</span>`);
     }
+    const cardTitle = isLive ? '⚡ Live Score Breakdown (Match in progress)' : '⚡ How This Score Was Achieved';
+    const totalColor = isLive ? '#ff5572' : 'var(--accent-green)';
     formulaHtml = `
-      <div class="pts-breakdown-card">
-        <div class="pts-breakdown-card-title">⚡ How This Score Was Achieved</div>
-        <div class="pts-breakdown-formula">${items.join('<span style="color:var(--text-dim);"> + </span>')} <span style="color:var(--accent-green); font-weight:800; margin-left:4px;">= ${breakdown.total} Pts Total</span></div>
+      <div class="pts-breakdown-card ${isLive ? 'live-breakdown' : ''}">
+        <div class="pts-breakdown-card-title" ${isLive ? 'style="color:#ff5572;"' : ''}>${cardTitle}</div>
+        <div class="pts-breakdown-formula">${items.join('<span style="color:var(--text-dim);"> + </span>')} <span style="color:${totalColor}; font-weight:800; margin-left:4px;">= ${breakdown.total} Pts Total ${isLive ? '(Live)' : ''}</span></div>
         <div class="pts-breakdown-explanation">${breakdown.explanation}</div>
       </div>
     `;
@@ -2964,11 +3060,17 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   } else {
     formulaHtml = `
       <div class="pts-breakdown-card" style="border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.05);">
-        <div class="pts-breakdown-card-title">⏳ Match Pending</div>
-        <div class="pts-breakdown-explanation">Prediction submitted: <strong style="color:var(--text-main); font-family:var(--font-title);">${breakdown.predScore || 'None'}</strong>. Points will be automatically computed upon official match completion based on the tiers below.</div>
+        <div class="pts-breakdown-card-title">⏳ Match Upcoming</div>
+        <div class="pts-breakdown-explanation">Prediction submitted: <strong style="color:var(--text-main); font-family:var(--font-title);">${breakdown.predScore || 'None'}</strong>. Points will be automatically computed dynamically as the match kicks off and progresses.</div>
       </div>
     `;
   }
+
+  const scoreBoxLabel = isLive ? 'Current Score (Live)' : (isFinished ? 'Final Result' : 'Actual Result');
+  const scoreBoxColor = actH !== null ? (isLive ? '#ff5572' : 'var(--accent-cyan)') : 'var(--text-dim)';
+  const scoreBoxValue = actH !== null
+    ? (isLive ? `<span class="live-pulse-dot" style="margin-right:4px;"></span>${actH} – ${actA}` : `${actH} – ${actA}`)
+    : (fixture && isLocked(fixture) ? 'Locked' : 'Open');
 
   return `
     <span class="pts-sheet-handle"></span>
@@ -2997,8 +3099,8 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       </div>
       <div class="pts-score-sep">vs</div>
       <div class="pts-score-box">
-        <div class="pts-score-box-label">Actual Result</div>
-        <div class="pts-score-box-value" style="color:${actH !== null ? 'var(--accent-cyan)' : 'var(--text-dim)'};">${actH !== null ? `${actH} – ${actA}` : (fixture && isLocked(fixture) ? 'Locked' : 'Open')}</div>
+        <div class="pts-score-box-label">${scoreBoxLabel}</div>
+        <div class="pts-score-box-value" style="color:${scoreBoxColor};">${scoreBoxValue}</div>
       </div>
       <div class="pts-score-sep">=</div>
       <div class="pts-score-total-box">
@@ -4018,8 +4120,13 @@ function initCopyBtn() {
 
 function startLockRefresh() {
   setInterval(() => {
-    if (state.activeGW && state.activeView === 'dashboard') renderMatrix();
-  }, 60_000);
+    if (state.activeGW && state.activeView === 'dashboard') {
+      renderMatrix();
+      if (hasActiveTeamFilter()) renderTeamBreakdown();
+      renderSnapshot(calcLeaderboard());
+      renderLeaderboard();
+    }
+  }, 30_000);
 }
 
 // ─── Init Application ────────────────────────────────────────────────────────

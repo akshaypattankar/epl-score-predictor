@@ -25,8 +25,8 @@ export function evaluatePrediction(actH, actA, predH, predA) {
 
   // Base points (mutually exclusive, highest tier wins)
   let tier;
-  if (isExactScore)                                    { tier = 1; }
-  else if (isCorrectOutcome && isExactGD)              { tier = 2; }
+  if (isExactScore)                                                      { tier = 1; }
+  else if (isCorrectOutcome && isExactGD && !(actH === 0 && actA === 0)) { tier = 2; }
   else if (isCorrectOutcome && isOneTeamGoalsExact)    { tier = 3; }
   else if (isCorrectOutcome)                           { tier = 4; }
   else if (isOneTeamGoalsExact)                        { tier = 5; }
@@ -406,7 +406,7 @@ export function renderExampleContainer(exampleStr) {
  * @param {number|null} predA
  * @returns {object} Full breakdown details
  */
-export function getPredictionBreakdown(actH, actA, predH, predA) {
+export function getPredictionBreakdown(actH, actA, predH, predA, isLive = false) {
   const hasResult = actH !== null && actA !== null && actH !== undefined && actA !== undefined;
   const hasPred = predH !== null && predA !== null && predH !== undefined && predA !== undefined;
 
@@ -414,6 +414,7 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
     return {
       status: 'no_prediction',
       hasResult,
+      isLive: Boolean(isLive),
       hasPred: false,
       total: 0,
       tier: null,
@@ -428,6 +429,7 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
     return {
       status: 'pending_result',
       hasResult: false,
+      isLive: false,
       hasPred: true,
       predScore: `${predH} – ${predA}`,
       total: null,
@@ -444,6 +446,7 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
     return {
       status: 'invalid',
       hasResult: true,
+      isLive: Boolean(isLive),
       hasPred: true,
       total: 0,
       tier: null,
@@ -460,25 +463,44 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
     name: b.name,
     pts: b.pts,
     icon: b.icon || '⭐',
+    icon_type: b.icon_type || 'emoji',
     reason: b.shortDesc || b.desc || `${b.name} criteria met.`
   }));
 
   // Explanation construction
   let explanation = '';
-  if (res.tier === 1) {
-    explanation = '🔮 Perfect Score! The Vishwaguru predicted the exact match scoreline.';
-  } else if (res.tier === 2) {
-    explanation = `📋 The Manager: Correct winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
-  } else if (res.tier === 3) {
-    const matchedSide = actH === predH ? 'Home team goals' : 'Away team goals';
-    explanation = `🎙️ The Fan: Correct outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
-  } else if (res.tier === 4) {
-    explanation = '📣 The Pundit: Correct match outcome (winner or draw) predicted.';
-  } else if (res.tier === 5) {
-    const matchedSide = actH === predH ? 'Home' : 'Away';
-    explanation = `🎲 The Casual: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
+  if (isLive) {
+    if (res.tier === 1) {
+      explanation = '🔮 Exact Score! Prediction currently matches the live match scoreline.';
+    } else if (res.tier === 2) {
+      explanation = `📋 The Manager: Currently matching winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
+    } else if (res.tier === 3) {
+      const matchedSide = actH === predH ? 'Home team goals' : 'Away team goals';
+      explanation = `🎙️ The Fan: Current outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
+    } else if (res.tier === 4) {
+      explanation = '📣 The Pundit: Current match outcome (winner or draw) matched.';
+    } else if (res.tier === 5) {
+      const matchedSide = actH === predH ? 'Home' : 'Away';
+      explanation = `🎲 The Casual: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
+    } else {
+      explanation = '🛋️ The Infantino: Incorrect match outcome and zero correct team goals against live score.';
+    }
   } else {
-    explanation = '🛋️ The Infantino: Incorrect match outcome and zero correct team goals.';
+    if (res.tier === 1) {
+      explanation = '🔮 Perfect Score! The Vishwaguru predicted the exact match scoreline.';
+    } else if (res.tier === 2) {
+      explanation = `📋 The Manager: Correct winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
+    } else if (res.tier === 3) {
+      const matchedSide = actH === predH ? 'Home team goals' : 'Away team goals';
+      explanation = `🎙️ The Fan: Correct outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
+    } else if (res.tier === 4) {
+      explanation = '📣 The Pundit: Correct match outcome (winner or draw) predicted.';
+    } else if (res.tier === 5) {
+      const matchedSide = actH === predH ? 'Home' : 'Away';
+      explanation = `🎲 The Casual: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
+    } else {
+      explanation = '🛋️ The Infantino: Incorrect match outcome and zero correct team goals.';
+    }
   }
 
   const summaryLines = [
@@ -492,7 +514,7 @@ export function getPredictionBreakdown(actH, actA, predH, predA) {
   return {
     status: 'evaluated',
     hasResult: true,
-    hasPred: true,
+    isLive: Boolean(isLive),
     predScore: `${predH} – ${predA}`,
     actScore: `${actH} – ${actA}`,
     eval: res,

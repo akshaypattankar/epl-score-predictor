@@ -11,7 +11,7 @@ For any given match, players earn points based on the highest applicable tier:
 | Tier | Icon | Title | Description | Base Pts | Example |
 | :---: | :---: | :--- | :--- | :---: | :--- |
 | **Tier 1** | 🔮 | **The Oracle** | Exact match scoreline | **6 pts** | Actual `3–1` \| Predicted `3–1` |
-| **Tier 2** | 📋 | **The Manager** | Correct outcome (Home Win / Away Win / Draw) AND exact goal difference ($GD = \text{Home} - \text{Away}$) | **4 pts** | Actual `3–1` ($GD=+2$) \| Predicted `2–0` ($GD=+2$)<br>Actual `2–2` ($GD=0$) \| Predicted `1–1` ($GD=0$) |
+| **Tier 2** | 📋 | **The Manager** | Correct outcome (Home Win / Away Win / Draw) AND exact goal difference ($GD = \text{Home} - \text{Away}$), excluding 0–0 actual scorelines | **4 pts** | Actual `3–1` ($GD=+2$) \| Predicted `2–0` ($GD=+2$)<br>Actual `2–2` ($GD=0$) \| Predicted `1–1` ($GD=0$) |
 | **Tier 3** | 🎙️ | **The Pundit** | Correct outcome, incorrect GD, but correctly predicted home or away score | **3 pts** | Actual `3–1` \| Predicted `3–0` or `2–1` |
 | **Tier 4** | 📣 | **The Fan** | Correct outcome only; GD and team scores are both incorrect | **2 pts** | Actual `3–1` \| Predicted `4–0` or `1–0` |
 | **Tier 5** | 🎲 | **The Lucky Guess** | Incorrect outcome, but correctly predicted one team's exact goal tally | **1 pt** | Actual `3–1` (Home Win) \| Predicted `3–3` (Draw) or `0–1` (Away Win) |
@@ -69,8 +69,8 @@ Bonus points stack on top of base points when their criteria are met:
 
 3. Determine Base Tier & Points:
    IF isExactScore                              --> Base = 6 (Tier 1)
-   ELSE IF isCorrectOutcome AND isExactGD       --> Base = 4 (Tier 2)
-   ELSE IF isCorrectOutcome AND isOneTeamGoals Exact --> Base = 3 (Tier 3)
+   ELSE IF isCorrectOutcome AND isExactGD AND (actual_home + actual_away > 0) --> Base = 4 (Tier 2)
+   ELSE IF isCorrectOutcome AND isOneTeamGoalsExact --> Base = 3 (Tier 3)
    ELSE IF isCorrectOutcome                     --> Base = 2 (Tier 4)
    ELSE IF isOneTeamGoalsExact                  --> Base = 1 (Tier 5)
    ELSE                                         --> Base = 0 (Tier 6)

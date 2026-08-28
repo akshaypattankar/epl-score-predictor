@@ -2,6 +2,9 @@
 
 This project provides a Premier League prediction mini-league dashboard built with Vite, HTML, CSS, Express, and SQLite.
 
+> [!NOTE]
+> **Disclaimer**: This app is completely vibe coded and is a technical experiment to see the capabilities of AI models.
+
 ---
 
 ## 🔌 Unique Port Mapping Overview
