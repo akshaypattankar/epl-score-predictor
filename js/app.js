@@ -52,7 +52,7 @@ const state = {
   selectedTeams: [],   // Array of selected team names, e.g. ['Arsenal', 'Chelsea']. Empty array [] = All teams
   playerSearchQuery: '',
   timezone: localStorage.getItem('epl_timezone') || 'UTC',
-  chartMode: localStorage.getItem('epl_chart_mode') || 'stepped', // 'stepped' | 'linear'
+  chartMode: localStorage.getItem('epl_chart_mode') || 'ribbon', // 'ribbon' | 'stepped' | 'linear'
   auth: {
     role: 'guest',    // 'guest' | 'player' | 'admin'
     activePlayerId: null,
@@ -2587,9 +2587,18 @@ function renderCumulativeChart() {
   const playerData = state.players.map((p, idx) => {
     let cumulative = 0;
     const pointsByGW = [];
+    const cumulativeTiers = {};
+    if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
+      SCORING_TIERS.forEach(t => { cumulativeTiers[`t${t.tier}`] = 0; });
+    }
 
     for (const gw of state.gwNumbers) {
       let gwPts = 0;
+      const gwTiers = {};
+      if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
+        SCORING_TIERS.forEach(t => { gwTiers[`t${t.tier}`] = 0; });
+      }
+
       const rawGwFixtures = state.fixtures[gw] ?? [];
       const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
       for (const f of fixtures) {
@@ -2599,10 +2608,22 @@ function renderCumulativeChart() {
         if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
 
         const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
-        if (res) gwPts += res.total;
+        if (res) {
+          gwPts += res.total;
+          if (res.tier) {
+            gwTiers[`t${res.tier}`] = (gwTiers[`t${res.tier}`] || 0) + 1;
+            cumulativeTiers[`t${res.tier}`] = (cumulativeTiers[`t${res.tier}`] || 0) + 1;
+          }
+        }
       }
       cumulative += gwPts;
-      pointsByGW.push({ gw, gwPts, cumulative });
+      pointsByGW.push({
+        gw,
+        gwPts,
+        cumulative,
+        gwTiers: { ...gwTiers },
+        cumulativeTiers: { ...cumulativeTiers }
+      });
     }
 
     return {
@@ -2652,17 +2673,29 @@ function renderCumulativeChart() {
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
 
-  let maxPts = Math.max(10, ...playerData.map(p => p.total));
-  maxPts = Math.ceil(maxPts / 5) * 5;
+  const isRibbon = state.chartMode === 'ribbon';
 
+  // Calculate scales for linear/stepped mode vs ribbon mode
+  let maxPlayerCumulative = Math.max(10, ...playerData.map(p => p.total));
+  maxPlayerCumulative = Math.ceil(maxPlayerCumulative / 5) * 5;
+
+  // Max Cumulative League Total Points across all played GWs for ribbon mode (GW1 + GW2 + ...)
+  const leagueCumulativeByGW = gwList.map((gw, i) => {
+    if (i > maxPlayedGwIdx) return 0;
+    return playerData.reduce((sum, p) => sum + (p.pointsByGW[i]?.cumulative || 0), 0);
+  });
+  let maxLeagueCumulative = Math.max(10, ...leagueCumulativeByGW);
+  maxLeagueCumulative = Math.ceil(maxLeagueCumulative / 5) * 5;
+
+  const activeYMax = isRibbon ? maxLeagueCumulative : maxPlayerCumulative;
   const getX = (i) => padLeft + (numGWs > 1 ? (i / (numGWs - 1)) * chartW : chartW / 2);
-  const getY = (val) => padTop + chartH - (val / maxPts) * chartH;
+  const getY = (val) => padTop + chartH - (val / activeYMax) * chartH;
 
   // 1. Y-Axis Grid Lines & Tick Labels
   let gridLinesSvg = '';
   const ySteps = 4;
   for (let i = 0; i <= ySteps; i++) {
-    const val = Math.round((maxPts / ySteps) * i);
+    const val = Math.round((activeYMax / ySteps) * i);
     const y = getY(val);
     gridLinesSvg += `
       <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'var(--border-active)' : 'var(--border-glass)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
@@ -2677,7 +2710,7 @@ function renderCumulativeChart() {
   const yLabelX = 20;
   const yLabelY = padTop + (chartH / 2);
   const yAxisLabelSvg = `
-    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">POINTS</text>
+    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : 'POINTS'}</text>
   `;
 
   // 2. X-Axis Baseline & Gameweek Ticks
@@ -2711,76 +2744,275 @@ function renderCumulativeChart() {
     return isYouA - isYouB;
   });
 
-  sortedPlayersForSvg.forEach(p => {
-    const isYou = state.auth.activePlayerId === p.id;
-    const isDotted = hasActivePlayer ? !isYou : false;
-    const pts = p.pointsByGW;
-    // Only plot points for ongoing or completed gameweeks
-    const playedPts = pts.filter((pt, i) => i <= maxPlayedGwIdx);
+  // Rank comparison function using cumulative points, then scoring tiers hierarchy, then GW points, then name
+  function comparePlayersAtGW(a, b, gwIdx) {
+    const ptA = a.pointsByGW[gwIdx] || { cumulative: 0, gwPts: 0 };
+    const ptB = b.pointsByGW[gwIdx] || { cumulative: 0, gwPts: 0 };
 
-    const strokeWidth = isYou ? '3.5' : (hasActivePlayer ? '2' : '2.5');
-    const strokeDash = isDotted ? 'stroke-dasharray="4,4"' : '';
-    const opacity = isDotted ? '0.85' : '1';
-    const shadowFilter = isYou
-      ? `style="filter: drop-shadow(0 2px 6px ${p.color}88);"`
-      : `style="filter: drop-shadow(0 1px 3px ${p.color}44);"`;
-
-    if (playedPts.length >= 2) {
-      let pathD = '';
-      if (state.chartMode === 'linear') {
-        const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
-        pathD = `M ${pathCoords}`;
-      } else {
-        // Stepped Line Chart: horizontal step across gameweeks, then vertical rise/drop at each gameweek
-        pathD = `M ${getX(0)},${getY(playedPts[0].cumulative)}`;
-        for (let i = 1; i < playedPts.length; i++) {
-          const prevY = getY(playedPts[i - 1].cumulative);
-          const currX = getX(i);
-          const currY = getY(playedPts[i].cumulative);
-          pathD += ` L ${currX},${prevY} L ${currX},${currY}`;
-        }
+    // 1. Overall cumulative points at this GW
+    if (ptB.cumulative !== ptA.cumulative) {
+      return ptB.cumulative - ptA.cumulative;
+    }
+    // 2. Scoring tiers tie-breaker (T1 -> T2 -> T3 ...)
+    if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
+      for (const t of SCORING_TIERS) {
+        const countA = ptA.cumulativeTiers?.[`t${t.tier}`] || 0;
+        const countB = ptB.cumulativeTiers?.[`t${t.tier}`] || 0;
+        if (countB !== countA) return countB - countA;
       }
+    }
+    // 3. Current gameweek points
+    if (ptB.gwPts !== ptA.gwPts) {
+      return ptB.gwPts - ptA.gwPts;
+    }
+    // 4. Alphabetical fallback
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  }
 
-      linesSvg += `
-        <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" ${shadowFilter} />
-      `;
+  if (isRibbon) {
+    // ─── CUMULATIVE STACKED POWER BI RIBBON CHART (GW1 + GW2 + ...) ─────────
+    const N = playerData.length;
+    const ribbonColW = numGWs > 1 ? Math.min(32, Math.max(18, chartW / (numGWs * 1.8))) : 38;
+    const minSegmentH = 4; // subtle sliver for 0-pt players so ribbon tracks cleanly
+    const totalMinH = N * minSegmentH;
+    const availableH = Math.max(0, chartH - totalMinH);
+    const ptsScale = maxLeagueCumulative > 0 ? availableH / maxLeagueCumulative : 0;
+
+    // Calculate layout coordinates per gameweek
+    const ribbonLayout = []; // ribbonLayout[gwIdx][playerId] = { yTop, yBot, h, xLeft, xRight, cx, rank, cumulative, gwPts }
+
+    gwList.forEach((gw, i) => {
+      ribbonLayout[i] = {};
+      if (i > maxPlayedGwIdx) return;
+
+      // Sort players by cumulative rank & scoring tier tie-breakers (Rank #1 at top)
+      const rankedList = [...playerData].sort((a, b) => comparePlayersAtGW(a, b, i));
+
+      // Calculate heights for each player based on CUMULATIVE points up to this gameweek
+      const segmentHeights = rankedList.map(p => {
+        const cumPts = p.pointsByGW[i]?.cumulative || 0;
+        return minSegmentH + (cumPts * ptsScale);
+      });
+
+      const totalColH = segmentHeights.reduce((sum, h) => sum + h, 0);
+      const colBaseline = padTop + chartH;
+      const colTop = colBaseline - totalColH;
+
+      let currY = colTop;
+      rankedList.forEach((p, rIdx) => {
+        const segH = segmentHeights[rIdx];
+        const pt = p.pointsByGW[i] || { cumulative: 0, gwPts: 0 };
+        const cx = getX(i);
+
+        ribbonLayout[i][p.id] = {
+          xLeft: cx - ribbonColW / 2,
+          xRight: cx + ribbonColW / 2,
+          cx,
+          yTop: currY,
+          yBot: currY + segH,
+          h: segH,
+          rank: rIdx + 1,
+          cumulative: pt.cumulative,
+          gwPts: pt.gwPts,
+          player: p
+        };
+        currY += segH;
+      });
+    });
+
+    // 1. Draw Connecting Ribbons between consecutive Gameweeks
+    let ribbonGradientsSvg = '<defs>';
+    for (let i = 0; i < maxPlayedGwIdx; i++) {
+      sortedPlayersForSvg.forEach(p => {
+        const seg1 = ribbonLayout[i]?.[p.id];
+        const seg2 = ribbonLayout[i + 1]?.[p.id];
+        if (!seg1 || !seg2) return;
+
+        const isYou = state.auth.activePlayerId === p.id;
+        const gradId = `ribbon_flow_${p.id}_${i}`;
+
+        // Horizontal fading gradient across the ribbon flow
+        ribbonGradientsSvg += `
+          <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.68' : '0.38'}" />
+            <stop offset="50%" stop-color="${p.color}" stop-opacity="${isYou ? '0.48' : '0.24'}" />
+            <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.68' : '0.38'}" />
+          </linearGradient>
+        `;
+
+        const x1 = seg1.xRight;
+        const x2 = seg2.xLeft;
+        const y1_top = seg1.yTop;
+        const y1_bot = seg1.yBot;
+        const y2_top = seg2.yTop;
+        const y2_bot = seg2.yBot;
+        const dx = (x2 - x1) * 0.52;
+
+        const ribbonD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top} L ${x2},${y2_bot} C ${x2 - dx},${y2_bot} ${x1 + dx},${y1_bot} ${x1},${y1_bot} Z`;
+
+        const ribbonStroke = isYou ? '#38bdf8' : p.color;
+        const ribbonStrokeW = isYou ? '1.8' : '1';
+        const ribbonStrokeOpacity = isYou ? '0.9' : '0.45';
+        const ribbonShadow = isYou ? `style="filter: drop-shadow(0 2px 8px ${p.color}66);"` : '';
+
+        linesSvg += `
+          <path class="ribbon-band" d="${ribbonD}" fill="url(#${gradId})" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linejoin="round" ${ribbonShadow} />
+        `;
+      });
     }
 
-    playedPts.forEach((pt, i) => {
-      const cx = getX(i);
-      const cy = getY(pt.cumulative);
-      const radius = isYou ? '4.5' : '3.5';
-      const strokeW = isYou ? '2.2' : '1.5';
-      const nodeClass = isYou ? 'chart-marker-node chart-marker-node-you' : 'chart-marker-node';
-
-      markersSvg += `
-        <g class="chart-marker-group" data-gw-idx="${i}">
-          <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-gw-idx="${i}" />
-        </g>
+    // Add pillar vertical gradients for each player
+    sortedPlayersForSvg.forEach(p => {
+      const isYou = state.auth.activePlayerId === p.id;
+      ribbonGradientsSvg += `
+        <linearGradient id="pillar_vgrad_${p.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.92' : '0.70'}" />
+          <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.65' : '0.45'}" />
+        </linearGradient>
       `;
     });
-  });
+
+    ribbonGradientsSvg += '</defs>';
+    linesSvg = ribbonGradientsSvg + linesSvg;
+
+    // 2. Draw Column Segments & Badges at each Gameweek
+    for (let i = 0; i <= maxPlayedGwIdx; i++) {
+      sortedPlayersForSvg.forEach(p => {
+        const seg = ribbonLayout[i]?.[p.id];
+        if (!seg) return;
+
+        const isYou = state.auth.activePlayerId === p.id;
+        const strokeColor = isYou ? '#38bdf8' : 'rgba(255, 255, 255, 0.2)';
+        const strokeW = isYou ? '1.8' : '0.9';
+        const pillarShadow = isYou ? `style="filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.45));"` : '';
+
+        const badgeW = Math.max(22, Math.min(ribbonColW - 6, 28));
+        const badgeH = Math.min(seg.h - 4, 18);
+
+        if (seg.h >= 20) {
+          // Large segment: Frosted glass data pill with bold white cumulative score
+          markersSvg += `
+            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="5" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+              <rect x="${seg.cx - badgeW / 2}" y="${seg.yTop + seg.h / 2 - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="4" fill="rgba(10, 15, 29, 0.82)" stroke="${isYou ? '#38bdf8' : 'rgba(255, 255, 255, 0.18)'}" stroke-width="${isYou ? '1' : '0.75'}" />
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2 + 3.8}" fill="#ffffff" font-size="10.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em">${seg.cumulative}</text>
+            </g>
+          `;
+        } else if (seg.h >= 12) {
+          // Medium segment: Clean white score with soft shadow
+          markersSvg += `
+            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="3" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2 + 3.5}" fill="#ffffff" font-size="9" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.95));">${seg.cumulative}</text>
+            </g>
+          `;
+        } else {
+          // Slim segment (0-pt sliver)
+          markersSvg += `
+            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="2" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+            </g>
+          `;
+        }
+      });
+    }
+
+  } else {
+    // ─── STANDARD LINE / STEPPED LINE RENDERING ─────────────────────────────
+    let areaGradientsSvg = '<defs>';
+    if (state.chartMode === 'stepped') {
+      sortedPlayersForSvg.forEach(p => {
+        const isYou = state.auth.activePlayerId === p.id;
+        const gradId = `step_area_grad_${p.id}`;
+        areaGradientsSvg += `
+          <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.35' : '0.30'}" />
+            <stop offset="100%" stop-color="${p.color}" stop-opacity="0.08" />
+          </linearGradient>
+        `;
+      });
+    }
+    areaGradientsSvg += '</defs>';
+    linesSvg = areaGradientsSvg + linesSvg;
+
+    sortedPlayersForSvg.forEach(p => {
+      const isYou = state.auth.activePlayerId === p.id;
+      const isDotted = hasActivePlayer ? !isYou : false;
+      const pts = p.pointsByGW;
+      const playedPts = pts.filter((pt, i) => i <= maxPlayedGwIdx);
+
+      const strokeWidth = isYou ? '3.5' : (hasActivePlayer ? '2' : '2.5');
+      const strokeDash = isDotted ? 'stroke-dasharray="4,4"' : '';
+      const opacity = isDotted ? '0.85' : '1';
+      const shadowFilter = isYou
+        ? `style="filter: drop-shadow(0 2px 6px ${p.color}88);"`
+        : `style="filter: drop-shadow(0 1px 3px ${p.color}44);"`;
+
+      if (playedPts.length >= 2) {
+        let pathD = '';
+        if (state.chartMode === 'linear') {
+          const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
+          pathD = `M ${pathCoords}`;
+        } else {
+          // Stepped Line Chart: horizontal step across gameweeks, then vertical step at gameweek completion
+          pathD = `M ${getX(0)},${getY(playedPts[0].cumulative)}`;
+          for (let i = 1; i < playedPts.length; i++) {
+            const prevY = getY(playedPts[i - 1].cumulative);
+            const currX = getX(i);
+            const currY = getY(playedPts[i].cumulative);
+            pathD += ` L ${currX},${prevY} L ${currX},${currY}`;
+          }
+
+          // Area under the stepped chart with almost-transparent shade
+          const lastIdx = playedPts.length - 1;
+          const lastX = getX(lastIdx);
+          const firstX = getX(0);
+          const baselineY = padTop + chartH;
+          const areaD = `${pathD} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
+
+          linesSvg += `
+            <path d="${areaD}" fill="url(#step_area_grad_${p.id})" stroke="none" />
+          `;
+        }
+
+        linesSvg += `
+          <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" ${shadowFilter} />
+        `;
+      }
+
+      playedPts.forEach((pt, i) => {
+        const cx = getX(i);
+        const cy = getY(pt.cumulative);
+        const radius = isYou ? '4.5' : '3.5';
+        const strokeW = isYou ? '2.2' : '1.5';
+        const nodeClass = isYou ? 'chart-marker-node chart-marker-node-you' : 'chart-marker-node';
+
+        markersSvg += `
+          <g class="chart-marker-group" data-gw-idx="${i}">
+            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-gw-idx="${i}" />
+          </g>
+        `;
+      });
+    });
+  }
 
   // Calculate full standings per gameweek for multi-player tooltip
   const gwStandings = gwList.map((gw, i) => {
     const isPlayed = i <= maxPlayedGwIdx;
-    const list = playerData.map(p => {
+    const rankedPlayers = [...playerData].sort((a, b) => comparePlayersAtGW(a, b, i));
+    const list = rankedPlayers.map((p, rIdx) => {
       const pt = p.pointsByGW[i] || { gw, gwPts: 0, cumulative: 0 };
+      const prevPt = i > 0 ? (p.pointsByGW[i - 1] || { cumulative: 0 }) : null;
       return {
         id: p.id,
         name: p.name,
         color: p.color,
         gwPts: pt.gwPts,
         cumulative: pt.cumulative,
+        prevCumulative: prevPt ? prevPt.cumulative : null,
+        rank: rIdx + 1,
         isYou: state.auth.activePlayerId === p.id
       };
-    });
-
-    list.sort((a, b) => {
-      if (a.isYou && !b.isYou) return -1;
-      if (!a.isYou && b.isYou) return 1;
-      if (b.cumulative !== a.cumulative) return b.cumulative - a.cumulative;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
     return {
@@ -2876,7 +3108,8 @@ function attachChartTooltipHandlers(gwStandings, svgWidth) {
         <div class="chart-tooltip-list">
           ${data.players.map(p => `
             <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
-              <div class="chart-tooltip-player">
+              <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
                 <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
               </div>
@@ -4152,11 +4385,13 @@ function initCopyBtn() {
 function initChartControls() {
   const stepBtn = document.getElementById('chartModeStepBtn');
   const linearBtn = document.getElementById('chartModeLinearBtn');
+  const ribbonBtn = document.getElementById('chartModeRibbonBtn');
 
   function updateButtons() {
-    const isStep = state.chartMode === 'stepped';
-    if (stepBtn) stepBtn.classList.toggle('active', isStep);
-    if (linearBtn) linearBtn.classList.toggle('active', !isStep);
+    const mode = state.chartMode || 'stepped';
+    if (stepBtn) stepBtn.classList.toggle('active', mode === 'stepped');
+    if (linearBtn) linearBtn.classList.toggle('active', mode === 'linear');
+    if (ribbonBtn) ribbonBtn.classList.toggle('active', mode === 'ribbon');
   }
 
   stepBtn?.addEventListener('click', () => {
@@ -4169,6 +4404,13 @@ function initChartControls() {
   linearBtn?.addEventListener('click', () => {
     state.chartMode = 'linear';
     localStorage.setItem('epl_chart_mode', 'linear');
+    updateButtons();
+    renderCumulativeChart();
+  });
+
+  ribbonBtn?.addEventListener('click', () => {
+    state.chartMode = 'ribbon';
+    localStorage.setItem('epl_chart_mode', 'ribbon');
     updateButtons();
     renderCumulativeChart();
   });
