@@ -3159,14 +3159,36 @@ tr.row-out-of-scope:hover {
 .rule-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
 
 /* ── CUMULATIVE CHART STYLES ─────────────────── */
-.chart-type-toggle { display: inline-flex; gap: 4px; }
+.chart-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.chart-type-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  gap: 2px;
+  flex-shrink: 0;
+  max-width: 100%;
+}
 .chart-mode-btn {
   background: transparent;
   color: var(--text-muted);
   border: none;
+  font-size: 0.78rem;
+  padding: 5px 11px;
+  border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s ease;
+  flex: 0 0 auto;
+  width: auto;
 }
 .chart-mode-btn:hover {
   color: var(--text-main);
@@ -4020,6 +4042,23 @@ tr.row-out-of-scope:hover {
   /* Cumulative Chart */
   .chart-section {
     padding: 16px 12px;
+  }
+  .chart-header-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+  .chart-type-toggle {
+    display: inline-flex;
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 2px;
+  }
+  .chart-mode-btn {
+    width: auto !important;
+    padding: 5px 12px;
   }
   .chart-canvas-wrapper {
     overflow-x: auto;
