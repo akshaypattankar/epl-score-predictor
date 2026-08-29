@@ -1955,8 +1955,9 @@ function renderMatrix() {
 
   document.getElementById('matrixTitle').textContent = subtitleText;
 
-  const totalGWFixtures = fixtures.length;
-  const locked = fixtures.filter(f => isLocked(f)).length;
+  const completed = fixtures.filter(f => isMatchFinished(f)).length;
+  const live = fixtures.filter(f => isMatchOngoing(f)).length;
+  const yetToPlay = fixtures.filter(f => !isMatchFinished(f) && !isMatchOngoing(f)).length;
 
   const scopeChip = (!isGuest && groupFilter)
     ? `<span class="meta-chip" style="color:var(--accent-gold);border-color:var(--accent-gold)">🎯 Scope: ${groupFilter.length} Teams</span>`
@@ -1974,12 +1975,17 @@ function renderMatrix() {
     ? `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)" title="Admin Override Active: You can edit predictions for any player & completed matches">👑 Admin Edits Enabled</span>`
     : '';
 
+  const liveChip = live > 0
+    ? `<span class="meta-chip" style="color:#ff5572;border-color:rgba(255,85,114,0.4);">⚡ ${live} live</span>`
+    : '';
+
   document.getElementById('matrixMeta').innerHTML = `
     ${adminChip}
     ${scopeChip}
     ${filterChip}
-    <span class="meta-chip">🔒 ${locked} locked</span>
-    <span class="meta-chip">⏳ ${totalGWFixtures - locked} open</span>
+    ${liveChip}
+    <span class="meta-chip">✅ ${completed} completed</span>
+    <span class="meta-chip">⏳ ${yetToPlay} yet to play</span>
   `;
 
   let players = isGuest ? [] : [...state.players];
@@ -2119,7 +2125,12 @@ function renderMatrix() {
       }
 
       const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
-      const ptsText = result ? result.total : (locked ? '-' : '?');
+      const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
+      const tierIcon = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
+      const hasBonus = result && (result.highScoringBonus > 0 || result.drawBonus > 0 || result.customBonusesTotal > 0);
+      const ptsText = result
+        ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${result.total}</span>${hasBonus ? '<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px;">🔥</span>' : ''}`
+        : (locked ? '-' : '?');
       const ptsTitle = result
         ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
         : (locked ? 'Awaiting kickoff' : 'Open for predictions');
@@ -2385,13 +2396,18 @@ function updatePtsBadge(matchId, playerId) {
   if (!badge) return;
 
   const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
-  const ptsText = result ? result.total : (isLocked(fixture) ? '-' : '?');
+  const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
+  const tierIconHtml = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
+  const hasBonus = result && (result.highScoringBonus > 0 || result.drawBonus > 0 || result.customBonusesTotal > 0);
+  const badgeInner = result
+    ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIconHtml}</span><span class="pts-val">${result.total}</span>${hasBonus ? '<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px;">🔥</span>' : ''}`
+    : (isLocked(fixture) ? '-' : '?');
   const ptsTitle = result
     ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
     : (isLocked(fixture) ? 'Awaiting kickoff' : 'Open for predictions');
 
   badge.className = `pts-badge pts-interactive ${ptsClass}`;
-  badge.textContent = ptsText;
+  badge.innerHTML = badgeInner;
   badge.title = ptsTitle;
   badge.setAttribute('data-match', matchId);
   badge.setAttribute('data-player', playerId);
@@ -2444,6 +2460,27 @@ function renderLeaderboard() {
     }
   }
 
+  const thead = document.getElementById('leaderboardHead') || document.querySelector('#leaderboardTable thead');
+  if (thead) {
+    thead.innerHTML = `
+      <tr>
+        <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
+        ${SCORING_TIERS.map(t => `
+          <th class="lb-tier-th" data-tier="${t.tier}" tabindex="0" role="button" aria-label="Tier ${t.tier} Rules: ${t.name}" title="Click or tap to learn what Tier ${t.tier} means">
+            <div class="th-tier-title" style="display:flex; align-items:center; justify-content:center; gap:4px;">
+              ${renderIconElement(t.icon, t.icon_type, 16)} <span>Tier ${t.tier}</span>
+            </div>
+            <div class="th-tier-sub">${t.pts} ${t.pts === 1 ? 'pt' : 'pts'}</div>
+          </th>
+        `).join('')}
+        <th class="lb-total-th" title="Total Cumulative Points">
+          <div class="th-tier-title">Total</div>
+          <div class="th-tier-sub">Pts</div>
+        </th>
+      </tr>
+    `;
+  }
+
   if (state.auth.role === 'guest') {
     tbody.innerHTML = `
       <tr>
@@ -2463,25 +2500,6 @@ function renderLeaderboard() {
         </td>
       </tr>`;
     return;
-  }
-
-  const thead = document.querySelector('#leaderboardTable thead tr');
-  if (thead) {
-    thead.innerHTML = `
-      <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
-      ${SCORING_TIERS.map(t => `
-        <th class="lb-tier-th" data-tier="${t.tier}" tabindex="0" role="button" aria-label="Tier ${t.tier} Rules: ${t.name}" title="Click or tap to learn what Tier ${t.tier} means">
-          <div class="th-tier-title" style="display:flex; align-items:center; justify-content:center; gap:4px;">
-            ${renderIconElement(t.icon, t.icon_type, 16)} <span>Tier ${t.tier}</span>
-          </div>
-          <div class="th-tier-sub">${t.pts} ${t.pts === 1 ? 'pt' : 'pts'}</div>
-        </th>
-      `).join('')}
-      <th class="lb-total-th" title="Total Cumulative Points">
-        <div class="th-tier-title">Total</div>
-        <div class="th-tier-sub">Pts</div>
-      </th>
-    `;
   }
 
   const medals = ['🥇', '🥈', '🥉'];
@@ -4164,6 +4182,8 @@ async function init() {
 
   try {
     await loadAndApplyScoringRules();
+    renderScoringViewSummary();
+    renderMgmtScoringRulesSummary();
     await initAuth();
     await reloadMasterData();
     populateGroupDropdown();

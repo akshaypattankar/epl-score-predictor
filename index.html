@@ -245,7 +245,9 @@
             <h2 id="matrixTitle">📅 GW 1 Predictions</h2>
             <p id="matrixSubtitle">Enter your scores before kick-off - fields lock automatically</p>
           </div>
-          <div class="matrix-meta" id="matrixMeta"></div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div class="matrix-meta" id="matrixMeta"></div>
+          </div>
         </div>
         <div class="matrix-wrapper">
           <table class="matrix-table" id="matrixTable">
@@ -264,49 +266,13 @@
             <h2>🏆 Leaderboard Table</h2>
             <p id="leaderboardSubtitle">Scoring tier breakdown and total points for active group</p>
           </div>
-          <div id="leaderboardMeta" class="matrix-meta"></div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div id="leaderboardMeta" class="matrix-meta"></div>
+          </div>
         </div>
         <div class="table-responsive">
           <table class="data-table" id="leaderboardTable">
-            <thead>
-              <tr>
-                <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
-                <th class="lb-tier-th" data-tier="1" tabindex="0" role="button" aria-label="Tier 1 Rules: The Vishwaguru"
-                  title="Click or tap to learn what Tier 1 means">
-                  <div class="th-tier-title">🔮 Tier 1</div>
-                  <div class="th-tier-sub">6 pts</div>
-                </th>
-                <th class="lb-tier-th" data-tier="2" tabindex="0" role="button" aria-label="Tier 2 Rules: The Manager"
-                  title="Click or tap to learn what Tier 2 means">
-                  <div class="th-tier-title">📋 Tier 2</div>
-                  <div class="th-tier-sub">4 pts</div>
-                </th>
-                <th class="lb-tier-th" data-tier="3" tabindex="0" role="button" aria-label="Tier 3 Rules: The Fan"
-                  title="Click or tap to learn what Tier 3 means">
-                  <div class="th-tier-title">🎙️ Tier 3</div>
-                  <div class="th-tier-sub">3 pts</div>
-                </th>
-                <th class="lb-tier-th" data-tier="4" tabindex="0" role="button" aria-label="Tier 4 Rules: The Pundit"
-                  title="Click or tap to learn what Tier 4 means">
-                  <div class="th-tier-title">📣 Tier 4</div>
-                  <div class="th-tier-sub">2 pts</div>
-                </th>
-                <th class="lb-tier-th" data-tier="5" tabindex="0" role="button"
-                  aria-label="Tier 5 Rules: The Casual" title="Click or tap to learn what Tier 5 means">
-                  <div class="th-tier-title">🎲 Tier 5</div>
-                  <div class="th-tier-sub">1 pt</div>
-                </th>
-                <th class="lb-tier-th" data-tier="6" tabindex="0" role="button" aria-label="Tier 6 Rules: The Infantino"
-                  title="Click or tap to learn what Tier 6 means">
-                  <div class="th-tier-title">🛋️ Tier 6</div>
-                  <div class="th-tier-sub">0 pts</div>
-                </th>
-                <th class="lb-total-th" title="Total Cumulative Points">
-                  <div class="th-tier-title">Total</div>
-                  <div class="th-tier-sub">Pts</div>
-                </th>
-              </tr>
-            </thead>
+            <thead id="leaderboardHead"></thead>
             <tbody id="leaderboardBody"></tbody>
           </table>
         </div>
@@ -363,138 +329,7 @@
       <!-- Point Tiers Summary Grid -->
       <div class="scoring-rules-grid" id="scoringTiersSummaryGrid"
         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
-        <div class="glass-card scoring-rule-card tier-1">
-          <div class="rule-icon"><img src="assets/icons/oracle.svg" width="36" height="36" alt="The Vishwaguru" /></div>
-          <div class="rule-title">Tier 1 - The Vishwaguru</div>
-          <div class="rule-pts">6 Pts</div>
-          <p class="rule-desc">Correctly predict the exact final scoreline for both teams.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">3–1</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card tier-2">
-          <div class="rule-icon"><img src="assets/icons/manager.svg" width="36" height="36" alt="The Manager" /></div>
-          <div class="rule-title">Tier 2 - The Manager</div>
-          <div class="rule-pts">4 Pts</div>
-          <p class="rule-desc">Correct match outcome AND exact goal difference matched.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1 (GD +2)</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">2–0 (GD +2)</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card tier-3">
-          <div class="rule-icon"><img src="assets/icons/fan.svg" width="36" height="36" alt="The Fan" /></div>
-          <div class="rule-title">Tier 3 - The Fan</div>
-          <div class="rule-pts">3 Pts</div>
-          <p class="rule-desc">Correct outcome, incorrect GD, but correctly predicted either home or away score.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">3–0 or 2–1</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card tier-4">
-          <div class="rule-icon"><img src="assets/icons/pundit.svg" width="36" height="36" alt="The Pundit" /></div>
-          <div class="rule-title">Tier 4 - The Pundit</div>
-          <div class="rule-pts">2 Pts</div>
-          <p class="rule-desc">Correct match outcome only; goal difference and individual team scores are incorrect.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">4–0 or 1–0</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card tier-5">
-          <div class="rule-icon"><img src="assets/icons/lucky-guess.svg" width="36" height="36" alt="The Casual" />
-          </div>
-          <div class="rule-title">Tier 5 - The Casual</div>
-          <div class="rule-pts">1 Pt</div>
-          <p class="rule-desc">Incorrect outcome, but correctly predicted one team's exact goal tally.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1 (Home Win)</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">3–3 or 0–1</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card tier-6">
-          <div class="rule-icon"><img src="assets/icons/casual.svg" width="36" height="36" alt="The Infantino" /></div>
-          <div class="rule-title">Tier 6 - The Infantino</div>
-          <div class="rule-pts">0 Pts</div>
-          <p class="rule-desc">Incorrect match outcome and zero correct individual team goal predictions.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">0–2</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Dynamically rendered from active SCORING_TIERS in JS -->
       </div>
 
       <!-- Bonus Points Section -->
@@ -511,47 +346,8 @@
 
       <div class="scoring-rules-grid" id="scoringBonusesSummaryGrid"
         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
-        <div class="glass-card scoring-rule-card bonus-1">
-          <div class="rule-icon">🔥</div>
-          <div class="rule-title">High-Scoring Thriller Bonus</div>
-          <div class="rule-pts">+1 Pt</div>
-          <p class="rule-desc">Triggered when both actual match total goals and predicted total goals are &ge; 4. Player must have predicted the correct match outcome.</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">3–1 (&ge;4 goals)</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">4–0 (&ge;4 goals)</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="glass-card scoring-rule-card bonus-2">
-          <div class="rule-icon">✨</div>
-          <div class="rule-title">Exact Draw Premium</div>
-          <div class="rule-pts">+1 Pt</div>
-          <p class="rule-desc">Triggered when match ends in a draw and player predicts the exact scoreline. Stacks with
-            The Vishwaguru and Thriller for up to 8 Pts total!</p>
-          <div class="rule-example-box">
-            <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario</span>
-            </div>
-            <div class="rule-example-body">
-              <div class="example-flex-row">
-                <div class="example-chip actual-chip"><span class="example-chip-tag">Actual</span> <span
-                    class="example-chip-val">2–2</span></div>
-                <span class="example-vs-badge">VS</span>
-                <div class="example-chip pred-chip"><span class="example-chip-tag">Predicted</span> <span
-                    class="example-chip-val">2–2</span></div>
-                <span class="example-calc-pill">Total: 6+1+1 = 8 pts</span>
+        <!-- Dynamically rendered from active SCORING_BONUSES in JS -->
+      </div>
               </div>
             </div>
           </div>

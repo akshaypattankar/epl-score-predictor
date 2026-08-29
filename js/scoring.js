@@ -467,39 +467,41 @@ export function getPredictionBreakdown(actH, actA, predH, predA, isLive = false)
     reason: b.shortDesc || b.desc || `${b.name} criteria met.`
   }));
 
-  // Explanation construction
+  // Explanation construction (dynamic based on active tier info from rules editor)
+  const isSvg = tierInfo.icon_type === 'svg' || (typeof tierInfo.icon === 'string' && tierInfo.icon.includes('.svg'));
+  const iconStr = isSvg ? '' : `${tierInfo.icon} `;
   let explanation = '';
   if (isLive) {
     if (res.tier === 1) {
-      explanation = '🔮 Exact Score! Prediction currently matches the live match scoreline.';
+      explanation = `${iconStr}${tierInfo.name}: Exact scoreline matched against live score.`;
     } else if (res.tier === 2) {
-      explanation = `📋 The Manager: Currently matching winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
+      explanation = `${iconStr}${tierInfo.name}: Matching winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
     } else if (res.tier === 3) {
       const matchedSide = actH === predH ? 'Home team goals' : 'Away team goals';
-      explanation = `🎙️ The Fan: Current outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
+      explanation = `${iconStr}${tierInfo.name}: Current outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
     } else if (res.tier === 4) {
-      explanation = '📣 The Pundit: Current match outcome (winner or draw) matched.';
+      explanation = `${iconStr}${tierInfo.name}: Current match outcome (winner or draw) matched.`;
     } else if (res.tier === 5) {
       const matchedSide = actH === predH ? 'Home' : 'Away';
-      explanation = `🎲 The Casual: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
+      explanation = `${iconStr}${tierInfo.name}: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
     } else {
-      explanation = '🛋️ The Infantino: Incorrect match outcome and zero correct team goals against live score.';
+      explanation = `${iconStr}${tierInfo.name}: Incorrect match outcome and zero correct team goals against live score.`;
     }
   } else {
     if (res.tier === 1) {
-      explanation = '🔮 Perfect Score! The Vishwaguru predicted the exact match scoreline.';
+      explanation = `${iconStr}${tierInfo.name}: Exact final scoreline predicted.`;
     } else if (res.tier === 2) {
-      explanation = `📋 The Manager: Correct winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
+      explanation = `${iconStr}${tierInfo.name}: Correct winner/draw with exact goal difference (${(actH - actA) >= 0 ? '+' : ''}${actH - actA}).`;
     } else if (res.tier === 3) {
       const matchedSide = actH === predH ? 'Home team goals' : 'Away team goals';
-      explanation = `🎙️ The Fan: Correct outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
+      explanation = `${iconStr}${tierInfo.name}: Correct outcome & matched ${matchedSide} exactly (${actH === predH ? actH : actA}).`;
     } else if (res.tier === 4) {
-      explanation = '📣 The Pundit: Correct match outcome (winner or draw) predicted.';
+      explanation = `${iconStr}${tierInfo.name}: Correct match outcome (winner or draw) predicted.`;
     } else if (res.tier === 5) {
       const matchedSide = actH === predH ? 'Home' : 'Away';
-      explanation = `🎲 The Casual: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
+      explanation = `${iconStr}${tierInfo.name}: Wrong outcome, but matched ${matchedSide} goals (${actH === predH ? actH : actA}) as a consolation.`;
     } else {
-      explanation = '🛋️ The Infantino: Incorrect match outcome and zero correct team goals.';
+      explanation = `${iconStr}${tierInfo.name}: Incorrect match outcome and zero correct team goals.`;
     }
   }
 

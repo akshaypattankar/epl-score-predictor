@@ -277,9 +277,9 @@ export async function fetchTeams() {
 
 export function getCrestImg(code, name = '') {
   if (!code) return `<span class="team-crest-emoji">⚽</span>`;
-  const svgUrl = `https://fplbox.python-beardie.ts.net/assets/team_crests/svg_crests/${code}.svg`;
-  const pngUrl = `https://fplbox.python-beardie.ts.net/assets/team_crests/png_crests/${code}.png`;
-  return `<img class="team-crest-img" src="${svgUrl}" alt="${name}" onerror="this.onerror=null; this.src='${pngUrl}';" />`;
+  const localPng = `assets/team_crests/png_crests/${code}.png`;
+  const localSvg = `assets/team_crests/svg_crests/${code}.svg`;
+  return `<img class="team-crest-img" src="${localPng}" alt="${name}" onerror="this.onerror=null; this.src='${localSvg}';" />`;
 }
 
 export async function fetchFixtures() {

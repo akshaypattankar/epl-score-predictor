@@ -2258,16 +2258,18 @@ tr.row-out-of-scope:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
+  gap: 3px;
+  min-width: 36px;
   height: 26px;
-  padding: 0 5px;
-  border-radius: 5px;
+  padding: 0 6px;
+  border-radius: 6px;
   font-family: var(--font-title);
   font-size: 0.84rem;
   font-weight: 800;
   transition: all 0.3s ease;
   margin: 0 auto;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .pts-badge.p8,
@@ -6333,6 +6335,3 @@ tr.row-out-of-scope:hover {
 .sim-formula-bonus { color: #fbbf24; font-weight: 700; }
 .sim-formula-equals { color: var(--text-dim); font-weight: 800; }
 .sim-formula-total { color: var(--accent-green); font-size: 0.95rem; font-weight: 800; }
-
-
-
