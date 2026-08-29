@@ -2770,7 +2770,7 @@ function renderCumulativeChart() {
   }
 
   if (isRibbon) {
-    // ─── CUMULATIVE STACKED POWER BI RIBBON CHART (GW1 + GW2 + ...) ─────────
+    // ─── CUMULATIVE STACKED RIBBON CHART (GW1 + GW2 + ...) ──────────────────
     const N = playerData.length;
     const ribbonColW = numGWs > 1 ? Math.min(32, Math.max(18, chartW / (numGWs * 1.8))) : 38;
     const minSegmentH = 4; // subtle sliver for 0-pt players so ribbon tracks cleanly
