@@ -52,6 +52,7 @@ const state = {
   selectedTeams: [],   // Array of selected team names, e.g. ['Arsenal', 'Chelsea']. Empty array [] = All teams
   playerSearchQuery: '',
   timezone: localStorage.getItem('epl_timezone') || 'UTC',
+  chartMode: localStorage.getItem('epl_chart_mode') || 'stepped', // 'stepped' | 'linear'
   auth: {
     role: 'guest',    // 'guest' | 'player' | 'admin'
     activePlayerId: null,
@@ -2725,8 +2726,20 @@ function renderCumulativeChart() {
       : `style="filter: drop-shadow(0 1px 3px ${p.color}44);"`;
 
     if (playedPts.length >= 2) {
-      const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
-      const pathD = `M ${pathCoords}`;
+      let pathD = '';
+      if (state.chartMode === 'linear') {
+        const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
+        pathD = `M ${pathCoords}`;
+      } else {
+        // Stepped Line Chart: horizontal step across gameweeks, then vertical rise/drop at each gameweek
+        pathD = `M ${getX(0)},${getY(playedPts[0].cumulative)}`;
+        for (let i = 1; i < playedPts.length; i++) {
+          const prevY = getY(playedPts[i - 1].cumulative);
+          const currX = getX(i);
+          const currY = getY(playedPts[i].cumulative);
+          pathD += ` L ${currX},${prevY} L ${currX},${currY}`;
+        }
+      }
 
       linesSvg += `
         <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" ${shadowFilter} />
@@ -4136,6 +4149,33 @@ function initCopyBtn() {
   });
 }
 
+function initChartControls() {
+  const stepBtn = document.getElementById('chartModeStepBtn');
+  const linearBtn = document.getElementById('chartModeLinearBtn');
+
+  function updateButtons() {
+    const isStep = state.chartMode === 'stepped';
+    if (stepBtn) stepBtn.classList.toggle('active', isStep);
+    if (linearBtn) linearBtn.classList.toggle('active', !isStep);
+  }
+
+  stepBtn?.addEventListener('click', () => {
+    state.chartMode = 'stepped';
+    localStorage.setItem('epl_chart_mode', 'stepped');
+    updateButtons();
+    renderCumulativeChart();
+  });
+
+  linearBtn?.addEventListener('click', () => {
+    state.chartMode = 'linear';
+    localStorage.setItem('epl_chart_mode', 'linear');
+    updateButtons();
+    renderCumulativeChart();
+  });
+
+  updateButtons();
+}
+
 function startLockRefresh() {
   setInterval(() => {
     if (state.activeGW && state.activeView === 'dashboard') {
@@ -4156,6 +4196,7 @@ async function init() {
   initGroupEvents();
   initGWSkipControls();
   initManagementEvents();
+  initChartControls();
   initRulesEditorModal({
     onRulesUpdated: () => {
       renderScoringViewSummary();

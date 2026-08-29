@@ -3159,6 +3159,26 @@ tr.row-out-of-scope:hover {
 .rule-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
 
 /* ── CUMULATIVE CHART STYLES ─────────────────── */
+.chart-type-toggle { display: inline-flex; gap: 4px; }
+.chart-mode-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.chart-mode-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+.chart-mode-btn.active {
+  background: var(--accent-purple);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+}
+
 .chart-legend-container { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chart-legend-chip {
   display: inline-flex; align-items: center; gap: 6px;

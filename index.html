@@ -280,13 +280,23 @@
 
       <!-- CUMULATIVE PROGRESSION CHART -->
       <section class="glass-card chart-section" style="margin-top: 24px;">
-        <div class="section-header" style="flex-wrap: wrap; gap: 12px;">
+        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
           <div>
             <h2>📈 Leaderboard Chart</h2>
             <p id="chartSubtitle">Cumulative total points tracked across all completed gameweeks</p>
           </div>
-          <div class="chart-legend-container" id="chartLegend">
-            <!-- Player color legend chips rendered by JS -->
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div class="chart-type-toggle" style="display: flex; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 8px; border: 1px solid var(--border-glass);">
+              <button type="button" class="btn btn-sm chart-mode-btn active" id="chartModeStepBtn" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px;" title="Step line chart (discrete gameweek jumps)">
+                🪜 Step Line
+              </button>
+              <button type="button" class="btn btn-sm chart-mode-btn" id="chartModeLinearBtn" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px;" title="Linear continuous slope">
+                📈 Linear
+              </button>
+            </div>
+            <div class="chart-legend-container" id="chartLegend">
+              <!-- Player color legend chips rendered by JS -->
+            </div>
           </div>
         </div>
 
