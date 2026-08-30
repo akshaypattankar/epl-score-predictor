@@ -375,6 +375,18 @@ function isTeamInGroupScope(teamName, group = state.activeGroup) {
   return isTeamInList(teamName, groupFilter);
 }
 
+// Helper: get the count of teams in scope for a group
+export function getGroupInScopeTeamsCount(group = state.activeGroup) {
+  const groupFilter = getGroupTeamsFilter(group);
+  if (!groupFilter) return 20; // 'ALL' scope: all 20 Premier League clubs are in scope
+  return groupFilter.length;
+}
+
+// Helper: check if chart x-axis expansion into matches is enabled (requires > 1 team in group scope)
+export function isChartExpandable(group = state.activeGroup) {
+  return getGroupInScopeTeamsCount(group) > 1;
+}
+
 // Helper: check if a fixture is within active group's scope
 function isFixtureInGroupScope(fixture, group = state.activeGroup) {
   if (!fixture) return true;
@@ -2614,6 +2626,7 @@ export function getCrestUrl(code) {
 }
 
 export function toggleChartExpandedGW(gw) {
+  if (!isChartExpandable()) return;
   const num = Number(gw);
   if (!state.chartExpandedGWs) {
     const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
@@ -2629,6 +2642,7 @@ export function toggleChartExpandedGW(gw) {
 }
 
 export function expandToCurrentGW() {
+  if (!isChartExpandable()) return;
   if (!state.chartExpandedGWs) {
     state.chartExpandedGWs = new Set();
   } else {
@@ -2644,6 +2658,7 @@ export function expandToCurrentGW() {
 }
 
 export function expandAllGWs() {
+  if (!isChartExpandable()) return;
   if (!state.chartExpandedGWs) {
     state.chartExpandedGWs = new Set();
   }
@@ -2654,6 +2669,7 @@ export function expandAllGWs() {
 }
 
 export function collapseAllGWs() {
+  if (!isChartExpandable()) return;
   if (!state.chartExpandedGWs) {
     state.chartExpandedGWs = new Set();
   } else {
@@ -2668,6 +2684,8 @@ if (typeof window !== 'undefined') {
   window.expandAllGWs = expandAllGWs;
   window.collapseAllGWs = collapseAllGWs;
   window.getCrestUrl = getCrestUrl;
+  window.getGroupInScopeTeamsCount = getGroupInScopeTeamsCount;
+  window.isChartExpandable = isChartExpandable;
 }
 
 export function setChartDrilldown(gw) {
@@ -2765,7 +2783,15 @@ function renderCumulativeChart() {
     if (drilldownNav) drilldownNav.style.display = 'none';
     if (overviewNav) overviewNav.style.display = 'inline-flex';
 
-    if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
+    const expandable = isChartExpandable();
+    const expandBtnGroup = document.querySelector('.chart-expand-btn-group');
+    if (expandBtnGroup) {
+      expandBtnGroup.style.display = expandable ? 'inline-flex' : 'none';
+    }
+
+    if (!expandable) {
+      state.chartExpandedGWs = new Set();
+    } else if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
       const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
       state.chartExpandedGWs = new Set([defaultGw]);
     }
@@ -2789,15 +2815,20 @@ function renderAllGameweeksChart() {
   const legendContainer = document.getElementById('chartLegend');
   const chartSubtitle = document.getElementById('chartSubtitle');
   const selectedTeams = getSelectedTeams();
+  const expandable = isChartExpandable();
 
-  if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
+  if (!expandable) {
+    state.chartExpandedGWs = new Set();
+  } else if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
     const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
     state.chartExpandedGWs = new Set([defaultGw]);
   }
   const expandedGwList = [...state.chartExpandedGWs].sort((a, b) => a - b);
 
   if (chartSubtitle) {
-    if (selectedTeams.length === 1) {
+    if (!expandable) {
+      chartSubtitle.textContent = `Cumulative points progression across the season`;
+    } else if (selectedTeams.length === 1) {
       const details = getClubDetails(selectedTeams[0]);
       const shortLabel = details?.short || details?.shortName || '';
       chartSubtitle.textContent = `Cumulative points progression for ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''} · Click any Gameweek to toggle matches`;
@@ -2812,7 +2843,7 @@ function renderAllGameweeksChart() {
   const xItems = [];
 
   for (const gw of state.gwNumbers) {
-    if (state.chartExpandedGWs.has(gw)) {
+    if (expandable && state.chartExpandedGWs.has(gw)) {
       const rawGwFixtures = state.fixtures[gw] ?? [];
       const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
       const sortedMatches = [...fixtures].sort((a, b) => {
@@ -3044,8 +3075,9 @@ function renderAllGameweeksChart() {
         </g>
       `;
     } else {
+      const tickTitle = expandable ? `GW ${it.gw} (Click to expand inline)` : `GW ${it.gw}`;
       xLabelsSvg += `
-        <g class="chart-gw-tick-group" data-item-idx="${i}" data-gw="${it.gw}" role="button" tabindex="0" style="cursor: pointer;" title="GW ${it.gw} (Click to expand inline)">
+        <g class="chart-gw-tick-group" data-item-idx="${i}" data-gw="${it.gw}" role="button" tabindex="0" style="${expandable ? 'cursor: pointer;' : 'cursor: default;'}" title="${tickTitle}">
           <rect class="chart-gw-tick-bg" x="${x - 13}" y="${yBase + 4}" width="26" height="42" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
           <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 5}" stroke="${isPlayed ? 'var(--accent-purple)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
           <text class="chart-axis-tick chart-gw-tick-text" x="${x}" y="${yBase + 24}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${it.gw}</text>
@@ -3503,7 +3535,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             `;
       }).join('')}
         </div>
-        <div class="chart-tooltip-drilldown-hint">👆 Click match to collapse GW ${it.gw}</div>
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click match to collapse GW ${it.gw}</div>` : ''}
       `;
     } else if (!data.isPlayed) {
       tooltip.innerHTML = `
@@ -3525,7 +3557,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             </div>
           `).join('')}
         </div>
-        <div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>` : ''}
       `;
     } else {
       tooltip.innerHTML = `
@@ -3547,7 +3579,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             </div>
           `).join('')}
         </div>
-        <div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>` : ''}
       `;
     }
 
@@ -3585,6 +3617,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
     });
 
     el.addEventListener('click', (e) => {
+      if (!isChartExpandable()) return;
       e.stopPropagation();
       const gwVal = el.getAttribute('data-gw');
       if (gwVal && gwVal !== '0') {
@@ -4152,6 +4185,8 @@ function renderGameweekMatchesChart(gw) {
 
     return {
       itemIdx: i,
+      matchIdx: it.matchIdx !== undefined ? it.matchIdx : i,
+      totalMatches: it.totalMatchesInGw || xItems.length,
       xItem: it,
       fixture: it.fixture,
       gw,
@@ -4239,10 +4274,12 @@ function attachMatchTooltipHandlers(matchStandings, svgWidth) {
     const scoreStr = scoreInfo?.hasScore ? `${scoreInfo.home} – ${scoreInfo.away}` : 'vs';
     const homeShort = f.home_short || getClubDetails(f.home_name)?.short || f.home_name.slice(0, 3).toUpperCase();
     const awayShort = f.away_short || getClubDetails(f.away_name)?.short || f.away_name.slice(0, 3).toUpperCase();
+    const matchIdx = data.matchIdx !== undefined ? data.matchIdx : (data.xItem?.matchIdx !== undefined ? data.xItem.matchIdx : mIdx);
+    const totalMatches = data.totalMatches || data.xItem?.totalMatchesInGw || matchStandings.length;
 
     tooltip.innerHTML = `
       <div class="chart-tooltip-header">
-        <span>⚽ GW ${data.gw} · Match ${data.matchIdx + 1} of ${data.totalMatches}</span>
+        <span>⚽ GW ${data.gw} · Match ${matchIdx + 1} of ${totalMatches}</span>
       </div>
       <div class="chart-tooltip-matchup">
         <span class="tooltip-team-badge" title="${f.home_name}">
