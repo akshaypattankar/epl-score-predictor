@@ -282,10 +282,39 @@
       <section class="glass-card chart-section" style="margin-top: 24px;">
         <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
           <div>
-            <h2>📈 Leaderboard Chart</h2>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <h2>📈 Leaderboard Chart</h2>
+              <span id="chartDrilldownBadge" class="chart-drilldown-pill" style="display: none;"></span>
+            </div>
             <p id="chartSubtitle">Cumulative total points tracked across all completed gameweeks</p>
           </div>
           <div class="chart-header-controls">
+            <!-- Drilldown Isolated Navigation (Shown only when in single-GW drilldown) -->
+            <div id="chartDrilldownNav" class="chart-drilldown-nav" style="display: none;">
+              <button type="button" class="btn btn-sm btn-outline chart-back-btn" id="chartBackToAllGWsBtn" title="Back to season overview across all gameweeks">
+                ← Season Overview
+              </button>
+              <select id="chartGwDrilldownSelect" class="control-dropdown chart-gw-dropdown" title="Select Gameweek to view in isolated drilldown">
+              </select>
+            </div>
+
+            <!-- Season Overview Navigation: Expand to Current / Expand All / Collapse All & Drilldown Zoom -->
+            <div id="chartOverviewNav" class="chart-overview-nav" style="display: inline-flex; align-items: center; gap: 6px;">
+              <div class="chart-expand-btn-group">
+                <button type="button" class="chart-expand-toggle-btn" id="chartExpandToCurrentBtn" title="Expand Gameweeks up to current active Gameweek">
+                  ➕ Expand to Current GW
+                </button>
+                <button type="button" class="chart-expand-toggle-btn" id="chartExpandAllBtn" title="Expand all 38 Gameweeks across the season">
+                  ⚡ Expand All
+                </button>
+                <button type="button" class="chart-collapse-toggle-btn" id="chartCollapseAllBtn" title="Collapse all Gameweeks to GW numbers">
+                  ➖ Collapse All
+                </button>
+              </div>
+              <select id="chartDrilldownModeSelect" class="control-dropdown chart-drill-dropdown" title="Drilldown to isolate a single Gameweek">
+              </select>
+            </div>
+
             <div class="chart-type-toggle">
               <button type="button" class="chart-mode-btn active" id="chartModeRibbonBtn" title="Ribbon Chart (Rank & point flows across matchdays)">
                 🎀 Ribbon

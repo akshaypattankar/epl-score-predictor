@@ -3159,11 +3159,148 @@ tr.row-out-of-scope:hover {
 .rule-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
 
 /* ── CUMULATIVE CHART STYLES ─────────────────── */
+.chart-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.chart-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: rgba(10, 15, 29, 0.45);
+  border: 1px solid var(--border-glass);
+  padding: 6px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.5) rgba(15, 23, 42, 0.6);
+}
+
+.chart-canvas-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.chart-canvas-wrapper::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+}
+
+.chart-canvas-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 4px;
+}
+
+.chart-canvas-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-cyan);
+}
+
+.chart-scroll-container {
+  position: relative;
+  display: block;
+}
+
+.chart-scroll-container svg.chart-svg {
+  display: block;
+  height: auto;
+}
+
 .chart-header-controls {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+.chart-drilldown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: var(--accent-purple-light, #c084fc);
+  font-family: var(--font-title);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+  animation: fadeIn 0.2s ease-out;
+}
+.chart-drilldown-nav,
+.chart-overview-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-back-btn {
+  font-size: 0.78rem;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-glass);
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.chart-back-btn:hover {
+  background: rgba(168, 85, 247, 0.22);
+  border-color: rgba(168, 85, 247, 0.6);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+}
+.chart-gw-dropdown,
+.chart-expand-dropdown,
+.chart-drill-dropdown {
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  height: auto;
+  border-radius: 6px;
+  background: rgba(15, 22, 41, 0.85);
+  border: 1px solid var(--border-glass);
+  color: var(--text-main);
+  transition: border-color 0.2s ease;
+}
+.chart-gw-dropdown:focus,
+.chart-expand-dropdown:focus,
+.chart-drill-dropdown:focus {
+  border-color: var(--accent-cyan);
+  outline: none;
+}
+.chart-expand-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chart-expand-toggle-btn,
+.chart-collapse-toggle-btn {
+  font-size: 0.76rem;
+  padding: 5px 10px;
+  height: auto;
+  border-radius: 6px;
+  background: rgba(15, 22, 41, 0.85);
+  border: 1px solid var(--border-glass);
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.chart-expand-toggle-btn:hover,
+.chart-collapse-toggle-btn:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: var(--accent-cyan);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
 }
 .chart-type-toggle {
   display: inline-flex;
@@ -3336,6 +3473,138 @@ tr.row-out-of-scope:hover {
   user-select: none;
 }
 
+/* ── INTERACTIVE X-AXIS GW & MATCH TICKS ── */
+.chart-gw-tick-group,
+.chart-match-tick-group {
+  cursor: pointer;
+  outline: none;
+}
+
+.chart-gw-tick-bg,
+.chart-match-tick-bg {
+  transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.chart-gw-tick-group:hover .chart-gw-tick-bg {
+  fill: rgba(168, 85, 247, 0.25);
+  stroke: rgba(168, 85, 247, 0.65);
+  stroke-width: 1px;
+}
+
+.chart-gw-tick-group:hover .chart-gw-tick-text {
+  fill: #38bdf8 !important;
+  font-weight: 800 !important;
+}
+
+.chart-match-tick-group:hover .chart-match-tick-bg {
+  fill: rgba(56, 189, 248, 0.2);
+  stroke: rgba(56, 189, 248, 0.6);
+  stroke-width: 1px;
+}
+
+.chart-match-tick-group:hover .chart-match-tick-main {
+  fill: #38bdf8 !important;
+  font-weight: 800 !important;
+}
+
+.chart-tooltip-drilldown-hint {
+  font-size: 0.72rem;
+  color: var(--accent-cyan);
+  background: rgba(56, 189, 248, 0.1);
+  border-top: 1px solid rgba(56, 189, 248, 0.2);
+  margin: 8px -14px -10px -14px;
+  padding: 6px 12px;
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+  text-align: center;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.chart-tooltip-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-title);
+  margin-bottom: 8px;
+  padding: 4px 0 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chart-tooltip-matchup .tooltip-team-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.chart-tooltip-matchup .tooltip-team-badge .team-crest-img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+.chart-tooltip-matchup .matchup-score {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--accent-green);
+  flex-shrink: 0;
+  font-family: var(--font-title);
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.chart-tooltip-matchup .matchup-score.is-live {
+  background: rgba(255, 85, 114, 0.22);
+  border-color: rgba(255, 85, 114, 0.55);
+  color: #ff5572;
+  box-shadow: 0 0 10px rgba(255, 85, 114, 0.4);
+}
+
+.chart-axis-gw-bracket {
+  font-size: 8.5px;
+  font-weight: 700;
+  fill: var(--accent-cyan);
+  letter-spacing: 0.04em;
+  font-family: var(--font-title);
+}
+
+.chart-tooltip-ko {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-tooltip-pred-chip {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-title);
+  margin-left: 2px;
+}
+
+.chart-tooltip-match-tier {
+  font-size: 0.7rem;
+  font-weight: 700;
+}
 
 /* ── GAME WEEK UNIFORM NO-WRAP STYLING ── */
 .gw-cell,

@@ -53,6 +53,8 @@ const state = {
   playerSearchQuery: '',
   timezone: localStorage.getItem('epl_timezone') || 'UTC',
   chartMode: localStorage.getItem('epl_chart_mode') || 'ribbon', // 'ribbon' | 'stepped' | 'linear'
+  chartDrilldownGW: null, // null (Season Overview) or number e.g. 1 (isolated drilldown view)
+  chartExpandedGWs: null, // Initialized to default active current GW expanded, e.g. new Set([activeGW])
   auth: {
     role: 'guest',    // 'guest' | 'player' | 'admin'
     activePlayerId: null,
@@ -195,6 +197,18 @@ function hexToRgba(hex, alpha) {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function darkenHex(hex, factor = 0.45) {
+  if (!hex || typeof hex !== 'string') return '#0f172a';
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return '#0f172a';
+  const r = Math.round(((num >> 16) & 255) * factor);
+  const g = Math.round(((num >> 8) & 255) * factor);
+  const b = Math.round((num & 255) * factor);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 function getPlayerColorShades(playerOrIdOrName) {
@@ -2259,9 +2273,9 @@ function renderMatrixFooter(players, fixtures, isGuest) {
         </div>
       </td>
       ${players.map(p => {
-        const shades = getPlayerColorShades(p);
-        const total = playerTotals[p.id] || 0;
-        return `
+    const shades = getPlayerColorShades(p);
+    const total = playerTotals[p.id] || 0;
+    return `
           <td colspan="3" class="matrix-foot-player-cell" style="background:${shades.bgSubtle}; border-top:2px solid ${shades.border}; border-right:1px solid rgba(255, 255, 255, 0.08);">
             <div class="matrix-foot-pts-badge" style="color:${shades.primary}; border-color:${shades.chipBorder}; background:${shades.chipBg};">
               <span class="matrix-foot-pts-num">${total}</span>
@@ -2269,7 +2283,7 @@ function renderMatrixFooter(players, fixtures, isGuest) {
             </div>
           </td>
         `;
-      }).join('')}
+  }).join('')}
       <td class="matrix-foot-empty-cell"></td>
     </tr>
   `;
@@ -2520,38 +2534,196 @@ function renderLeaderboard() {
           </div>
         </td>
         ${SCORING_TIERS.map(t => {
-          const count = r[`t${t.tier}`] || 0;
-          return `<td class="lb-tier-cell ${count === 0 ? 'lb-zero' : ''}" data-tier="${t.tier}" data-player-name="${r.name}" data-count="${count}" tabindex="0" role="button" aria-label="Tier ${t.tier} (${t.name}) count for ${r.name}: ${count}" title="Click or tap to learn what Tier ${t.tier} (${t.name}) means">${count}</td>`;
-        }).join('')}
+      const count = r[`t${t.tier}`] || 0;
+      return `<td class="lb-tier-cell ${count === 0 ? 'lb-zero' : ''}" data-tier="${t.tier}" data-player-name="${r.name}" data-count="${count}" tabindex="0" role="button" aria-label="Tier ${t.tier} (${t.name}) count for ${r.name}: ${count}" title="Click or tap to learn what Tier ${t.tier} (${t.name}) means">${count}</td>`;
+    }).join('')}
         <td class="lb-pts">${r.total}</td>
       </tr>
     `;
   }).join('');
 }
 
-// ─── Render: Cumulative Line Chart ────────────────────────────────────────────
+// ─── Team Abbreviation & Kickoff Helpers ─────────────────────────────────────────
+const CLUB_SHORT_CODES = {
+  'Arsenal': 'ARS',
+  'Aston Villa': 'AVL',
+  'Bournemouth': 'BOU',
+  'Brentford': 'BRE',
+  'Brighton': 'BHA',
+  'Brighton & Hove Albion': 'BHA',
+  'Chelsea': 'CHE',
+  'Crystal Palace': 'CRY',
+  'Everton': 'EVE',
+  'Fulham': 'FUL',
+  'Ipswich Town': 'IPS',
+  'Ipswich': 'IPS',
+  'Leicester City': 'LEI',
+  'Leicester': 'LEI',
+  'Liverpool': 'LIV',
+  'Man City': 'MCI',
+  'Manchester City': 'MCI',
+  'Man United': 'MUN',
+  'Man Utd': 'MUN',
+  'Manchester United': 'MUN',
+  'Newcastle': 'NEW',
+  'Newcastle United': 'NEW',
+  "Nott'm Forest": 'NFO',
+  'Nottingham Forest': 'NFO',
+  'Southampton': 'SOU',
+  'Spurs': 'TOT',
+  'Tottenham': 'TOT',
+  'Tottenham Hotspur': 'TOT',
+  'West Ham': 'WHU',
+  'West Ham United': 'WHU',
+  'Wolves': 'WOL',
+  'Wolverhampton': 'WOL',
+  'Wolverhampton Wanderers': 'WOL'
+};
+
+function getTeamShortCode(teamName, fallbackShort) {
+  if (fallbackShort && fallbackShort.length <= 4 && !fallbackShort.startsWith('T') && isNaN(fallbackShort)) {
+    return fallbackShort.toUpperCase();
+  }
+  if (teamName && CLUB_SHORT_CODES[teamName]) {
+    return CLUB_SHORT_CODES[teamName];
+  }
+  if (teamName) {
+    const norm = normalizeTeamName(teamName);
+    if (CLUB_SHORT_CODES[norm]) return CLUB_SHORT_CODES[norm];
+    return norm.slice(0, 3).toUpperCase();
+  }
+  return fallbackShort || '???';
+}
+
+function formatMatchAxisDate(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const tz = state.timezone || 'UTC';
+  try {
+    const day = d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: tz });
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    return `${day} ${time}`;
+  } catch (e) {
+    return d.toUTCString().slice(0, 11);
+  }
+}
+
+export function getCrestUrl(code) {
+  if (!code) return 'assets/pl-logo.png';
+  return `assets/team_crests/png_crests/${code}.png`;
+}
+
+export function toggleChartExpandedGW(gw) {
+  const num = Number(gw);
+  if (!state.chartExpandedGWs) {
+    const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
+    state.chartExpandedGWs = new Set([defaultGw]);
+  }
+  if (state.chartExpandedGWs.has(num)) {
+    state.chartExpandedGWs.delete(num);
+  } else {
+    // Expand this gameweek alongside any already expanded gameweeks
+    state.chartExpandedGWs.add(num);
+  }
+  renderCumulativeChart();
+}
+
+export function expandToCurrentGW() {
+  if (!state.chartExpandedGWs) {
+    state.chartExpandedGWs = new Set();
+  } else {
+    state.chartExpandedGWs.clear();
+  }
+  const currentGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
+  state.gwNumbers.forEach(g => {
+    if (g <= currentGw) {
+      state.chartExpandedGWs.add(g);
+    }
+  });
+  renderCumulativeChart();
+}
+
+export function expandAllGWs() {
+  if (!state.chartExpandedGWs) {
+    state.chartExpandedGWs = new Set();
+  }
+  state.gwNumbers.forEach(g => {
+    state.chartExpandedGWs.add(g);
+  });
+  renderCumulativeChart();
+}
+
+export function collapseAllGWs() {
+  if (!state.chartExpandedGWs) {
+    state.chartExpandedGWs = new Set();
+  } else {
+    state.chartExpandedGWs.clear();
+  }
+  renderCumulativeChart();
+}
+
+if (typeof window !== 'undefined') {
+  window.toggleChartExpandedGW = toggleChartExpandedGW;
+  window.expandToCurrentGW = expandToCurrentGW;
+  window.expandAllGWs = expandAllGWs;
+  window.collapseAllGWs = collapseAllGWs;
+  window.getCrestUrl = getCrestUrl;
+}
+
+export function setChartDrilldown(gw) {
+  if (gw === null || gw === 'all' || gw === 'none' || gw === undefined) {
+    state.chartDrilldownGW = null;
+  } else {
+    const num = Number(gw);
+    if (!isNaN(num) && state.gwNumbers.includes(num)) {
+      state.chartDrilldownGW = num;
+    } else {
+      state.chartDrilldownGW = null;
+    }
+  }
+  renderCumulativeChart();
+}
+if (typeof window !== 'undefined') {
+  window.setChartDrilldown = setChartDrilldown;
+}
+
+// ─── Helper: Determine active or finished match/GW ────────────────────────────
+const isMatchActiveOrFinished = (f) => {
+  if (!f) return false;
+  return Boolean(
+    f.finished === true ||
+    f.started === true ||
+    isLocked(f) ||
+    (f.actual_home_score !== null && f.actual_away_score !== null)
+  );
+};
+
+const isGWActiveOrFinished = (gw) => {
+  const rawGwFixtures = state.fixtures[gw] ?? [];
+  const scopedFixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
+  const list = scopedFixtures.length > 0 ? scopedFixtures : filterFixturesByGroup(rawGwFixtures);
+  return list.some(f => isMatchActiveOrFinished(f));
+};
+
+// ─── Main Entry Point: Leaderboard Chart ──────────────────────────────────────
 function renderCumulativeChart() {
   const wrapper = document.getElementById('chartWrapper');
   const legendContainer = document.getElementById('chartLegend');
   if (!wrapper || !legendContainer) return;
 
-  const selectedTeams = getSelectedTeams();
-  const hasTeamFilter = selectedTeams.length > 0;
+  const drilldownBadge = document.getElementById('chartDrilldownBadge');
+  const drilldownNav = document.getElementById('chartDrilldownNav');
+  const overviewNav = document.getElementById('chartOverviewNav');
+  const gwDrillSelect = document.getElementById('chartGwDrilldownSelect');
+  const expandSelect = document.getElementById('chartInlineExpandSelect');
+  const drilldownModeSelect = document.getElementById('chartDrilldownModeSelect');
   const chartSubtitle = document.getElementById('chartSubtitle');
 
-  if (chartSubtitle) {
-    if (selectedTeams.length === 1) {
-      const details = getClubDetails(selectedTeams[0]);
-      const shortLabel = details?.short || details?.shortName || '';
-      chartSubtitle.textContent = `Cumulative total points for matches involving ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}`;
-    } else if (selectedTeams.length > 1) {
-      chartSubtitle.textContent = `Cumulative total points for matches involving ${selectedTeams.length} Selected Teams (${selectedTeams.join(', ')})`;
-    } else {
-      chartSubtitle.textContent = `Cumulative total points tracked across all completed gameweeks`;
-    }
-  }
-
   if (state.auth.role === 'guest') {
+    if (drilldownBadge) drilldownBadge.style.display = 'none';
+    if (drilldownNav) drilldownNav.style.display = 'none';
+    if (overviewNav) overviewNav.style.display = 'none';
+    if (chartSubtitle) chartSubtitle.textContent = 'Cumulative total points tracked across all completed gameweeks';
     wrapper.innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--text-muted);">
         🔒 <strong>Points Progression Chart Hidden for Guests:</strong> Log in with a player passcode to view cumulative charts.
@@ -2560,70 +2732,199 @@ function renderCumulativeChart() {
     return;
   }
 
-  // Determine which gameweeks have ongoing or finished games
-  const isMatchActiveOrFinished = (f) => {
-    if (!f) return false;
-    return Boolean(
-      f.finished === true ||
-      f.started === true ||
-      isLocked(f) ||
-      (f.actual_home_score !== null && f.actual_away_score !== null)
-    );
-  };
+  // Check if we are in Isolated Gameweek Drilldown Mode
+  if (state.chartDrilldownGW !== null && state.gwNumbers.includes(Number(state.chartDrilldownGW))) {
+    const gw = Number(state.chartDrilldownGW);
 
-  const isGWActiveOrFinished = (gw) => {
-    const rawGwFixtures = state.fixtures[gw] ?? [];
-    const scopedFixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
-    const list = scopedFixtures.length > 0 ? scopedFixtures : filterFixturesByGroup(rawGwFixtures);
-    return list.some(f => isMatchActiveOrFinished(f));
-  };
-
-  const gwList = state.gwNumbers;
-  const activeGwIndices = gwList
-    .map((gw, idx) => (isGWActiveOrFinished(gw) ? idx : -1))
-    .filter(idx => idx !== -1);
-  const maxPlayedGwIdx = activeGwIndices.length > 0 ? Math.max(...activeGwIndices) : -1;
-
-  const playerData = state.players.map((p, idx) => {
-    let cumulative = 0;
-    const pointsByGW = [];
-    const cumulativeTiers = {};
-    if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
-      SCORING_TIERS.forEach(t => { cumulativeTiers[`t${t.tier}`] = 0; });
+    if (drilldownBadge) {
+      drilldownBadge.style.display = 'inline-flex';
+      drilldownBadge.innerHTML = `🔍 GW ${gw} Drilldown`;
+    }
+    if (drilldownNav) {
+      drilldownNav.style.display = 'inline-flex';
+    }
+    if (overviewNav) {
+      overviewNav.style.display = 'none';
+    }
+    if (gwDrillSelect) {
+      gwDrillSelect.innerHTML = state.gwNumbers.map(g => `
+        <option value="${g}" ${g === gw ? 'selected' : ''}>GW ${g}</option>
+      `).join('');
     }
 
-    for (const gw of state.gwNumbers) {
-      let gwPts = 0;
-      const gwTiers = {};
-      if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
-        SCORING_TIERS.forEach(t => { gwTiers[`t${t.tier}`] = 0; });
-      }
+    renderGameweekMatchesChart(gw);
+  } else {
+    // Season Overview Mode with Inline Expand / Collapse
+    state.chartDrilldownGW = null;
+    if (drilldownBadge) drilldownBadge.style.display = 'none';
+    if (drilldownNav) drilldownNav.style.display = 'none';
+    if (overviewNav) overviewNav.style.display = 'inline-flex';
 
+    if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
+      const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
+      state.chartExpandedGWs = new Set([defaultGw]);
+    }
+
+    if (drilldownModeSelect) {
+      drilldownModeSelect.innerHTML = `
+        <option value="none" selected>🔍 Zoom: Off</option>
+        ${state.gwNumbers.map(g => `
+          <option value="${g}">🔍 Zoom: GW ${g}</option>
+        `).join('')}
+      `;
+    }
+
+    renderAllGameweeksChart();
+  }
+}
+
+// // ─── VIEW A: Season Progression Chart (with Inline Expand / Collapse) ─────────
+function renderAllGameweeksChart() {
+  const wrapper = document.getElementById('chartWrapper');
+  const legendContainer = document.getElementById('chartLegend');
+  const chartSubtitle = document.getElementById('chartSubtitle');
+  const selectedTeams = getSelectedTeams();
+
+  if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
+    const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
+    state.chartExpandedGWs = new Set([defaultGw]);
+  }
+  const expandedGwList = [...state.chartExpandedGWs].sort((a, b) => a - b);
+
+  if (chartSubtitle) {
+    if (selectedTeams.length === 1) {
+      const details = getClubDetails(selectedTeams[0]);
+      const shortLabel = details?.short || details?.shortName || '';
+      chartSubtitle.textContent = `Cumulative points progression for ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''} · Click any Gameweek to toggle matches`;
+    } else if (selectedTeams.length > 1) {
+      chartSubtitle.textContent = `Cumulative points progression for ${selectedTeams.length} Selected Teams · Click any Gameweek to toggle matches`;
+    } else {
+      chartSubtitle.textContent = `Cumulative points progression across the season · Click any Gameweek on the x-axis to expand or collapse matches`;
+    }
+  }
+
+  // 1. Construct unified xItems sequence starting from Game 1 / GW 1
+  const xItems = [];
+
+  for (const gw of state.gwNumbers) {
+    if (state.chartExpandedGWs.has(gw)) {
       const rawGwFixtures = state.fixtures[gw] ?? [];
       const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
-      for (const f of fixtures) {
-        const scoreInfo = getMatchScoreInfo(f);
-        if (!scoreInfo.hasScore) continue;
-        const pred = state.predictions[`${f.id}_${p.id}`];
-        if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
+      const sortedMatches = [...fixtures].sort((a, b) => {
+        const timeA = a.kickoff_time ? new Date(a.kickoff_time).getTime() : Infinity;
+        const timeB = b.kickoff_time ? new Date(b.kickoff_time).getTime() : Infinity;
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.id || 0) - (b.id || 0);
+      });
 
-        const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
-        if (res) {
-          gwPts += res.total;
-          if (res.tier) {
-            gwTiers[`t${res.tier}`] = (gwTiers[`t${res.tier}`] || 0) + 1;
-            cumulativeTiers[`t${res.tier}`] = (cumulativeTiers[`t${res.tier}`] || 0) + 1;
+      if (sortedMatches.length === 0) {
+        xItems.push({
+          type: 'gw',
+          gw,
+          isPlayed: isGWActiveOrFinished(gw)
+        });
+      } else {
+        sortedMatches.forEach((f, mIdx) => {
+          xItems.push({
+            type: 'match',
+            gw,
+            matchIdx: mIdx,
+            totalMatchesInGw: sortedMatches.length,
+            fixture: f,
+            isFirstInGw: mIdx === 0,
+            isLastInGw: mIdx === sortedMatches.length - 1,
+            isPlayed: isMatchActiveOrFinished(f),
+            isLive: isMatchOngoing(f)
+          });
+        });
+      }
+    } else {
+      xItems.push({
+        type: 'gw',
+        gw,
+        isPlayed: isGWActiveOrFinished(gw)
+      });
+    }
+  }
+
+  const activeItemIndices = xItems
+    .map((it, idx) => (it.isPlayed ? idx : -1))
+    .filter(idx => idx !== -1);
+  const maxPlayedItemIdx = activeItemIndices.length > 0 ? Math.max(...activeItemIndices) : 0;
+
+  // 2. Compute progression along xItems for each player
+  const playerData = state.players.map(p => {
+    let cumulative = 0;
+    const pointsByItem = [];
+
+    for (let itIdx = 0; itIdx < xItems.length; itIdx++) {
+      const it = xItems[itIdx];
+      if (it.type === 'match') {
+        const f = it.fixture;
+        const scoreInfo = getMatchScoreInfo(f);
+        let matchPts = 0;
+        let tier = null;
+        let bonuses = [];
+        const pred = state.predictions[`${f.id}_${p.id}`];
+        const hasPred = Boolean(pred && pred.predicted_home !== null && pred.predicted_away !== null && pred.predicted_home !== undefined && pred.predicted_home !== '' && pred.predicted_away !== '');
+
+        if (scoreInfo.hasScore && hasPred) {
+          const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
+          if (res) {
+            matchPts = res.total;
+            tier = res.tier;
+            bonuses = res.activeBonuses || [];
           }
         }
+        cumulative += matchPts;
+        pointsByItem.push({
+          type: 'match',
+          gw: it.gw,
+          matchIdx: it.matchIdx,
+          fixture: f,
+          hasPred,
+          predHome: pred?.predicted_home,
+          predAway: pred?.predicted_away,
+          matchPts,
+          matchTier: tier,
+          matchBonuses: bonuses,
+          cumulative
+        });
+      } else {
+        // Collapsed GW item
+        let gwPts = 0;
+        const gwTiers = {};
+        if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
+          SCORING_TIERS.forEach(t => { gwTiers[`t${t.tier}`] = 0; });
+        }
+
+        if (it.isPlayed) {
+          const rawGwFixtures = state.fixtures[it.gw] ?? [];
+          const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
+          for (const f of fixtures) {
+            const scoreInfo = getMatchScoreInfo(f);
+            if (!scoreInfo.hasScore) continue;
+            const pred = state.predictions[`${f.id}_${p.id}`];
+            if (!pred || pred.predicted_home === null || pred.predicted_away === null || pred.predicted_home === undefined || pred.predicted_home === '' || pred.predicted_away === '') continue;
+
+            const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, Number(pred.predicted_home), Number(pred.predicted_away));
+            if (res) {
+              gwPts += res.total;
+              if (res.tier) {
+                gwTiers[`t${res.tier}`] = (gwTiers[`t${res.tier}`] || 0) + 1;
+              }
+            }
+          }
+        }
+        cumulative += gwPts;
+        pointsByItem.push({
+          type: 'gw',
+          gw: it.gw,
+          gwPts,
+          gwTiers,
+          cumulative
+        });
       }
-      cumulative += gwPts;
-      pointsByGW.push({
-        gw,
-        gwPts,
-        cumulative,
-        gwTiers: { ...gwTiers },
-        cumulativeTiers: { ...cumulativeTiers }
-      });
     }
 
     return {
@@ -2631,11 +2932,11 @@ function renderCumulativeChart() {
       name: p.name,
       color: getPlayerColor(p),
       total: cumulative,
-      pointsByGW
+      pointsByItem
     };
   });
 
-  if (playerData.length === 0 || state.gwNumbers.length === 0) {
+  if (playerData.length === 0 || xItems.length === 0) {
     wrapper.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">No player chart data available for this group.</div>`;
     legendContainer.innerHTML = '';
     return;
@@ -2661,34 +2962,35 @@ function renderCumulativeChart() {
     `;
   }).join('');
 
-  const numGWs = state.gwNumbers.length;
+  const numItems = xItems.length;
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const padLeft = isMobile ? 55 : 65;
-  const padRight = isMobile ? 20 : 25;
+  const padRight = isMobile ? 25 : 30;
   const padTop = isMobile ? 30 : 28;
-  const padBottom = isMobile ? 52 : 48;
-  const svgWidth = 1000;
-  const svgHeight = isMobile ? 420 : 340;
+  const padBottom = isMobile ? 96 : 88;
+  const svgWidth = Math.max(1000, numItems * (isMobile ? 26 : 28));
+  const svgHeight = isMobile ? 440 : 380;
 
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
 
   const isRibbon = state.chartMode === 'ribbon';
 
-  // Calculate scales for linear/stepped mode vs ribbon mode
-  let maxPlayerCumulative = Math.max(10, ...playerData.map(p => p.total));
-  maxPlayerCumulative = Math.ceil(maxPlayerCumulative / 5) * 5;
+  let maxPlayerCumulative = Math.max(6, ...playerData.map(p => p.total));
+  maxPlayerCumulative = maxPlayerCumulative <= 10
+    ? Math.ceil(maxPlayerCumulative / 2) * 2
+    : Math.ceil(maxPlayerCumulative / 5) * 5;
 
-  // Max Cumulative League Total Points across all played GWs for ribbon mode (GW1 + GW2 + ...)
-  const leagueCumulativeByGW = gwList.map((gw, i) => {
-    if (i > maxPlayedGwIdx) return 0;
-    return playerData.reduce((sum, p) => sum + (p.pointsByGW[i]?.cumulative || 0), 0);
+  // Max Cumulative League Total Points across all played items for ribbon mode
+  const leagueCumulativeByItem = xItems.map((it, i) => {
+    if (i > maxPlayedItemIdx) return 0;
+    return playerData.reduce((sum, p) => sum + (p.pointsByItem[i]?.cumulative || 0), 0);
   });
-  let maxLeagueCumulative = Math.max(10, ...leagueCumulativeByGW);
+  let maxLeagueCumulative = Math.max(10, ...leagueCumulativeByItem);
   maxLeagueCumulative = Math.ceil(maxLeagueCumulative / 5) * 5;
 
   const activeYMax = isRibbon ? maxLeagueCumulative : maxPlayerCumulative;
-  const getX = (i) => padLeft + (numGWs > 1 ? (i / (numGWs - 1)) * chartW : chartW / 2);
+  const getX = (i) => padLeft + (numItems > 1 ? (i / (numItems - 1)) * chartW : chartW / 2);
   const getY = (val) => padTop + chartH - (val / activeYMax) * chartH;
 
   // 1. Y-Axis Grid Lines & Tick Labels
@@ -2703,39 +3005,88 @@ function renderCumulativeChart() {
     `;
   }
 
-  // Y-Axis Baseline line
   const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
-  // Y-Axis Label
   const yLabelX = 20;
   const yLabelY = padTop + (chartH / 2);
   const yAxisLabelSvg = `
     <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : 'POINTS'}</text>
   `;
 
-  // 2. X-Axis Baseline & Gameweek Ticks
+  // 2. X-Axis Baseline & Multilevel Interactive Ticks
   const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
+  const yBase = padTop + chartH;
   let xLabelsSvg = '';
-  gwList.forEach((gw, i) => {
+  xItems.forEach((it, i) => {
     const x = getX(i);
-    const isPlayed = i <= maxPlayedGwIdx;
-    xLabelsSvg += `
-      <line x1="${x}" y1="${padTop + chartH}" x2="${x}" y2="${padTop + chartH + 5}" stroke="${isPlayed ? 'var(--accent-purple)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
-      <text class="chart-axis-tick" x="${x}" y="${padTop + chartH + 18}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${gw}</text>
-    `;
+    const isPlayed = i <= maxPlayedItemIdx;
+
+    if (it.type === 'match') {
+      const f = it.fixture;
+      const homeCrestUrl = getCrestUrl(f.home_code);
+      const awayCrestUrl = getCrestUrl(f.away_code);
+      xLabelsSvg += `
+        <g class="chart-match-tick-group" data-item-idx="${i}" data-gw="${it.gw}" data-match-id="${f.id}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name} (Click to collapse)">
+          <rect class="chart-match-tick-bg" x="${x - 12}" y="${yBase + 4}" width="24" height="44" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
+          <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 4}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+          <image href="${homeCrestUrl}" x="${x - 7.5}" y="${yBase + 5}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
+          <text class="chart-axis-tick" x="${x}" y="${yBase + 27}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">vs</text>
+          <image href="${awayCrestUrl}" x="${x - 7.5}" y="${yBase + 30}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
+        </g>
+      `;
+    } else {
+      xLabelsSvg += `
+        <g class="chart-gw-tick-group" data-item-idx="${i}" data-gw="${it.gw}" role="button" tabindex="0" style="cursor: pointer;" title="GW ${it.gw} (Click to expand inline)">
+          <rect class="chart-gw-tick-bg" x="${x - 13}" y="${yBase + 4}" width="26" height="42" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
+          <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 5}" stroke="${isPlayed ? 'var(--accent-purple)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+          <text class="chart-axis-tick chart-gw-tick-text" x="${x}" y="${yBase + 24}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${it.gw}</text>
+        </g>
+      `;
+    }
   });
 
-  // X-Axis Label
-  const xLabelX = padLeft + (chartW / 2);
-  const xLabelY = padTop + chartH + 38;
-  const xAxisLabelSvg = `
-    <text class="chart-axis-label" x="${xLabelX}" y="${xLabelY}" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.14em" text-anchor="middle" font-family="var(--font-title)">GAMEWEEK</text>
-  `;
+  // Level 2: Gameweek Grouping Band
+  let gwGroupsSvg = '';
+  const expandedGws = new Set();
+  xItems.forEach(it => {
+    if (it.type === 'match') expandedGws.add(it.gw);
+  });
+
+  expandedGws.forEach(gwNum => {
+    const matchIndices = xItems
+      .map((it, idx) => (it.type === 'match' && it.gw === gwNum ? idx : -1))
+      .filter(idx => idx !== -1);
+
+    if (matchIndices.length > 0) {
+      const firstIdx = matchIndices[0];
+      const lastIdx = matchIndices[matchIndices.length - 1];
+      const xLeft = getX(firstIdx) - 8;
+      const xRight = getX(lastIdx) + 8;
+      const yGroup = yBase + 49;
+      const midX = (xLeft + xRight) / 2;
+
+      gwGroupsSvg += `
+        <g class="chart-gw-group-level" data-gw="${gwNum}" role="button" tabindex="0" style="cursor:pointer;" title="GW ${gwNum} (Click to collapse)" onclick="window.toggleChartExpandedGW(${gwNum})">
+          <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--accent-purple)" stroke-width="1.2" opacity="0.65" />
+          <rect x="${midX - 25}" y="${yGroup + 6}" width="50" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
+          <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="10" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gwNum}</text>
+        </g>
+      `;
+    }
+  });
+
+  xItems.forEach((it, i) => {
+    const x = getX(i);
+    if (it.type === 'gw') {
+      gwGroupsSvg += `
+        <text class="chart-axis-tick chart-gw-subtick-text" x="${x}" y="${yBase + 66}" fill="var(--text-dim)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-main)" opacity="0.75">GW</text>
+      `;
+    }
+  });
 
   let linesSvg = '';
   let markersSvg = '';
-
   const hasActivePlayer = state.auth.activePlayerId != null && (state.auth.role === 'player' || (state.auth.role === 'admin' && state.auth.activePlayerId));
 
   const sortedPlayersForSvg = [...playerData].sort((a, b) => {
@@ -2744,16 +3095,13 @@ function renderCumulativeChart() {
     return isYouA - isYouB;
   });
 
-  // Rank comparison function using cumulative points, then scoring tiers hierarchy, then GW points, then name
-  function comparePlayersAtGW(a, b, gwIdx) {
-    const ptA = a.pointsByGW[gwIdx] || { cumulative: 0, gwPts: 0 };
-    const ptB = b.pointsByGW[gwIdx] || { cumulative: 0, gwPts: 0 };
+  function comparePlayersAtItem(a, b, itIdx) {
+    const ptA = a.pointsByItem[itIdx] || { cumulative: 0, gwPts: 0 };
+    const ptB = b.pointsByItem[itIdx] || { cumulative: 0, gwPts: 0 };
 
-    // 1. Overall cumulative points at this GW
     if (ptB.cumulative !== ptA.cumulative) {
       return ptB.cumulative - ptA.cumulative;
     }
-    // 2. Scoring tiers tie-breaker (T1 -> T2 -> T3 ...)
     if (typeof SCORING_TIERS !== 'undefined' && Array.isArray(SCORING_TIERS)) {
       for (const t of SCORING_TIERS) {
         const countA = ptA.cumulativeTiers?.[`t${t.tier}`] || 0;
@@ -2761,36 +3109,34 @@ function renderCumulativeChart() {
         if (countB !== countA) return countB - countA;
       }
     }
-    // 3. Current gameweek points
-    if (ptB.gwPts !== ptA.gwPts) {
-      return ptB.gwPts - ptA.gwPts;
+    if ((ptB.gwPts || 0) !== (ptA.gwPts || 0)) {
+      return (ptB.gwPts || 0) - (ptA.gwPts || 0);
     }
-    // 4. Alphabetical fallback
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   }
 
   if (isRibbon) {
-    // ─── CUMULATIVE STACKED RIBBON CHART (GW1 + GW2 + ...) ──────────────────
+    // ─── CUMULATIVE STACKED RIBBON CHART (POWER BI DESIGN) ──────────────────
     const N = playerData.length;
-    const ribbonColW = numGWs > 1 ? Math.min(32, Math.max(18, chartW / (numGWs * 1.8))) : 38;
+    const ribbonColW = numItems > 1 ? Math.min(32, Math.max(16, chartW / (numItems * 1.8))) : 38;
     const minSegmentH = 4; // subtle sliver for 0-pt players so ribbon tracks cleanly
     const totalMinH = N * minSegmentH;
     const availableH = Math.max(0, chartH - totalMinH);
     const ptsScale = maxLeagueCumulative > 0 ? availableH / maxLeagueCumulative : 0;
 
-    // Calculate layout coordinates per gameweek
-    const ribbonLayout = []; // ribbonLayout[gwIdx][playerId] = { yTop, yBot, h, xLeft, xRight, cx, rank, cumulative, gwPts }
+    // Calculate layout coordinates per item
+    const ribbonLayout = []; // ribbonLayout[itIdx][playerId] = { yTop, yBot, h, xLeft, xRight, cx, rank, cumulative }
 
-    gwList.forEach((gw, i) => {
+    xItems.forEach((it, i) => {
       ribbonLayout[i] = {};
-      if (i > maxPlayedGwIdx) return;
+      if (i > maxPlayedItemIdx) return;
 
       // Sort players by cumulative rank & scoring tier tie-breakers (Rank #1 at top)
-      const rankedList = [...playerData].sort((a, b) => comparePlayersAtGW(a, b, i));
+      const rankedList = [...playerData].sort((a, b) => comparePlayersAtItem(a, b, i));
 
-      // Calculate heights for each player based on CUMULATIVE points up to this gameweek
+      // Calculate heights for each player based on CUMULATIVE points up to this item
       const segmentHeights = rankedList.map(p => {
-        const cumPts = p.pointsByGW[i]?.cumulative || 0;
+        const cumPts = p.pointsByItem[i]?.cumulative || 0;
         return minSegmentH + (cumPts * ptsScale);
       });
 
@@ -2801,7 +3147,7 @@ function renderCumulativeChart() {
       let currY = colTop;
       rankedList.forEach((p, rIdx) => {
         const segH = segmentHeights[rIdx];
-        const pt = p.pointsByGW[i] || { cumulative: 0, gwPts: 0 };
+        const pt = p.pointsByItem[i] || { cumulative: 0 };
         const cx = getX(i);
 
         ribbonLayout[i][p.id] = {
@@ -2813,16 +3159,18 @@ function renderCumulativeChart() {
           h: segH,
           rank: rIdx + 1,
           cumulative: pt.cumulative,
-          gwPts: pt.gwPts,
           player: p
         };
         currY += segH;
       });
     });
 
-    // 1. Draw Connecting Ribbons between consecutive Gameweeks
+    // 1. Draw Connecting Ribbons between consecutive Items
     let ribbonGradientsSvg = '<defs>';
-    for (let i = 0; i < maxPlayedGwIdx; i++) {
+    let ribbonFillsSvg = '';
+    let ribbonOutlinesSvg = '';
+
+    for (let i = 0; i < maxPlayedItemIdx; i++) {
       sortedPlayersForSvg.forEach(p => {
         const seg1 = ribbonLayout[i]?.[p.id];
         const seg2 = ribbonLayout[i + 1]?.[p.id];
@@ -2834,29 +3182,37 @@ function renderCumulativeChart() {
         // Horizontal fading gradient across the ribbon flow
         ribbonGradientsSvg += `
           <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.68' : '0.38'}" />
-            <stop offset="50%" stop-color="${p.color}" stop-opacity="${isYou ? '0.48' : '0.24'}" />
-            <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.68' : '0.38'}" />
+            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.75' : '0.45'}" />
+            <stop offset="50%" stop-color="${p.color}" stop-opacity="${isYou ? '0.55' : '0.28'}" />
+            <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.75' : '0.45'}" />
           </linearGradient>
         `;
 
-        const x1 = seg1.xRight;
-        const x2 = seg2.xLeft;
-        const y1_top = seg1.yTop;
-        const y1_bot = seg1.yBot;
-        const y2_top = seg2.yTop;
-        const y2_bot = seg2.yBot;
-        const dx = (x2 - x1) * 0.52;
+        const x1 = seg1.xRight - 0.5;
+        const x2 = seg2.xLeft + 0.5;
+        const y1_top = seg1.yTop + (seg1.h * 0.07);
+        const y1_bot = seg1.yTop + (seg1.h * 0.93);
+        const y2_top = seg2.yTop + (seg2.h * 0.07);
+        const y2_bot = seg2.yTop + (seg2.h * 0.93);
+        const dx = (x2 - x1) * 0.5;
 
-        const ribbonD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top} L ${x2},${y2_bot} C ${x2 - dx},${y2_bot} ${x1 + dx},${y1_bot} ${x1},${y1_bot} Z`;
+        const fillD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top} L ${x2},${y2_bot} C ${x2 - dx},${y2_bot} ${x1 + dx},${y1_bot} ${x1},${y1_bot} Z`;
+        const topD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top}`;
+        const botD = `M ${x1},${y1_bot} C ${x1 + dx},${y1_bot} ${x2 - dx},${y2_bot} ${x2},${y2_bot}`;
 
-        const ribbonStroke = isYou ? '#38bdf8' : p.color;
-        const ribbonStrokeW = isYou ? '1.8' : '1';
-        const ribbonStrokeOpacity = isYou ? '0.9' : '0.45';
-        const ribbonShadow = isYou ? `style="filter: drop-shadow(0 2px 8px ${p.color}66);"` : '';
+        const darkAccent = darkenHex(p.color, 0.45);
+        const ribbonStroke = darkAccent;
+        const ribbonStrokeW = isYou ? '1.1' : '0.75';
+        const ribbonStrokeOpacity = isYou ? '0.95' : '0.65';
+        const ribbonShadow = isYou ? `style="filter: drop-shadow(0 0 3px ${darkAccent});"` : '';
 
-        linesSvg += `
-          <path class="ribbon-band" d="${ribbonD}" fill="url(#${gradId})" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linejoin="round" ${ribbonShadow} />
+        ribbonFillsSvg += `
+          <path class="ribbon-band" d="${fillD}" fill="url(#${gradId})" stroke="none" />
+        `;
+
+        ribbonOutlinesSvg += `
+          <path class="ribbon-contour" d="${topD}" fill="none" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linecap="round" ${ribbonShadow} />
+          <path class="ribbon-contour" d="${botD}" fill="none" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linecap="round" ${ribbonShadow} />
         `;
       });
     }
@@ -2866,59 +3222,54 @@ function renderCumulativeChart() {
       const isYou = state.auth.activePlayerId === p.id;
       ribbonGradientsSvg += `
         <linearGradient id="pillar_vgrad_${p.id}" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.92' : '0.70'}" />
-          <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.65' : '0.45'}" />
+          <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.95' : '0.78'}" />
+          <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.72' : '0.50'}" />
         </linearGradient>
       `;
     });
 
     ribbonGradientsSvg += '</defs>';
-    linesSvg = ribbonGradientsSvg + linesSvg;
+    linesSvg = ribbonGradientsSvg + ribbonFillsSvg + ribbonOutlinesSvg;
 
-    // 2. Draw Column Segments & Badges at each Gameweek
-    for (let i = 0; i <= maxPlayedGwIdx; i++) {
+    // 2. Draw Column Segments & Badges at each item
+    for (let i = 0; i <= maxPlayedItemIdx; i++) {
+      const it = xItems[i];
       sortedPlayersForSvg.forEach(p => {
         const seg = ribbonLayout[i]?.[p.id];
         if (!seg) return;
 
         const isYou = state.auth.activePlayerId === p.id;
-        const strokeColor = isYou ? '#38bdf8' : 'rgba(255, 255, 255, 0.2)';
-        const strokeW = isYou ? '1.8' : '0.9';
-        const pillarShadow = isYou ? `style="filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.45));"` : '';
+        const darkAccent = darkenHex(p.color, 0.38);
+        const strokeColor = darkAccent;
+        const strokeW = isYou ? '1.1' : '0.75';
+        const pillarShadow = isYou ? `style="filter: drop-shadow(0 0 3px ${darkAccent});"` : '';
 
-        const badgeW = Math.max(22, Math.min(ribbonColW - 6, 28));
-        const badgeH = Math.min(seg.h - 4, 18);
-
-        if (seg.h >= 20) {
-          // Large segment: Frosted glass data pill with bold white cumulative score
+        if (seg.h >= 15 && seg.cumulative > 0) {
+          const fontSize = Math.min(12, Math.max(9.5, Math.min(seg.h * 0.52, ribbonColW * 0.48)));
           markersSvg += `
-            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
-              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="5" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <rect x="${seg.cx - badgeW / 2}" y="${seg.yTop + seg.h / 2 - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="4" fill="rgba(10, 15, 29, 0.82)" stroke="${isYou ? '#38bdf8' : 'rgba(255, 255, 255, 0.18)'}" stroke-width="${isYou ? '1' : '0.75'}" />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2 + 3.8}" fill="#ffffff" font-size="10.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em">${seg.cumulative}</text>
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-gw="${it.gw}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="4" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));">${seg.cumulative}</text>
             </g>
           `;
-        } else if (seg.h >= 12) {
-          // Medium segment: Clean white score with soft shadow
+        } else if (seg.h >= 10 && seg.cumulative > 0) {
           markersSvg += `
-            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-gw="${it.gw}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="3" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2 + 3.5}" fill="#ffffff" font-size="9" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.95));">${seg.cumulative}</text>
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95));">${seg.cumulative}</text>
             </g>
           `;
         } else {
-          // Slim segment (0-pt sliver)
           markersSvg += `
-            <g class="ribbon-seg-group" data-gw-idx="${i}" data-player-id="${p.id}">
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-gw="${it.gw}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="2" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
             </g>
           `;
         }
       });
     }
-
   } else {
-    // ─── STANDARD LINE / STEPPED LINE RENDERING ─────────────────────────────
+    // Stepped or Linear Chart across xItems
     let areaGradientsSvg = '<defs>';
     if (state.chartMode === 'stepped') {
       sortedPlayersForSvg.forEach(p => {
@@ -2938,8 +3289,8 @@ function renderCumulativeChart() {
     sortedPlayersForSvg.forEach(p => {
       const isYou = state.auth.activePlayerId === p.id;
       const isDotted = hasActivePlayer ? !isYou : false;
-      const pts = p.pointsByGW;
-      const playedPts = pts.filter((pt, i) => i <= maxPlayedGwIdx);
+      const pts = p.pointsByItem;
+      const playedPts = pts.filter((pt, i) => i <= maxPlayedItemIdx);
 
       const strokeWidth = isYou ? '3.5' : (hasActivePlayer ? '2' : '2.5');
       const strokeDash = isDotted ? 'stroke-dasharray="4,4"' : '';
@@ -2954,60 +3305,63 @@ function renderCumulativeChart() {
           const pathCoords = playedPts.map((pt, i) => `${getX(i)},${getY(pt.cumulative)}`).join(' L ');
           pathD = `M ${pathCoords}`;
         } else {
-          // Stepped Line Chart: horizontal step across gameweeks, then vertical step at gameweek completion
           pathD = `M ${getX(0)},${getY(playedPts[0].cumulative)}`;
           for (let i = 1; i < playedPts.length; i++) {
             const prevY = getY(playedPts[i - 1].cumulative);
             const currX = getX(i);
             const currY = getY(playedPts[i].cumulative);
-            pathD += ` L ${currX},${prevY} L ${currX},${currY}`;
+            pathD += ` H ${currX} V ${currY}`;
           }
+        }
 
-          // Area under the stepped chart with almost-transparent shade
-          const lastIdx = playedPts.length - 1;
-          const lastX = getX(lastIdx);
+        if (state.chartMode === 'stepped') {
           const firstX = getX(0);
+          const lastX = getX(playedPts.length - 1);
           const baselineY = padTop + chartH;
           const areaD = `${pathD} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
-
           linesSvg += `
-            <path d="${areaD}" fill="url(#step_area_grad_${p.id})" stroke="none" />
+            <path d="${areaD}" fill="url(#step_area_grad_${p.id})" opacity="${opacity}" />
           `;
         }
 
         linesSvg += `
-          <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" ${shadowFilter} />
+          <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} opacity="${opacity}" stroke-linejoin="round" stroke-linecap="round" ${shadowFilter} />
+        `;
+      } else if (playedPts.length === 1) {
+        const cx = getX(0);
+        const cy = getY(playedPts[0].cumulative);
+        markersSvg += `
+          <circle cx="${cx}" cy="${cy}" r="${isYou ? '5.5' : '4.5'}" fill="${p.color}" stroke="#0f1629" stroke-width="2" class="chart-marker-node ${isYou ? 'chart-marker-node-you' : ''}" data-item-idx="0" />
         `;
       }
 
       playedPts.forEach((pt, i) => {
         const cx = getX(i);
         const cy = getY(pt.cumulative);
-        const radius = isYou ? '4.5' : '3.5';
-        const strokeW = isYou ? '2.2' : '1.5';
+        const radius = isYou ? 4.5 : 3.5;
+        const strokeW = isYou ? 2 : 1.5;
         const nodeClass = isYou ? 'chart-marker-node chart-marker-node-you' : 'chart-marker-node';
 
         markersSvg += `
-          <g class="chart-marker-group" data-gw-idx="${i}">
-            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-gw-idx="${i}" />
+          <g class="chart-marker-group" data-item-idx="${i}" data-gw="${xItems[i]?.gw}" style="cursor:pointer;">
+            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-item-idx="${i}" />
           </g>
         `;
       });
     });
   }
 
-  // Calculate full standings per gameweek for multi-player tooltip
-  const gwStandings = gwList.map((gw, i) => {
-    const isPlayed = i <= maxPlayedGwIdx;
-    const rankedPlayers = [...playerData].sort((a, b) => comparePlayersAtGW(a, b, i));
+  const itemStandings = xItems.map((it, i) => {
+    const isPlayed = i <= maxPlayedItemIdx;
+    const rankedPlayers = [...playerData].sort((a, b) => comparePlayersAtItem(a, b, i));
     const list = rankedPlayers.map((p, rIdx) => {
-      const pt = p.pointsByGW[i] || { gw, gwPts: 0, cumulative: 0 };
-      const prevPt = i > 0 ? (p.pointsByGW[i - 1] || { cumulative: 0 }) : null;
+      const pt = p.pointsByItem[i] || { cumulative: 0 };
+      const prevPt = i > 0 ? (p.pointsByItem[i - 1] || { cumulative: 0 }) : null;
       return {
         id: p.id,
         name: p.name,
         color: p.color,
-        gwPts: pt.gwPts,
+        pt,
         cumulative: pt.cumulative,
         prevCumulative: prevPt ? prevPt.cumulative : null,
         rank: rIdx + 1,
@@ -3016,7 +3370,8 @@ function renderCumulativeChart() {
     });
 
     return {
-      gw,
+      itemIdx: i,
+      xItem: it,
       isPlayed,
       x: getX(i),
       players: list
@@ -3025,85 +3380,127 @@ function renderCumulativeChart() {
 
   let crosshairsSvg = '';
   let hitboxesSvg = '';
-  const colWidth = numGWs > 1 ? chartW / (numGWs - 1) : chartW;
+  const colWidth = numItems > 1 ? chartW / (numItems - 1) : chartW;
 
-  gwList.forEach((gw, i) => {
+  xItems.forEach((it, i) => {
     const cx = getX(i);
     crosshairsSvg += `
       <line id="chartCrosshair_${i}" class="chart-crosshair" x1="${cx}" y1="${padTop}" x2="${cx}" y2="${padTop + chartH}" stroke="rgba(56, 189, 248, 0.45)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
     `;
 
-    const boxX = numGWs > 1
+    const boxX = numItems > 1
       ? (i === 0 ? padLeft - 10 : cx - colWidth / 2)
       : padLeft;
-    const boxW = numGWs > 1
-      ? (i === 0 || i === numGWs - 1 ? colWidth / 2 + 10 : colWidth)
+    const boxW = numItems > 1
+      ? (i === 0 || i === numItems - 1 ? colWidth / 2 + 10 : colWidth)
       : chartW;
 
     hitboxesSvg += `
-      <rect class="chart-col-hitbox" data-gw-idx="${i}" x="${boxX}" y="${padTop}" width="${boxW}" height="${chartH + padBottom}" fill="transparent" />
+      <rect class="chart-col-hitbox" data-item-idx="${i}" data-gw="${it.gw}" x="${boxX}" y="${padTop}" width="${boxW}" height="${chartH}" fill="transparent" style="cursor: pointer;" />
     `;
   });
 
   wrapper.innerHTML = `
-    <div class="svg-container" style="width: 100%; position: relative;">
-      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="display: block; width: 100%; height: auto;">
+    <div class="chart-scroll-container" style="position: relative; display: inline-block; min-width: ${svgWidth}px; width: ${svgWidth}px;">
+      <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="none" style="width:${svgWidth}px; min-width:${svgWidth}px; height:${svgHeight}px; display:block;">
+        <!-- Grid & Axes -->
         ${gridLinesSvg}
         ${yAxisLineSvg}
         ${yAxisLabelSvg}
         ${xAxisLineSvg}
+        ${gwGroupsSvg}
         ${xLabelsSvg}
-        ${xAxisLabelSvg}
         ${crosshairsSvg}
+        <!-- Lines / Ribbons -->
         ${linesSvg}
+        <!-- Data Markers & Nodes -->
         ${markersSvg}
+        <!-- Column Hitboxes -->
         ${hitboxesSvg}
       </svg>
-      <div id="chartTooltip" class="chart-tooltip" style="display: none; position: absolute; pointer-events: none; z-index: 10;"></div>
+      <div class="chart-tooltip" style="display:none; position: absolute; pointer-events: none; z-index: 100;"></div>
     </div>
   `;
 
-  attachChartTooltipHandlers(gwStandings, svgWidth);
+  attachAllGwTooltipHandlers(itemStandings, svgWidth);
 }
 
-function attachChartTooltipHandlers(gwStandings, svgWidth) {
-  const tooltip = document.getElementById('chartTooltip');
-  const container = document.querySelector('.svg-container');
-  if (!tooltip || !container || !gwStandings?.length) return;
+function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
+  const container = document.querySelector('#chartWrapper .chart-scroll-container') || document.getElementById('chartWrapper');
+  if (!container) return;
 
-  function showGWTooltip(gwIdx) {
-    const data = gwStandings[gwIdx];
+  const tooltip = container.querySelector('.chart-tooltip');
+  if (!tooltip || !itemStandings?.length) return;
+
+  function showGWTooltip(idx) {
+    const data = itemStandings[idx];
     if (!data) return;
 
-    // Show crosshair
-    document.querySelectorAll('.chart-crosshair').forEach((line, idx) => {
-      line.style.display = idx === gwIdx ? 'block' : 'none';
+    document.querySelectorAll('.chart-crosshair').forEach((line, i) => {
+      line.style.display = i === idx ? 'block' : 'none';
     });
 
-    // Highlight markers for this GW
     document.querySelectorAll('.chart-marker-node').forEach(node => {
-      const nodeGw = parseInt(node.getAttribute('data-gw-idx'), 10);
-      if (nodeGw === gwIdx) {
+      const nodeIdx = parseInt(node.getAttribute('data-item-idx'), 10);
+      if (nodeIdx === idx) {
         node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '6.5' : '5.5');
       } else {
         node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '4.5' : '3.5');
       }
     });
 
-    if (!data.isPlayed) {
+    const it = data.xItem;
+
+    if (it.type === 'match') {
+      const f = it.fixture;
+      const scoreInfo = getMatchScoreInfo(f);
+      const scoreStr = scoreInfo.hasScore ? `${scoreInfo.home} – ${scoreInfo.away}` : 'vs';
+      const homeShort = f.home_short || getClubDetails(f.home_name)?.short || f.home_name.slice(0, 3).toUpperCase();
+      const awayShort = f.away_short || getClubDetails(f.away_name)?.short || f.away_name.slice(0, 3).toUpperCase();
+
       tooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span>📅 GW ${data.gw} · Upcoming</span>
+          <span>⚽ GW ${it.gw} · Match ${it.matchIdx + 1} of ${it.totalMatchesInGw}</span>
         </div>
-        <div style="font-size:0.8rem; color:var(--text-dim); text-align:center; padding:6px 0;">
-          Matches have not kicked off yet
+        <div class="chart-tooltip-matchup">
+          <span class="tooltip-team-badge" title="${f.home_name}">
+            ${getCrestImg(f.home_code, f.home_name)}
+            <span>${homeShort}</span>
+          </span>
+          <span class="matchup-score ${scoreInfo.isLive ? 'is-live' : ''}">${scoreStr}</span>
+          <span class="tooltip-team-badge" title="${f.away_name}">
+            <span>${awayShort}</span>
+            ${getCrestImg(f.away_code, f.away_name)}
+          </span>
         </div>
+        <div class="chart-tooltip-list">
+          ${data.players.map(p => {
+        let matchPtsStr = '';
+        if (data.isPlayed) {
+          const tierStr = p.pt.matchTier ? ` · T${p.pt.matchTier}` : '';
+          matchPtsStr = `<span class="chart-tooltip-gw-pts" style="${p.pt.matchPts > 0 ? '' : 'color:var(--text-dim);'}" title="Points from this match">(+${p.pt.matchPts}${tierStr})</span>`;
+        }
+        return `
+              <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
+                <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                  <span class="chart-tooltip-dot" style="background:${p.color};"></span>
+                  <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+                </div>
+                <div class="chart-tooltip-scores">
+                  <span class="chart-tooltip-cum-pts" title="Total Points">${p.cumulative} pts</span>
+                  ${matchPtsStr}
+                </div>
+              </div>
+            `;
+      }).join('')}
+        </div>
+        <div class="chart-tooltip-drilldown-hint">👆 Click match to collapse GW ${it.gw}</div>
       `;
-    } else {
-      // Render multi-player list
+    } else if (!data.isPlayed) {
       tooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span>📅 GW ${data.gw} Standings</span>
+          <span>📅 GW ${it.gw} (Upcoming)</span>
         </div>
         <div class="chart-tooltip-list">
           ${data.players.map(p => `
@@ -3115,21 +3512,41 @@ function attachChartTooltipHandlers(gwStandings, svgWidth) {
               </div>
               <div class="chart-tooltip-scores">
                 <span class="chart-tooltip-cum-pts">${p.cumulative} pts</span>
-                <span class="chart-tooltip-gw-pts" style="${p.gwPts > 0 ? '' : 'color:var(--text-dim);'}">(+${p.gwPts})</span>
+                <span class="chart-tooltip-gw-pts" style="color:var(--text-dim);">(–)</span>
               </div>
             </div>
           `).join('')}
         </div>
+        <div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>
+      `;
+    } else {
+      tooltip.innerHTML = `
+        <div class="chart-tooltip-header">
+          <span>📅 GW ${it.gw} Standings</span>
+        </div>
+        <div class="chart-tooltip-list">
+          ${data.players.map(p => `
+            <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
+              <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                <span class="chart-tooltip-dot" style="background:${p.color};"></span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+              </div>
+              <div class="chart-tooltip-scores">
+                <span class="chart-tooltip-cum-pts">${p.cumulative} pts</span>
+                <span class="chart-tooltip-gw-pts" style="${p.pt.gwPts > 0 ? '' : 'color:var(--text-dim);'}">(+${p.pt.gwPts || 0})</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>
       `;
     }
 
-    // Position tooltip
-    const containerRect = container.getBoundingClientRect();
-    const xRatio = data.x / svgWidth;
-    const targetX = xRatio * containerRect.width;
-    const tooltipWidth = 230;
+    const targetX = data.x;
+    const tooltipWidth = 240;
 
-    if (targetX + tooltipWidth + 20 > containerRect.width) {
+    if (targetX + tooltipWidth + 20 > svgWidth) {
       tooltip.style.left = `${Math.max(8, targetX - tooltipWidth - 14)}px`;
     } else {
       tooltip.style.left = `${targetX + 14}px`;
@@ -3148,25 +3565,27 @@ function attachChartTooltipHandlers(gwStandings, svgWidth) {
     });
   }
 
-  container.querySelectorAll('.chart-col-hitbox, .chart-marker-group').forEach(el => {
+  container.querySelectorAll('.chart-col-hitbox, .chart-marker-group, .chart-gw-tick-group, .chart-match-tick-group, .ribbon-seg-group').forEach(el => {
     el.addEventListener('mouseenter', () => {
-      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
       showGWTooltip(idx);
     });
 
     el.addEventListener('mousemove', () => {
-      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
       showGWTooltip(idx);
     });
 
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
-      showGWTooltip(idx);
+      const gwVal = el.getAttribute('data-gw');
+      if (gwVal && gwVal !== '0') {
+        toggleChartExpandedGW(Number(gwVal));
+      }
     });
 
     el.addEventListener('touchstart', () => {
-      const idx = parseInt(el.getAttribute('data-gw-idx'), 10);
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
       showGWTooltip(idx);
     }, { passive: true });
   });
@@ -3178,6 +3597,682 @@ function attachChartTooltipHandlers(gwStandings, svgWidth) {
   document.addEventListener('click', (e) => {
     if (!container.contains(e.target)) {
       hideGWTooltip();
+    }
+  });
+}
+
+// ─── VIEW B: Gameweek Match-by-Match Chart (Isolated Drilldown) ────────────────
+function renderGameweekMatchesChart(gw) {
+  const wrapper = document.getElementById('chartWrapper');
+  const legendContainer = document.getElementById('chartLegend');
+  const chartSubtitle = document.getElementById('chartSubtitle');
+  const selectedTeams = getSelectedTeams();
+
+  const rawGwFixtures = state.fixtures[gw] ?? [];
+  const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
+
+  if (chartSubtitle) {
+    if (selectedTeams.length === 1) {
+      const details = getClubDetails(selectedTeams[0]);
+      chartSubtitle.textContent = `Match-by-match progression for GW ${gw} · Matches involving ${selectedTeams[0]} (${details?.shortName || ''})`;
+    } else if (selectedTeams.length > 1) {
+      chartSubtitle.textContent = `Match-by-match progression for GW ${gw} · Matches involving ${selectedTeams.length} Teams (${selectedTeams.join(', ')})`;
+    } else {
+      chartSubtitle.textContent = `Match-by-match points progression for GW ${gw} (${fixtures.length} matches sorted by kickoff)`;
+    }
+  }
+
+  if (fixtures.length === 0) {
+    wrapper.innerHTML = `
+      <div style="text-align:center; padding:40px; color:var(--text-muted);">
+        No matches found for GW ${gw} matching current group/team filter.<br/>
+        <button class="btn btn-sm btn-outline" style="margin-top:14px;" onclick="window.setChartDrilldown(null)">← Back to Season Overview</button>
+      </div>`;
+    legendContainer.innerHTML = '';
+    return;
+  }
+
+  // 1. Sort matches chronologically by kickoff time
+  const sortedMatches = [...fixtures].sort((a, b) => {
+    const timeA = a.kickoff_time ? new Date(a.kickoff_time).getTime() : Infinity;
+    const timeB = b.kickoff_time ? new Date(b.kickoff_time).getTime() : Infinity;
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.id || 0) - (b.id || 0);
+  });
+
+  // Construct match xItems for this GW
+  const xItems = [];
+  sortedMatches.forEach((f, mIdx) => {
+    xItems.push({
+      type: 'match',
+      matchIdx: mIdx,
+      totalMatchesInGw: sortedMatches.length,
+      fixture: f,
+      gw,
+      isPlayed: isMatchActiveOrFinished(f),
+      isLive: isMatchOngoing(f)
+    });
+  });
+
+  const activeItemIndices = xItems
+    .map((it, idx) => (it.isPlayed ? idx : -1))
+    .filter(idx => idx !== -1);
+  const maxPlayedItemIdx = activeItemIndices.length > 0 ? Math.max(...activeItemIndices) : 0;
+
+  // 2. Compute match-by-match points for each player
+  const playerData = state.players.map(p => {
+    let gwCumulative = 0;
+    const pointsByItem = [];
+
+    xItems.forEach((it, idx) => {
+      const f = it.fixture;
+      const scoreInfo = getMatchScoreInfo(f);
+      const pred = state.predictions[`${f.id}_${p.id}`];
+      let matchPts = 0;
+      let matchTier = null;
+      let matchBonuses = [];
+      let hasPred = false;
+      let predHome = null;
+      let predAway = null;
+
+      if (pred && pred.predicted_home !== null && pred.predicted_away !== null && pred.predicted_home !== undefined && pred.predicted_home !== '' && pred.predicted_away !== '') {
+        hasPred = true;
+        predHome = Number(pred.predicted_home);
+        predAway = Number(pred.predicted_away);
+        if (scoreInfo.hasScore) {
+          const res = evaluatePrediction(scoreInfo.home, scoreInfo.away, predHome, predAway);
+          if (res) {
+            matchPts = res.total;
+            matchTier = res.tier;
+            matchBonuses = res.activeBonuses || [];
+          }
+        }
+      }
+
+      gwCumulative += matchPts;
+
+      pointsByItem.push({
+        type: 'match',
+        matchIdx: it.matchIdx,
+        fixture: f,
+        hasPred,
+        predHome,
+        predAway,
+        matchPts,
+        matchTier,
+        matchBonuses,
+        gwCumulative,
+        cumulative: gwCumulative
+      });
+    });
+
+    return {
+      id: p.id,
+      name: p.name,
+      color: getPlayerColor(p),
+      totalGw: gwCumulative,
+      total: gwCumulative,
+      pointsByItem
+    };
+  });
+
+  // Render match-by-match Legend
+  const sortedLegendPlayers = [...playerData].sort((a, b) => {
+    const isYouA = state.auth.activePlayerId === a.id;
+    const isYouB = state.auth.activePlayerId === b.id;
+    if (isYouA && !isYouB) return -1;
+    if (!isYouA && isYouB) return 1;
+    if (b.totalGw !== a.totalGw) return b.totalGw - a.totalGw;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+
+  legendContainer.innerHTML = sortedLegendPlayers.map(p => {
+    const isYou = state.auth.activePlayerId === p.id;
+    return `
+      <div class="chart-legend-chip ${isYou ? 'active' : ''}">
+        <span class="legend-dot" style="background: ${p.color};"></span>
+        <span>${p.name}${isYou ? ' (You)' : ''}</span>
+        <span class="legend-pts">${p.totalGw} pts</span>
+      </div>
+    `;
+  }).join('');
+
+  const numItems = xItems.length;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const padLeft = isMobile ? 55 : 65;
+  const padRight = isMobile ? 25 : 30;
+  const padTop = isMobile ? 30 : 28;
+  const padBottom = isMobile ? 96 : 88;
+  const svgWidth = Math.max(1000, numItems * (isMobile ? 70 : 85));
+  const svgHeight = isMobile ? 440 : 380;
+
+  const chartW = svgWidth - padLeft - padRight;
+  const chartH = svgHeight - padTop - padBottom;
+
+  const isRibbon = state.chartMode === 'ribbon';
+
+  let maxPlayerCumulative = Math.max(6, ...playerData.map(p => p.totalGw));
+  maxPlayerCumulative = maxPlayerCumulative <= 10 ? Math.ceil(maxPlayerCumulative / 2) * 2 : Math.ceil(maxPlayerCumulative / 5) * 5;
+
+  const leagueCumulativeByItem = xItems.map((it, i) => {
+    if (i > maxPlayedItemIdx) return 0;
+    return playerData.reduce((sum, p) => sum + (p.pointsByItem[i]?.gwCumulative || 0), 0);
+  });
+  let maxLeagueCumulative = Math.max(10, ...leagueCumulativeByItem);
+  maxLeagueCumulative = Math.ceil(maxLeagueCumulative / 5) * 5;
+
+  const activeYMax = isRibbon ? maxLeagueCumulative : maxPlayerCumulative;
+  const getX = (i) => padLeft + (numItems > 1 ? (i / (numItems - 1)) * chartW : chartW / 2);
+  const getY = (val) => padTop + chartH - (val / activeYMax) * chartH;
+
+  // 1. Y-Axis Grid Lines & Tick Labels
+  let gridLinesSvg = '';
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const val = Math.round((activeYMax / ySteps) * i);
+    const y = getY(val);
+    gridLinesSvg += `
+      <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'var(--border-active)' : 'var(--border-glass)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
+      <text class="chart-axis-tick" x="${padLeft - 10}" y="${y + 4}" fill="var(--text-dim)" font-size="11" font-weight="600" text-anchor="end" font-family="var(--font-main)">${val}</text>
+    `;
+  }
+
+  const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
+
+  const yLabelX = 20;
+  const yLabelY = padTop + (chartH / 2);
+  const yAxisLabelSvg = `
+    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : `GW ${gw} POINTS`}</text>
+  `;
+
+  // 2. X-Axis Baseline & Multilevel Match Ticks (Home Crest \n vs \n Away Crest)
+  const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
+
+  const yBase = padTop + chartH;
+  let xLabelsSvg = '';
+  xItems.forEach((it, i) => {
+    const x = getX(i);
+    const isPlayed = i <= maxPlayedItemIdx;
+    const f = it.fixture;
+    const homeCrestUrl = getCrestUrl(f.home_code);
+    const awayCrestUrl = getCrestUrl(f.away_code);
+
+    xLabelsSvg += `
+      <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name}">
+        <rect class="chart-match-tick-bg" x="${x - 12}" y="${yBase + 4}" width="24" height="44" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
+        <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 4}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+        <image href="${homeCrestUrl}" x="${x - 7.5}" y="${yBase + 5}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
+        <text class="chart-axis-tick" x="${x}" y="${yBase + 27}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">vs</text>
+        <image href="${awayCrestUrl}" x="${x - 7.5}" y="${yBase + 30}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
+      </g>
+    `;
+  });
+
+  // Level 2: Spanning GW # bracket
+  let gwGroupsSvg = '';
+  if (xItems.length > 0) {
+    const xLeft = getX(0) - 10;
+    const xRight = getX(xItems.length - 1) + 10;
+    const yGroup = yBase + 49;
+    const midX = (xLeft + xRight) / 2;
+
+    gwGroupsSvg += `
+      <g class="chart-gw-group-level" data-gw="${gw}">
+        <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--accent-purple)" stroke-width="1.2" opacity="0.65" />
+        <rect x="${midX - 30}" y="${yGroup + 6}" width="60" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
+        <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="10" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gw}</text>
+      </g>
+    `;
+  }
+
+  let linesSvg = '';
+  let markersSvg = '';
+  const hasActivePlayer = state.auth.activePlayerId != null && (state.auth.role === 'player' || (state.auth.role === 'admin' && state.auth.activePlayerId));
+
+  const sortedPlayersForSvg = [...playerData].sort((a, b) => {
+    const isYouA = state.auth.activePlayerId === a.id ? 1 : 0;
+    const isYouB = state.auth.activePlayerId === b.id ? 1 : 0;
+    return isYouA - isYouB;
+  });
+
+  function comparePlayersAtMatch(a, b, itIdx) {
+    const ptA = a.pointsByItem[itIdx] || { gwCumulative: 0, matchPts: 0 };
+    const ptB = b.pointsByItem[itIdx] || { gwCumulative: 0, matchPts: 0 };
+
+    if (ptB.gwCumulative !== ptA.gwCumulative) {
+      return ptB.gwCumulative - ptA.gwCumulative;
+    }
+    if ((ptB.matchPts || 0) !== (ptA.matchPts || 0)) {
+      return (ptB.matchPts || 0) - (ptA.matchPts || 0);
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  }
+
+  if (isRibbon) {
+    const N = playerData.length;
+    const ribbonColW = numItems > 1 ? Math.min(36, Math.max(18, chartW / (numItems * 1.8))) : 38;
+    const minSegmentH = 4;
+    const totalMinH = N * minSegmentH;
+    const availableH = Math.max(0, chartH - totalMinH);
+    const ptsScale = maxLeagueCumulative > 0 ? availableH / maxLeagueCumulative : 0;
+
+    const ribbonLayout = [];
+
+    xItems.forEach((it, i) => {
+      ribbonLayout[i] = {};
+      if (i > maxPlayedItemIdx) return;
+
+      const rankedList = [...playerData].sort((a, b) => comparePlayersAtMatch(a, b, i));
+
+      const segmentHeights = rankedList.map(p => {
+        const cumPts = p.pointsByItem[i]?.gwCumulative || 0;
+        return minSegmentH + (cumPts * ptsScale);
+      });
+
+      const totalColH = segmentHeights.reduce((sum, h) => sum + h, 0);
+      const colBaseline = padTop + chartH;
+      const colTop = colBaseline - totalColH;
+
+      let currY = colTop;
+      rankedList.forEach((p, rIdx) => {
+        const segH = segmentHeights[rIdx];
+        const pt = p.pointsByItem[i] || { gwCumulative: 0 };
+        const cx = getX(i);
+
+        ribbonLayout[i][p.id] = {
+          xLeft: cx - ribbonColW / 2,
+          xRight: cx + ribbonColW / 2,
+          cx,
+          yTop: currY,
+          yBot: currY + segH,
+          h: segH,
+          rank: rIdx + 1,
+          gwCumulative: pt.gwCumulative,
+          player: p
+        };
+        currY += segH;
+      });
+    });
+    // 1. Draw Connecting Ribbons between consecutive matches
+    let ribbonGradientsSvg = '<defs>';
+    let ribbonFillsSvg = '';
+    let ribbonOutlinesSvg = '';
+
+    for (let i = 0; i < maxPlayedItemIdx; i++) {
+      sortedPlayersForSvg.forEach(p => {
+        const seg1 = ribbonLayout[i]?.[p.id];
+        const seg2 = ribbonLayout[i + 1]?.[p.id];
+        if (!seg1 || !seg2) return;
+
+        const isYou = state.auth.activePlayerId === p.id;
+        const gradId = `ribbon_flow_m_${p.id}_${i}`;
+
+        ribbonGradientsSvg += `
+          <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.75' : '0.45'}" />
+            <stop offset="50%" stop-color="${p.color}" stop-opacity="${isYou ? '0.55' : '0.28'}" />
+            <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.75' : '0.45'}" />
+          </linearGradient>
+        `;
+
+        const x1 = seg1.xRight - 0.5;
+        const x2 = seg2.xLeft + 0.5;
+        const y1_top = seg1.yTop + (seg1.h * 0.03);
+        const y1_bot = seg1.yTop + (seg1.h * 0.97);
+        const y2_top = seg2.yTop + (seg2.h * 0.03);
+        const y2_bot = seg2.yTop + (seg2.h * 0.97);
+        const dx = (x2 - x1) * 0.5;
+
+        const fillD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top} L ${x2},${y2_bot} C ${x2 - dx},${y2_bot} ${x1 + dx},${y1_bot} ${x1},${y1_bot} Z`;
+        const topD = `M ${x1},${y1_top} C ${x1 + dx},${y1_top} ${x2 - dx},${y2_top} ${x2},${y2_top}`;
+        const botD = `M ${x1},${y1_bot} C ${x1 + dx},${y1_bot} ${x2 - dx},${y2_bot} ${x2},${y2_bot}`;
+
+        const darkAccent = darkenHex(p.color, 0.45);
+        const ribbonStroke = darkAccent;
+        const ribbonStrokeW = isYou ? '1.1' : '0.75';
+        const ribbonStrokeOpacity = isYou ? '0.95' : '0.65';
+        const ribbonShadow = isYou ? `style="filter: drop-shadow(0 0 3px ${darkAccent});"` : '';
+
+        ribbonFillsSvg += `
+          <path class="ribbon-band" d="${fillD}" fill="url(#${gradId})" stroke="none" />
+        `;
+
+        ribbonOutlinesSvg += `
+          <path class="ribbon-contour" d="${topD}" fill="none" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linecap="round" ${ribbonShadow} />
+          <path class="ribbon-contour" d="${botD}" fill="none" stroke="${ribbonStroke}" stroke-width="${ribbonStrokeW}" stroke-opacity="${ribbonStrokeOpacity}" stroke-linecap="round" ${ribbonShadow} />
+        `;
+      });
+    }
+
+    sortedPlayersForSvg.forEach(p => {
+      const isYou = state.auth.activePlayerId === p.id;
+      ribbonGradientsSvg += `
+        <linearGradient id="pillar_vgrad_m_${p.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.95' : '0.78'}" />
+          <stop offset="100%" stop-color="${p.color}" stop-opacity="${isYou ? '0.72' : '0.50'}" />
+        </linearGradient>
+      `;
+    });
+
+    ribbonGradientsSvg += '</defs>';
+    linesSvg = ribbonGradientsSvg + ribbonFillsSvg + ribbonOutlinesSvg;
+
+    for (let i = 0; i <= maxPlayedItemIdx; i++) {
+      sortedPlayersForSvg.forEach(p => {
+        const seg = ribbonLayout[i]?.[p.id];
+        if (!seg) return;
+
+        const isYou = state.auth.activePlayerId === p.id;
+        const darkAccent = darkenHex(p.color, 0.38);
+        const strokeColor = darkAccent;
+        const strokeW = isYou ? '1.1' : '0.75';
+        const pillarShadow = isYou ? `style="filter: drop-shadow(0 0 3px ${darkAccent});"` : '';
+
+        if (seg.h >= 15 && seg.gwCumulative > 0) {
+          const fontSize = Math.min(12, Math.max(9.5, Math.min(seg.h * 0.52, ribbonColW * 0.48)));
+          markersSvg += `
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="4" fill="url(#pillar_vgrad_m_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));">${seg.gwCumulative}</text>
+            </g>
+          `;
+        } else if (seg.h >= 10 && seg.gwCumulative > 0) {
+          markersSvg += `
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="3" fill="url(#pillar_vgrad_m_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95));">${seg.gwCumulative}</text>
+            </g>
+          `;
+        } else {
+          markersSvg += `
+            <g class="ribbon-seg-group" data-item-idx="${i}" data-player-id="${p.id}">
+              <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="2" fill="url(#pillar_vgrad_m_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
+            </g>
+          `;
+        }
+      });
+    }
+  } else {
+    // Stepped or Linear Match Chart
+    let areaGradientsSvg = '<defs>';
+    if (state.chartMode === 'stepped') {
+      sortedPlayersForSvg.forEach(p => {
+        const isYou = state.auth.activePlayerId === p.id;
+        const gradId = `step_area_grad_m_${p.id}`;
+        areaGradientsSvg += `
+          <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${p.color}" stop-opacity="${isYou ? '0.35' : '0.30'}" />
+            <stop offset="100%" stop-color="${p.color}" stop-opacity="0.08" />
+          </linearGradient>
+        `;
+      });
+    }
+    areaGradientsSvg += '</defs>';
+    linesSvg = areaGradientsSvg + linesSvg;
+
+    sortedPlayersForSvg.forEach(p => {
+      const isYou = state.auth.activePlayerId === p.id;
+      const isDotted = hasActivePlayer ? !isYou : false;
+      const pts = p.pointsByItem;
+      const playedPts = pts.filter((pt, m) => m <= maxPlayedItemIdx);
+
+      const strokeWidth = isYou ? '3.5' : (hasActivePlayer ? '2' : '2.5');
+      const strokeDash = isDotted ? 'stroke-dasharray="4,4"' : '';
+      const opacity = isDotted ? '0.85' : '1';
+      const shadowFilter = isYou
+        ? `style="filter: drop-shadow(0 2px 6px ${p.color}88);"`
+        : `style="filter: drop-shadow(0 1px 3px ${p.color}44);"`;
+
+      if (playedPts.length >= 2) {
+        let pathD = '';
+        if (state.chartMode === 'linear') {
+          const pathCoords = playedPts.map((pt, m) => `${getX(m)},${getY(pt.gwCumulative)}`).join(' L ');
+          pathD = `M ${pathCoords}`;
+        } else {
+          pathD = `M ${getX(0)},${getY(playedPts[0].gwCumulative)}`;
+          for (let m = 1; m < playedPts.length; m++) {
+            const prevY = getY(playedPts[m - 1].gwCumulative);
+            const currX = getX(m);
+            const currY = getY(playedPts[m].gwCumulative);
+            pathD += ` H ${currX} V ${currY}`;
+          }
+        }
+
+        if (state.chartMode === 'stepped') {
+          const firstX = getX(0);
+          const lastX = getX(playedPts.length - 1);
+          const baselineY = padTop + chartH;
+          const areaD = `${pathD} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
+          linesSvg += `
+            <path d="${areaD}" fill="url(#step_area_grad_m_${p.id})" opacity="${opacity}" />
+          `;
+        }
+
+        linesSvg += `
+          <path d="${pathD}" fill="none" stroke="${p.color}" stroke-width="${strokeWidth}" ${strokeDash} opacity="${opacity}" stroke-linejoin="round" stroke-linecap="round" ${shadowFilter} />
+        `;
+      } else if (playedPts.length === 1) {
+        const cx = getX(0);
+        const cy = getY(playedPts[0].gwCumulative);
+        markersSvg += `
+          <circle cx="${cx}" cy="${cy}" r="${isYou ? '5.5' : '4.5'}" fill="${p.color}" stroke="#0f1629" stroke-width="2" class="chart-marker-node ${isYou ? 'chart-marker-node-you' : ''}" data-item-idx="0" />
+        `;
+      }
+
+      playedPts.forEach((pt, m) => {
+        const cx = getX(m);
+        const cy = getY(pt.gwCumulative);
+        const radius = isYou ? 4.5 : 3.5;
+        const strokeW = isYou ? 2 : 1.5;
+        const nodeClass = isYou ? 'chart-marker-node chart-marker-node-you' : 'chart-marker-node';
+
+        markersSvg += `
+          <g class="chart-marker-group" data-item-idx="${m}" style="cursor:pointer;">
+            <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${p.color}" stroke="#0f1629" stroke-width="${strokeW}" class="${nodeClass}" data-item-idx="${m}" />
+          </g>
+        `;
+      });
+    });
+  }
+
+  // Calculate standings per item for match tooltips
+  const matchStandings = xItems.map((it, i) => {
+    const isPlayed = i <= maxPlayedItemIdx;
+    const rankedPlayers = [...playerData].sort((a, b) => comparePlayersAtMatch(a, b, i));
+
+    const list = rankedPlayers.map((p, rIdx) => {
+      const pt = p.pointsByItem[i] || { gwCumulative: 0, matchPts: 0, hasPred: false };
+      return {
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        matchPts: pt.matchPts || 0,
+        matchTier: pt.matchTier,
+        matchBonuses: pt.matchBonuses,
+        hasPred: pt.hasPred,
+        predHome: pt.predHome,
+        predAway: pt.predAway,
+        gwCumulative: pt.gwCumulative || 0,
+        rank: rIdx + 1,
+        isYou: state.auth.activePlayerId === p.id
+      };
+    });
+
+    return {
+      itemIdx: i,
+      xItem: it,
+      fixture: it.fixture,
+      gw,
+      isPlayed,
+      isLive: it.isLive,
+      scoreInfo: it.fixture ? getMatchScoreInfo(it.fixture) : null,
+      x: getX(i),
+      players: list
+    };
+  });
+
+  let crosshairsSvg = '';
+  let hitboxesSvg = '';
+  const colWidth = numItems > 1 ? chartW / (numItems - 1) : chartW;
+
+  xItems.forEach((it, i) => {
+    const cx = getX(i);
+    crosshairsSvg += `
+      <line id="chartCrosshair_m_${i}" class="chart-crosshair" x1="${cx}" y1="${padTop}" x2="${cx}" y2="${padTop + chartH}" stroke="rgba(56, 189, 248, 0.45)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
+    `;
+
+    const boxX = numItems > 1
+      ? (i === 0 ? padLeft - 10 : cx - colWidth / 2)
+      : padLeft;
+    const boxW = numItems > 1
+      ? (i === 0 || i === numItems - 1 ? colWidth / 2 + 10 : colWidth)
+      : chartW;
+
+    hitboxesSvg += `
+      <rect class="chart-col-hitbox" data-item-idx="${i}" x="${boxX}" y="${padTop}" width="${boxW}" height="${chartH}" fill="transparent" style="cursor: pointer;" />
+    `;
+  });
+
+  wrapper.innerHTML = `
+    <div class="chart-scroll-container" style="position: relative; display: inline-block; min-width: ${svgWidth}px; width: ${svgWidth}px;">
+      <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="none" style="width:${svgWidth}px; min-width:${svgWidth}px; height:${svgHeight}px; display:block;">
+        <!-- Grid & Axes -->
+        ${gridLinesSvg}
+        ${yAxisLineSvg}
+        ${yAxisLabelSvg}
+        ${xAxisLineSvg}
+        ${gwGroupsSvg}
+        ${xLabelsSvg}
+        ${crosshairsSvg}
+        <!-- Lines / Ribbons -->
+        ${linesSvg}
+        <!-- Data Markers & Nodes -->
+        ${markersSvg}
+        <!-- Hitboxes -->
+        ${hitboxesSvg}
+      </svg>
+      <div class="chart-tooltip" style="display: none; position: absolute; pointer-events: none; z-index: 100;"></div>
+    </div>
+  `;
+
+  attachMatchTooltipHandlers(matchStandings, svgWidth);
+}
+
+function attachMatchTooltipHandlers(matchStandings, svgWidth) {
+  const container = document.querySelector('#chartWrapper .chart-scroll-container') || document.getElementById('chartWrapper');
+  if (!container) return;
+
+  const tooltip = container.querySelector('.chart-tooltip');
+  if (!tooltip || !matchStandings?.length) return;
+
+  function showMatchTooltip(mIdx) {
+    const data = matchStandings[mIdx];
+    if (!data) return;
+
+    document.querySelectorAll('.chart-crosshair').forEach((line, idx) => {
+      line.style.display = idx === mIdx ? 'block' : 'none';
+    });
+
+    document.querySelectorAll('.chart-marker-node').forEach(node => {
+      const nodeM = parseInt(node.getAttribute('data-item-idx'), 10);
+      if (nodeM === mIdx) {
+        node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '6.5' : '5.5');
+      } else {
+        node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '4.5' : '3.5');
+      }
+    });
+
+    const f = data.fixture;
+    const scoreInfo = getMatchScoreInfo(f);
+    const scoreStr = scoreInfo?.hasScore ? `${scoreInfo.home} – ${scoreInfo.away}` : 'vs';
+    const homeShort = f.home_short || getClubDetails(f.home_name)?.short || f.home_name.slice(0, 3).toUpperCase();
+    const awayShort = f.away_short || getClubDetails(f.away_name)?.short || f.away_name.slice(0, 3).toUpperCase();
+
+    tooltip.innerHTML = `
+      <div class="chart-tooltip-header">
+        <span>⚽ GW ${data.gw} · Match ${data.matchIdx + 1} of ${data.totalMatches}</span>
+      </div>
+      <div class="chart-tooltip-matchup">
+        <span class="tooltip-team-badge" title="${f.home_name}">
+          ${getCrestImg(f.home_code, f.home_name)}
+          <span>${homeShort}</span>
+        </span>
+        <span class="matchup-score ${scoreInfo?.isLive ? 'is-live' : ''}">${scoreStr}</span>
+        <span class="tooltip-team-badge" title="${f.away_name}">
+          <span>${awayShort}</span>
+          ${getCrestImg(f.away_code, f.away_name)}
+        </span>
+      </div>
+      <div class="chart-tooltip-list">
+        ${data.players.map(p => {
+      let matchPtsStr = '';
+      if (data.isPlayed) {
+        const tierStr = p.matchTier ? ` · T${p.matchTier}` : '';
+        matchPtsStr = `<span class="chart-tooltip-gw-pts" style="${p.matchPts > 0 ? '' : 'color:var(--text-dim);'}" title="Points from this match">(+${p.matchPts}${tierStr})</span>`;
+      }
+      return `
+            <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
+              <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                <span class="chart-tooltip-dot" style="background:${p.color};"></span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+              </div>
+              <div class="chart-tooltip-scores">
+                <span class="chart-tooltip-cum-pts" title="GW Points up to this match">${p.gwCumulative} pts</span>
+                ${matchPtsStr}
+              </div>
+            </div>
+          `;
+    }).join('')}
+      </div>
+    `;
+
+    const targetX = data.x;
+    const tooltipWidth = 240;
+
+    if (targetX + tooltipWidth + 20 > svgWidth) {
+      tooltip.style.left = `${Math.max(8, targetX - tooltipWidth - 14)}px`;
+    } else {
+      tooltip.style.left = `${targetX + 14}px`;
+    }
+    tooltip.style.top = '14px';
+    tooltip.style.display = 'block';
+  }
+
+  function hideMatchTooltip() {
+    tooltip.style.display = 'none';
+    document.querySelectorAll('.chart-crosshair').forEach(line => {
+      line.style.display = 'none';
+    });
+    document.querySelectorAll('.chart-marker-node').forEach(node => {
+      node.setAttribute('r', node.classList.contains('chart-marker-node-you') ? '4.5' : '3.5');
+    });
+  }
+
+  container.querySelectorAll('.chart-col-hitbox, .chart-marker-group, .chart-match-tick-group, .ribbon-seg-group').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
+      showMatchTooltip(idx);
+    });
+
+    el.addEventListener('mousemove', () => {
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
+      showMatchTooltip(idx);
+    });
+
+    el.addEventListener('touchstart', () => {
+      const idx = parseInt(el.getAttribute('data-item-idx'), 10);
+      showMatchTooltip(idx);
+    }, { passive: true });
+  });
+
+  container.addEventListener('mouseleave', () => {
+    hideMatchTooltip();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target)) {
+      hideMatchTooltip();
     }
   });
 }
@@ -4386,9 +5481,15 @@ function initChartControls() {
   const stepBtn = document.getElementById('chartModeStepBtn');
   const linearBtn = document.getElementById('chartModeLinearBtn');
   const ribbonBtn = document.getElementById('chartModeRibbonBtn');
+  const backBtn = document.getElementById('chartBackToAllGWsBtn');
+  const gwSelect = document.getElementById('chartGwDrilldownSelect');
+  const drilldownModeSelect = document.getElementById('chartDrilldownModeSelect');
+  const expandToCurrentBtn = document.getElementById('chartExpandToCurrentBtn');
+  const expandAllBtn = document.getElementById('chartExpandAllBtn');
+  const collapseAllBtn = document.getElementById('chartCollapseAllBtn');
 
   function updateButtons() {
-    const mode = state.chartMode || 'stepped';
+    const mode = state.chartMode || 'ribbon';
     if (stepBtn) stepBtn.classList.toggle('active', mode === 'stepped');
     if (linearBtn) linearBtn.classList.toggle('active', mode === 'linear');
     if (ribbonBtn) ribbonBtn.classList.toggle('active', mode === 'ribbon');
@@ -4413,6 +5514,36 @@ function initChartControls() {
     localStorage.setItem('epl_chart_mode', 'ribbon');
     updateButtons();
     renderCumulativeChart();
+  });
+
+  backBtn?.addEventListener('click', () => {
+    setChartDrilldown(null);
+  });
+
+  gwSelect?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    setChartDrilldown(val ? Number(val) : null);
+  });
+
+  expandToCurrentBtn?.addEventListener('click', () => {
+    expandToCurrentGW();
+  });
+
+  expandAllBtn?.addEventListener('click', () => {
+    expandAllGWs();
+  });
+
+  collapseAllBtn?.addEventListener('click', () => {
+    collapseAllGWs();
+  });
+
+  drilldownModeSelect?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val === 'none' || !val) {
+      setChartDrilldown(null);
+    } else {
+      setChartDrilldown(Number(val));
+    }
   });
 
   updateButtons();
