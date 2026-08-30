@@ -3750,11 +3750,11 @@ function renderGameweekMatchesChart(gw) {
 
   const numItems = xItems.length;
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-  const padLeft = isMobile ? 55 : 65;
-  const padRight = isMobile ? 25 : 30;
+  const padLeft = isMobile ? 65 : 75;
+  const padRight = isMobile ? 65 : 75;
   const padTop = isMobile ? 30 : 28;
-  const padBottom = isMobile ? 124 : 118;
-  const svgWidth = Math.max(1000, numItems * (isMobile ? 95 : 110));
+  const padBottom = isMobile ? 120 : 112;
+  const svgWidth = Math.max(1000, numItems * (isMobile ? 100 : 115) + padLeft + padRight);
   const svgHeight = isMobile ? 470 : 420;
 
   const chartW = svgWidth - padLeft - padRight;
@@ -3801,7 +3801,7 @@ function renderGameweekMatchesChart(gw) {
 
   const yBase = padTop + chartH;
   const colSpacing = numItems > 1 ? chartW / (numItems - 1) : chartW;
-  const cardW = Math.min(94, Math.max(80, colSpacing - 8));
+  const cardW = Math.min(84, Math.max(68, colSpacing - 12));
   const cardH = 70;
 
   let xLabelsSvg = '';
@@ -3836,30 +3836,27 @@ function renderGameweekMatchesChart(gw) {
     let statusPillSvg = '';
     if (scoreInfo.isFinished) {
       statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(34, 197, 94, 0.16)" stroke="rgba(34, 197, 94, 0.45)" stroke-width="0.75" />
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(34, 197, 94, 0.16)" />
         <text x="${x}" y="${cardY + 14.5}" fill="#4ade80" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">FT · ${scoreInfo.home} - ${scoreInfo.away}</text>
       `;
     } else if (isLive) {
       statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(239, 68, 68, 0.22)" stroke="rgba(239, 68, 68, 0.6)" stroke-width="0.75" />
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(239, 68, 68, 0.22)" />
         <text x="${x}" y="${cardY + 14.5}" fill="#f87171" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">🔴 LIVE · ${scoreInfo.home} - ${scoreInfo.away}</text>
       `;
     } else {
       statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(255, 255, 255, 0.04)" stroke="rgba(255, 255, 255, 0.08)" stroke-width="0.75" />
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(255, 255, 255, 0.04)" />
         <text x="${x}" y="${cardY + 14.5}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">${timeStr ? `M${it.matchIdx + 1} · ${timeStr}` : `Match ${it.matchIdx + 1}`}</text>
       `;
     }
 
     xLabelsSvg += `
       <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name} · Click to inspect match details">
-        <!-- Connecting tick line -->
-        <line x1="${x}" y1="${yBase}" x2="${x}" y2="${cardY}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+        <!-- Detailed Match Card Background (Frameless / No Outline) -->
+        <rect class="chart-match-tick-bg" x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="6" fill="${isLive ? 'rgba(239, 68, 68, 0.1)' : (isPlayed ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.4)')}" />
         
-        <!-- Detailed Match Card Background -->
-        <rect class="chart-match-tick-bg" x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="6" fill="${isLive ? 'rgba(239, 68, 68, 0.08)' : (isPlayed ? 'rgba(15, 23, 42, 0.8)' : 'rgba(15, 23, 42, 0.55)')}" stroke="${isLive ? 'rgba(239, 68, 68, 0.5)' : (isPlayed ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255, 255, 255, 0.08)')}" stroke-width="1" />
-        
-        <!-- Status / Header Pill -->
+        <!-- Status / Header Pill (Frameless / No Outline) -->
         ${statusPillSvg}
 
         <!-- Crests & Matchup Center -->
@@ -3880,9 +3877,12 @@ function renderGameweekMatchesChart(gw) {
   // Level 2: Spanning GW # bracket
   let gwGroupsSvg = '';
   if (xItems.length > 0) {
+    const colWidth = numItems > 1 ? chartW / (numItems - 1) : chartW;
+    const cardW = Math.min(84, Math.max(68, colWidth - 12));
+    const cardH = 70;
     const xLeft = getX(0) - (cardW / 2);
     const xRight = getX(xItems.length - 1) + (cardW / 2);
-    const yGroup = yBase + cardH + 11;
+    const yGroup = yBase + cardH + 10;
     const midX = (xLeft + xRight) / 2;
 
     gwGroupsSvg += `

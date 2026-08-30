@@ -3420,11 +3420,11 @@ tr.row-out-of-scope:hover {
 .legend-pts { color: var(--accent-green); font-family: var(--font-title); font-size: 0.78rem; margin-left: 2px; }
 
 .chart-match-tick-group { cursor: pointer; }
-.chart-match-tick-group .chart-match-tick-bg { transition: all 0.2s ease; }
+.chart-match-tick-group .chart-match-tick-bg { transition: all 0.2s ease; stroke: none; }
 .chart-match-tick-group:hover .chart-match-tick-bg {
-  fill: rgba(56, 189, 248, 0.14) !important;
-  stroke: var(--accent-cyan) !important;
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.35));
+  fill: rgba(56, 189, 248, 0.16) !important;
+  stroke: none !important;
+  filter: none !important;
 }
 
 .chart-marker-group { cursor: pointer; }
@@ -3570,9 +3570,8 @@ tr.row-out-of-scope:hover {
 }
 
 .chart-match-tick-group:hover .chart-match-tick-bg {
-  fill: rgba(56, 189, 248, 0.2);
-  stroke: rgba(56, 189, 248, 0.6);
-  stroke-width: 1px;
+  fill: rgba(56, 189, 248, 0.16);
+  stroke: none;
 }
 
 .chart-match-tick-group:hover .chart-match-tick-main {
