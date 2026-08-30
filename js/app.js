@@ -3833,43 +3833,26 @@ function renderGameweekMatchesChart(gw) {
       }
     }
 
-    let statusPillSvg = '';
-    if (scoreInfo.isFinished) {
-      statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(34, 197, 94, 0.16)" />
-        <text x="${x}" y="${cardY + 14.5}" fill="#4ade80" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">FT · ${scoreInfo.home} - ${scoreInfo.away}</text>
-      `;
-    } else if (isLive) {
-      statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(239, 68, 68, 0.22)" />
-        <text x="${x}" y="${cardY + 14.5}" fill="#f87171" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">🔴 LIVE · ${scoreInfo.home} - ${scoreInfo.away}</text>
-      `;
-    } else {
-      statusPillSvg = `
-        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(255, 255, 255, 0.04)" />
-        <text x="${x}" y="${cardY + 14.5}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">${timeStr ? `M${it.matchIdx + 1} · ${timeStr}` : `Match ${it.matchIdx + 1}`}</text>
-      `;
-    }
+    const dateDisplay = dateStr ? (timeStr ? `${dateStr} · ${timeStr}` : dateStr) : `Match ${it.matchIdx + 1}`;
+    const liveIndicatorSvg = isLive ? `<text x="${x}" y="${cardY + 54}" fill="#f87171" font-size="7" font-weight="800" text-anchor="middle" font-family="var(--font-title)">🔴 LIVE</text>` : '';
 
     xLabelsSvg += `
       <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name} · Click to inspect match details">
         <!-- Detailed Match Card Background (Frameless / No Outline) -->
         <rect class="chart-match-tick-bg" x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="6" fill="${isLive ? 'rgba(239, 68, 68, 0.1)' : (isPlayed ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.4)')}" />
         
-        <!-- Status / Header Pill (Frameless / No Outline) -->
-        ${statusPillSvg}
+        <!-- Date & Kickoff Time Header -->
+        <text x="${x}" y="${cardY + 14}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">${dateDisplay}</text>
 
         <!-- Crests & Matchup Center -->
         <image href="${homeCrestUrl}" x="${cardX + 7}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
-        <text x="${x}" y="${cardY + 34}" fill="${scoreInfo.hasScore ? 'var(--accent-cyan)' : 'var(--text-dim)'}" font-size="${scoreInfo.hasScore ? '9.5' : '8'}" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${scoreInfo.hasScore ? `${scoreInfo.home} - ${scoreInfo.away}` : 'vs'}</text>
+        <text x="${x}" y="${cardY + 35}" fill="${scoreInfo.hasScore ? 'var(--accent-cyan)' : 'var(--text-dim)'}" font-size="${scoreInfo.hasScore ? '10' : '8.5'}" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${scoreInfo.hasScore ? `${scoreInfo.home} - ${scoreInfo.away}` : 'vs'}</text>
         <image href="${awayCrestUrl}" x="${cardX + cardW - 25}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
 
         <!-- Team Short Codes -->
-        <text x="${cardX + 16}" y="${cardY + 49}" fill="var(--text-main)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${homeShort}</text>
-        <text x="${cardX + cardW - 16}" y="${cardY + 49}" fill="var(--text-main)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${awayShort}</text>
-
-        <!-- Date / Kickoff Footer -->
-        <text x="${x}" y="${cardY + 61}" fill="var(--text-dim)" font-size="7" font-weight="600" text-anchor="middle" font-family="var(--font-main)">${dateStr || `Fixture ${it.matchIdx + 1}`}</text>
+        <text x="${cardX + 16}" y="${cardY + 54}" fill="var(--text-main)" font-size="8.5" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${homeShort}</text>
+        ${liveIndicatorSvg}
+        <text x="${cardX + cardW - 16}" y="${cardY + 54}" fill="var(--text-main)" font-size="8.5" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${awayShort}</text>
       </g>
     `;
   });
