@@ -1944,6 +1944,61 @@ tr.row-out-of-scope:hover {
   white-space: nowrap !important;
 }
 
+.matrix-wrapper.use-short-names .team-name-full,
+.table-responsive.use-short-names .team-name-full,
+.use-short-names .team-name-full {
+  display: none !important;
+}
+
+.matrix-wrapper.use-short-names .team-name-short,
+.table-responsive.use-short-names .team-name-short,
+.use-short-names .team-name-short {
+  display: inline !important;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Tight & compact match columns when short names are active */
+.matrix-wrapper.use-short-names .matrix-table th.col-match,
+.matrix-wrapper.use-short-names .matrix-table td.col-match,
+.table-responsive.use-short-names .col-match,
+.use-short-names .col-match {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.matrix-wrapper.use-short-names .match-team,
+.matrix-wrapper.use-short-names .match-team.home-team,
+.matrix-wrapper.use-short-names .match-team.away-team,
+.table-responsive.use-short-names .match-team,
+.table-responsive.use-short-names .match-team.home-team,
+.table-responsive.use-short-names .match-team.away-team,
+.use-short-names .match-team,
+.use-short-names .match-team.home-team,
+.use-short-names .match-team.away-team {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: none !important;
+}
+
+.matrix-wrapper.use-short-names .match-teams,
+.table-responsive.use-short-names .match-teams,
+.use-short-names .match-teams {
+  gap: 3px !important;
+  width: auto !important;
+}
+
+.matrix-wrapper.use-short-names .match-vs,
+.table-responsive.use-short-names .match-vs,
+.use-short-names .match-vs {
+  margin: 0 4px !important;
+  padding: 1px 4px !important;
+}
+
 .match-vs {
   font-size: 0.68rem;
   font-weight: 800;
@@ -2011,10 +2066,10 @@ tr.row-out-of-scope:hover {
   text-align: center !important;
   vertical-align: middle !important;
   white-space: nowrap !important;
-  width: 58px;
-  min-width: 52px;
-  max-width: 68px;
-  padding: 6px 4px !important;
+  width: 85px;
+  min-width: 76px;
+  max-width: 105px;
+  padding: 6px 6px !important;
 }
 
 .status-logo {
@@ -4267,14 +4322,18 @@ tr.row-out-of-scope:hover {
     white-space: nowrap !important;
   }
   .matrix-table th.col-match, .matrix-table td.col-match {
-    min-width: 115px;
-    padding-left: 8px;
-    padding-right: 6px;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding-left: 6px !important;
+    padding-right: 4px !important;
   }
-  .team-name-full {
+  .matrix-wrapper.use-short-names .team-name-full,
+  .use-short-names .team-name-full {
     display: none !important;
   }
-  .team-name-short {
+  .matrix-wrapper.use-short-names .team-name-short,
+  .use-short-names .team-name-short {
     display: inline !important;
     font-weight: 700;
     letter-spacing: 0.5px;
@@ -4282,46 +4341,60 @@ tr.row-out-of-scope:hover {
   .match-venue {
     display: none !important;
   }
+  .match-info {
+    gap: 1px !important;
+  }
   .match-teams {
-    font-size: 0.82rem;
-    gap: 3px;
+    font-size: 0.8rem !important;
+    gap: 2px !important;
+    width: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
   }
   .match-team {
     display: inline-flex !important;
     width: auto !important;
     min-width: 0 !important;
+    max-width: none !important;
     flex: none !important;
   }
   .match-team.home-team {
     width: auto !important;
     min-width: 0 !important;
+    max-width: none !important;
     flex: none !important;
   }
   .match-team.away-team {
     width: auto !important;
     min-width: 0 !important;
+    max-width: none !important;
     flex: none !important;
   }
   .match-vs {
-    margin: 0 4px !important;
+    margin: 0 3px !important;
+    padding: 0 3px !important;
+    font-size: 0.6rem !important;
+    line-height: 1.2 !important;
   }
   .match-ko {
-    font-size: 0.7rem;
+    font-size: 0.68rem !important;
+    line-height: 1.2 !important;
   }
   .team-crest-img {
-    width: 18px;
-    height: 18px;
-    margin-right: 3px;
+    width: 16px !important;
+    height: 16px !important;
+    margin-right: 2px !important;
+    flex-shrink: 0 !important;
   }
 
   /* Status and Results Responsive */
   .col-status,
   .matrix-table th.col-status,
   .matrix-table td.col-status {
-    width: 52px;
-    min-width: 48px;
-    max-width: 60px;
-    padding: 4px 2px !important;
+    width: 76px;
+    min-width: 68px;
+    max-width: 90px;
+    padding: 4px 4px !important;
   }
   .status-logo {
     width: 26px;

@@ -1681,6 +1681,17 @@ function getStatusLogoHtml(f, isGuest = false) {
   </span>`;
 }
 
+function getMatchStatusHtml(f, isGuest = false) {
+  const scoreInfo = getMatchScoreInfo(f);
+  if (scoreInfo.isFinished && scoreInfo.hasScore) {
+    return `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+  } else if (scoreInfo.isLive) {
+    return `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+  } else {
+    return getStatusLogoHtml(f, isGuest);
+  }
+}
+
 // ─── Render: Team Breakdown & Match Table ──────────────────────────────────────
 function renderTeamBreakdown() {
   const card = document.getElementById('teamBreakdownCard');
@@ -1818,7 +1829,7 @@ function renderTeamBreakdown() {
   thead.innerHTML = `
     <th class="gw-col-header" style="min-width:60px; white-space:nowrap; text-align:center;">GW</th>
     <th class="col-match" style="text-align:left; white-space:nowrap;">Matchup</th>
-    <th class="col-result" style="white-space:nowrap; min-width:85px; text-align:center;">Status</th>
+    <th class="col-status" style="white-space:nowrap; min-width:85px; text-align:center;">Status</th>
     ${players.map((p) => {
     const isYou = state.auth.activePlayerId === p.id;
     const shades = getPlayerColorShades(p);
@@ -1842,14 +1853,7 @@ function renderTeamBreakdown() {
     const locked = timeLocked || !isMatchInScope;
     const scoreInfo = getMatchScoreInfo(f);
 
-    let resultText = '';
-    if (scoreInfo.isFinished && scoreInfo.hasScore) {
-      resultText = `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
-    } else if (scoreInfo.isLive) {
-      resultText = `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
-    } else {
-      resultText = getStatusLogoHtml(f, isGuest);
-    }
+    const resultText = getMatchStatusHtml(f, isGuest);
 
     const playerCells = players.map((p) => {
       const pred = state.predictions[`${f.id}_${p.id}`];
@@ -1927,7 +1931,7 @@ function renderTeamBreakdown() {
             </div>
           </div>
         </td>
-        <td class="col-result">${resultText}</td>
+        <td class="col-status">${resultText}</td>
         ${playerCells}
       </tr>
     `;
@@ -1935,6 +1939,7 @@ function renderTeamBreakdown() {
 
   attachInputHandlers();
   attachTeamLinkHandlers();
+  requestAnimationFrame(() => adjustPredictionTeamNames());
 }
 
 function attachTeamLinkHandlers() {
@@ -2031,7 +2036,6 @@ function renderMatrix() {
         <th class="col-match">Matchup</th>
         <th class="col-ko">Kickoff Time</th>
         <th class="col-status">Status</th>
-        <th class="col-result">Official Result</th>
       </tr>
     `;
   } else {
@@ -2049,7 +2053,6 @@ function renderMatrix() {
             </th>
           `;
     }).join('')}
-        <th class="col-result" rowspan="2">Result</th>
       </tr>
       <tr>
         ${players.map(() => `
@@ -2076,7 +2079,7 @@ function renderMatrix() {
     const emptyMsg = isGuest
       ? (hasTeamFilter ? `No fixtures found for selected team(s) in GW ${gw}.` : `No fixtures found for GW ${gw}.`)
       : `No fixtures matching current scope/filter for GW ${gw}.`;
-    tbody.innerHTML = `<tr><td colspan="${isGuest ? 4 : (4 + players.length * 3)}" class="loading-state">${emptyMsg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${isGuest ? 3 : (2 + players.length * 3)}" class="loading-state">${emptyMsg}</td></tr>`;
     renderMatrixFooter(players, fixtures, isGuest);
     return;
   }
@@ -2088,16 +2091,7 @@ function renderMatrix() {
     const locked = timeLocked || !isMatchInScope;
     const scoreInfo = getMatchScoreInfo(f);
 
-    const statusHtml = getStatusLogoHtml(f, isGuest);
-
-    let actualHtml = '';
-    if (scoreInfo.isFinished && scoreInfo.hasScore) {
-      actualHtml = `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
-    } else if (scoreInfo.isLive) {
-      actualHtml = `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
-    } else {
-      actualHtml = `<span class="actual-score-badge pending" title="${!isMatchInScope ? 'Locked: Outside group scope' : 'Open for predictions'}">-</span>`;
-    }
+    const statusHtml = getMatchStatusHtml(f, isGuest);
 
     const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
     const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
@@ -2131,7 +2125,6 @@ function renderMatrix() {
           </td>
           <td class="col-ko">${formatKO(f.kickoff_time)}</td>
           <td class="col-status">${statusHtml}</td>
-          <td class="col-result">${actualHtml}</td>
         </tr>
       `;
     }
@@ -2237,7 +2230,6 @@ function renderMatrix() {
         </td>
         <td class="col-status">${statusHtml}</td>
         ${playerCells}
-        <td class="col-result">${actualHtml}</td>
       </tr>
     `;
   }).join('');
@@ -2245,6 +2237,7 @@ function renderMatrix() {
   if (!isGuest) attachInputHandlers();
   attachTeamLinkHandlers();
   renderMatrixFooter(players, fixtures, isGuest);
+  requestAnimationFrame(() => adjustPredictionTeamNames());
 }
 
 function renderMatrixFooter(players, fixtures, isGuest) {
@@ -2296,7 +2289,6 @@ function renderMatrixFooter(players, fixtures, isGuest) {
           </td>
         `;
   }).join('')}
-      <td class="matrix-foot-empty-cell"></td>
     </tr>
   `;
 }
@@ -2324,6 +2316,27 @@ function updateMatrixTotals() {
   }
 
   renderMatrixFooter(players, fixtures, isGuest);
+  requestAnimationFrame(() => adjustPredictionTeamNames());
+}
+
+// ─── Adaptive Prediction Team Names (Full vs Short) ──────────────────────────
+export function adjustPredictionTeamNames() {
+  const containers = document.querySelectorAll('.matrix-wrapper, .team-matches-wrapper .table-responsive');
+  if (!containers || containers.length === 0) return;
+
+  containers.forEach(container => {
+    // 1. Temporarily remove short-names class to test if full names fit without horizontal scroll
+    container.classList.remove('use-short-names');
+
+    // 2. Check if the table overflows the container width causing horizontal scroll
+    // (scrollWidth > clientWidth means horizontal scrollbar is present)
+    const hasHorizontalScroll = container.scrollWidth > container.clientWidth + 1;
+
+    // 3. If there is a scrollbar with full team names, switch to team short names
+    if (hasHorizontalScroll) {
+      container.classList.add('use-short-names');
+    }
+  });
 }
 
 // ─── Input Handlers (Server Auto-Save) ────────────────────────────────────────
@@ -2443,7 +2456,7 @@ function updatePtsBadge(matchId, playerId) {
 
   const statusCell = row.querySelector('.col-status');
   if (statusCell) {
-    statusCell.innerHTML = getStatusLogoHtml(fixture, state.auth.role === 'guest');
+    statusCell.innerHTML = getMatchStatusHtml(fixture, state.auth.role === 'guest');
   }
 }
 
@@ -2686,6 +2699,7 @@ if (typeof window !== 'undefined') {
   window.getCrestUrl = getCrestUrl;
   window.getGroupInScopeTeamsCount = getGroupInScopeTeamsCount;
   window.isChartExpandable = isChartExpandable;
+  window.adjustPredictionTeamNames = adjustPredictionTeamNames;
 }
 
 export function setChartDrilldown(gw) {
@@ -4800,10 +4814,15 @@ function initPointsTooltip() {
   tooltipBackdropEl.addEventListener('click', () => hidePointsTooltip());
 
   let chartResizeTimer;
+  let predictionResizeTimer;
   window.addEventListener('resize', () => {
     if (activeTooltipTarget && tooltipPopoverEl.style.display !== 'none') {
       positionTooltipPopover(activeTooltipTarget);
     }
+    clearTimeout(predictionResizeTimer);
+    predictionResizeTimer = setTimeout(() => {
+      adjustPredictionTeamNames();
+    }, 50);
     clearTimeout(chartResizeTimer);
     chartResizeTimer = setTimeout(() => {
       renderCumulativeChart();
