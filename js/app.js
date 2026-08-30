@@ -2718,11 +2718,15 @@ function renderCumulativeChart() {
   const expandSelect = document.getElementById('chartInlineExpandSelect');
   const drilldownModeSelect = document.getElementById('chartDrilldownModeSelect');
   const chartSubtitle = document.getElementById('chartSubtitle');
+  const controlsPanel = document.getElementById('chartControlsPanel');
+  const legendPanel = document.getElementById('chartLegendPanel');
 
   if (state.auth.role === 'guest') {
     if (drilldownBadge) drilldownBadge.style.display = 'none';
     if (drilldownNav) drilldownNav.style.display = 'none';
     if (overviewNav) overviewNav.style.display = 'none';
+    if (controlsPanel) controlsPanel.style.display = 'none';
+    if (legendPanel) legendPanel.style.display = 'none';
     if (chartSubtitle) chartSubtitle.textContent = 'Cumulative total points tracked across all completed gameweeks';
     wrapper.innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--text-muted);">
@@ -2731,6 +2735,7 @@ function renderCumulativeChart() {
     legendContainer.innerHTML = '';
     return;
   }
+  if (controlsPanel) controlsPanel.style.display = 'flex';
 
   // Check if we are in Isolated Gameweek Drilldown Mode
   if (state.chartDrilldownGW !== null && state.gwNumbers.includes(Number(state.chartDrilldownGW))) {
@@ -2936,11 +2941,14 @@ function renderAllGameweeksChart() {
     };
   });
 
+  const legendPanel = document.getElementById('chartLegendPanel');
   if (playerData.length === 0 || xItems.length === 0) {
     wrapper.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">No player chart data available for this group.</div>`;
     legendContainer.innerHTML = '';
+    if (legendPanel) legendPanel.style.display = 'none';
     return;
   }
+  if (legendPanel) legendPanel.style.display = 'flex';
 
   const sortedLegendPlayers = [...playerData].sort((a, b) => {
     const isYouA = state.auth.activePlayerId === a.id;
@@ -3249,14 +3257,14 @@ function renderAllGameweeksChart() {
           markersSvg += `
             <g class="ribbon-seg-group" data-item-idx="${i}" data-gw="${it.gw}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="4" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));">${seg.cumulative}</text>
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="${darkAccent}" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em">${seg.cumulative}</text>
             </g>
           `;
         } else if (seg.h >= 10 && seg.cumulative > 0) {
           markersSvg += `
             <g class="ribbon-seg-group" data-item-idx="${i}" data-gw="${it.gw}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="3" fill="url(#pillar_vgrad_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95));">${seg.cumulative}</text>
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="${darkAccent}" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${seg.cumulative}</text>
             </g>
           `;
         } else {
@@ -3622,6 +3630,7 @@ function renderGameweekMatchesChart(gw) {
     }
   }
 
+  const legendPanel = document.getElementById('chartLegendPanel');
   if (fixtures.length === 0) {
     wrapper.innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--text-muted);">
@@ -3629,8 +3638,10 @@ function renderGameweekMatchesChart(gw) {
         <button class="btn btn-sm btn-outline" style="margin-top:14px;" onclick="window.setChartDrilldown(null)">← Back to Season Overview</button>
       </div>`;
     legendContainer.innerHTML = '';
+    if (legendPanel) legendPanel.style.display = 'none';
     return;
   }
+  if (legendPanel) legendPanel.style.display = 'flex';
 
   // 1. Sort matches chronologically by kickoff time
   const sortedMatches = [...fixtures].sort((a, b) => {
@@ -3973,14 +3984,14 @@ function renderGameweekMatchesChart(gw) {
           markersSvg += `
             <g class="ribbon-seg-group" data-item-idx="${i}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="4" fill="url(#pillar_vgrad_m_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));">${seg.gwCumulative}</text>
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="${darkAccent}" font-size="${fontSize}" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.02em">${seg.gwCumulative}</text>
             </g>
           `;
         } else if (seg.h >= 10 && seg.gwCumulative > 0) {
           markersSvg += `
             <g class="ribbon-seg-group" data-item-idx="${i}" data-player-id="${p.id}">
               <rect x="${seg.xLeft}" y="${seg.yTop}" width="${ribbonColW}" height="${seg.h}" rx="3" fill="url(#pillar_vgrad_m_${p.id})" stroke="${strokeColor}" stroke-width="${strokeW}" ${pillarShadow} />
-              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="#ffffff" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95));">${seg.gwCumulative}</text>
+              <text x="${seg.cx}" y="${seg.yTop + seg.h / 2}" dominant-baseline="central" fill="${darkAccent}" font-size="8.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${seg.gwCumulative}</text>
             </g>
           `;
         } else {
