@@ -2772,9 +2772,9 @@ function renderCumulativeChart() {
 
     if (drilldownModeSelect) {
       drilldownModeSelect.innerHTML = `
-        <option value="none" selected>🔍 Zoom: Off</option>
+        <option value="none" selected>🔍 Drill Down: Off</option>
         ${state.gwNumbers.map(g => `
-          <option value="${g}">🔍 Zoom: GW ${g}</option>
+          <option value="${g}">🔍 Drill Down: GW ${g}</option>
         `).join('')}
       `;
     }
@@ -3753,9 +3753,9 @@ function renderGameweekMatchesChart(gw) {
   const padLeft = isMobile ? 55 : 65;
   const padRight = isMobile ? 25 : 30;
   const padTop = isMobile ? 30 : 28;
-  const padBottom = isMobile ? 96 : 88;
-  const svgWidth = Math.max(1000, numItems * (isMobile ? 70 : 85));
-  const svgHeight = isMobile ? 440 : 380;
+  const padBottom = isMobile ? 124 : 118;
+  const svgWidth = Math.max(1000, numItems * (isMobile ? 95 : 110));
+  const svgHeight = isMobile ? 470 : 420;
 
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
@@ -3796,25 +3796,83 @@ function renderGameweekMatchesChart(gw) {
     <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : `GW ${gw} POINTS`}</text>
   `;
 
-  // 2. X-Axis Baseline & Multilevel Match Ticks (Home Crest \n vs \n Away Crest)
+  // 2. X-Axis Baseline & Rich Detailed Match Cards
   const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
   const yBase = padTop + chartH;
+  const colSpacing = numItems > 1 ? chartW / (numItems - 1) : chartW;
+  const cardW = Math.min(94, Math.max(80, colSpacing - 8));
+  const cardH = 70;
+
   let xLabelsSvg = '';
   xItems.forEach((it, i) => {
     const x = getX(i);
     const isPlayed = i <= maxPlayedItemIdx;
     const f = it.fixture;
+    const homeShort = f.home_short || getClubDetails(f.home_name)?.short || f.home_name.slice(0, 3).toUpperCase();
+    const awayShort = f.away_short || getClubDetails(f.away_name)?.short || f.away_name.slice(0, 3).toUpperCase();
     const homeCrestUrl = getCrestUrl(f.home_code);
     const awayCrestUrl = getCrestUrl(f.away_code);
+    const scoreInfo = getMatchScoreInfo(f);
+    const isLive = it.isLive;
+
+    const cardX = x - (cardW / 2);
+    const cardY = yBase + 6;
+
+    let dateStr = '';
+    let timeStr = '';
+    if (f.kickoff_time) {
+      const d = new Date(f.kickoff_time);
+      const tz = state.timezone || 'UTC';
+      try {
+        dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
+        timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+      } catch (e) {
+        dateStr = '';
+        timeStr = '';
+      }
+    }
+
+    let statusPillSvg = '';
+    if (scoreInfo.isFinished) {
+      statusPillSvg = `
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(34, 197, 94, 0.16)" stroke="rgba(34, 197, 94, 0.45)" stroke-width="0.75" />
+        <text x="${x}" y="${cardY + 14.5}" fill="#4ade80" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">FT · ${scoreInfo.home} - ${scoreInfo.away}</text>
+      `;
+    } else if (isLive) {
+      statusPillSvg = `
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(239, 68, 68, 0.22)" stroke="rgba(239, 68, 68, 0.6)" stroke-width="0.75" />
+        <text x="${x}" y="${cardY + 14.5}" fill="#f87171" font-size="8" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.03em">🔴 LIVE · ${scoreInfo.home} - ${scoreInfo.away}</text>
+      `;
+    } else {
+      statusPillSvg = `
+        <rect x="${cardX + 4}" y="${cardY + 4}" width="${cardW - 8}" height="14" rx="3" fill="rgba(255, 255, 255, 0.04)" stroke="rgba(255, 255, 255, 0.08)" stroke-width="0.75" />
+        <text x="${x}" y="${cardY + 14.5}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">${timeStr ? `M${it.matchIdx + 1} · ${timeStr}` : `Match ${it.matchIdx + 1}`}</text>
+      `;
+    }
 
     xLabelsSvg += `
-      <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name}">
-        <rect class="chart-match-tick-bg" x="${x - 12}" y="${yBase + 4}" width="24" height="44" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
-        <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 4}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
-        <image href="${homeCrestUrl}" x="${x - 7.5}" y="${yBase + 5}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
-        <text class="chart-axis-tick" x="${x}" y="${yBase + 27}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">vs</text>
-        <image href="${awayCrestUrl}" x="${x - 7.5}" y="${yBase + 30}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
+      <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name} · Click to inspect match details">
+        <!-- Connecting tick line -->
+        <line x1="${x}" y1="${yBase}" x2="${x}" y2="${cardY}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+        
+        <!-- Detailed Match Card Background -->
+        <rect class="chart-match-tick-bg" x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="6" fill="${isLive ? 'rgba(239, 68, 68, 0.08)' : (isPlayed ? 'rgba(15, 23, 42, 0.8)' : 'rgba(15, 23, 42, 0.55)')}" stroke="${isLive ? 'rgba(239, 68, 68, 0.5)' : (isPlayed ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255, 255, 255, 0.08)')}" stroke-width="1" />
+        
+        <!-- Status / Header Pill -->
+        ${statusPillSvg}
+
+        <!-- Crests & Matchup Center -->
+        <image href="${homeCrestUrl}" x="${cardX + 7}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
+        <text x="${x}" y="${cardY + 34}" fill="${scoreInfo.hasScore ? 'var(--accent-cyan)' : 'var(--text-dim)'}" font-size="${scoreInfo.hasScore ? '9.5' : '8'}" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${scoreInfo.hasScore ? `${scoreInfo.home} - ${scoreInfo.away}` : 'vs'}</text>
+        <image href="${awayCrestUrl}" x="${cardX + cardW - 25}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
+
+        <!-- Team Short Codes -->
+        <text x="${cardX + 16}" y="${cardY + 49}" fill="var(--text-main)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${homeShort}</text>
+        <text x="${cardX + cardW - 16}" y="${cardY + 49}" fill="var(--text-main)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${awayShort}</text>
+
+        <!-- Date / Kickoff Footer -->
+        <text x="${x}" y="${cardY + 61}" fill="var(--text-dim)" font-size="7" font-weight="600" text-anchor="middle" font-family="var(--font-main)">${dateStr || `Fixture ${it.matchIdx + 1}`}</text>
       </g>
     `;
   });
@@ -3822,16 +3880,16 @@ function renderGameweekMatchesChart(gw) {
   // Level 2: Spanning GW # bracket
   let gwGroupsSvg = '';
   if (xItems.length > 0) {
-    const xLeft = getX(0) - 10;
-    const xRight = getX(xItems.length - 1) + 10;
-    const yGroup = yBase + 49;
+    const xLeft = getX(0) - (cardW / 2);
+    const xRight = getX(xItems.length - 1) + (cardW / 2);
+    const yGroup = yBase + cardH + 11;
     const midX = (xLeft + xRight) / 2;
 
     gwGroupsSvg += `
       <g class="chart-gw-group-level" data-gw="${gw}">
         <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--accent-purple)" stroke-width="1.2" opacity="0.65" />
-        <rect x="${midX - 30}" y="${yGroup + 6}" width="60" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
-        <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="10" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gw}</text>
+        <rect x="${midX - 55}" y="${yGroup + 6}" width="110" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
+        <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="9.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gw} · ${sortedMatches.length} Matches</text>
       </g>
     `;
   }

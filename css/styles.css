@@ -3261,6 +3261,8 @@ tr.row-out-of-scope:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 .chart-back-btn {
   font-size: 0.78rem;
@@ -3293,6 +3295,8 @@ tr.row-out-of-scope:hover {
   border: 1px solid var(--border-glass);
   color: var(--text-main);
   transition: border-color 0.2s ease;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .chart-gw-dropdown:focus,
 .chart-expand-dropdown:focus,
@@ -3414,6 +3418,14 @@ tr.row-out-of-scope:hover {
 }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .legend-pts { color: var(--accent-green); font-family: var(--font-title); font-size: 0.78rem; margin-left: 2px; }
+
+.chart-match-tick-group { cursor: pointer; }
+.chart-match-tick-group .chart-match-tick-bg { transition: all 0.2s ease; }
+.chart-match-tick-group:hover .chart-match-tick-bg {
+  fill: rgba(56, 189, 248, 0.14) !important;
+  stroke: var(--accent-cyan) !important;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.35));
+}
 
 .chart-marker-group { cursor: pointer; }
 .chart-marker-node { transition: r 0.2s ease, stroke-width 0.2s ease; }
@@ -4381,8 +4393,42 @@ tr.row-out-of-scope:hover {
   }
   .chart-control-group {
     width: 100%;
-    justify-content: space-between;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 8px;
+  }
+  .chart-overview-nav,
+  .chart-drilldown-nav {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 8px;
+  }
+  .chart-overview-nav[style*="display: none"],
+  .chart-drilldown-nav[style*="display: none"] {
+    display: none !important;
+  }
+  .chart-expand-btn-group {
+    display: flex;
+    width: 100%;
+    gap: 4px;
+  }
+  .chart-expand-toggle-btn,
+  .chart-collapse-toggle-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 0.72rem;
+  }
+  .chart-drill-dropdown,
+  .chart-gw-dropdown {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.8rem;
+    padding: 6px 10px;
   }
   .chart-legend-panel {
     flex-direction: column;
@@ -4392,12 +4438,14 @@ tr.row-out-of-scope:hover {
   }
   .chart-type-toggle {
     display: inline-flex;
-    width: auto;
+    width: 100%;
     max-width: 100%;
   }
   .chart-mode-btn {
+    flex: 1 1 0;
+    text-align: center;
     width: auto !important;
-    padding: 5px 10px;
+    padding: 5px 8px;
   }
   .chart-canvas-wrapper {
     overflow-x: auto;
