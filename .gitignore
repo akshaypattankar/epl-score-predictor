@@ -9,3 +9,4 @@ data/*.db
 data/*.db-*
 user_credentials.txt
 passwords.txt
+scratch/

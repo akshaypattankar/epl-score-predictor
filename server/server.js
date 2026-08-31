@@ -3,7 +3,19 @@ import cors from 'cors';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import db, { generatePasscode, getFplCache, setFplCache, getAdminPassword, syncCredentialsFile, getScoringRules, saveScoringRules, resetScoringRules } from './db.js';
+import db, {
+  generatePasscode,
+  getFplCache,
+  setFplCache,
+  getAdminPassword,
+  syncCredentialsFile,
+  getScoringRules,
+  saveScoringRules,
+  resetScoringRules,
+  backupDatabase,
+  listBackups,
+  scheduleNightlyBackup
+} from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -18,6 +30,22 @@ app.get('/api/health', (req, res) => {
 
 // Persistent sessions via SQLite (2-year expiry)
 const SESSION_DURATION_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+const lastSeenThrottle = new Map();
+
+export function touchPlayerLastSeen(playerId) {
+  if (!playerId) return;
+  const now = Date.now();
+  const last = lastSeenThrottle.get(playerId) || 0;
+  // Throttle updates to at most once every 10 seconds per player
+  if (now - last > 10000) {
+    lastSeenThrottle.set(playerId, now);
+    try {
+      db.prepare(`UPDATE players SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?`).run(playerId);
+    } catch (e) {
+      console.warn('Error updating player last_seen_at:', e.message);
+    }
+  }
+}
 
 function getSession(req) {
   const authHeader = req.headers.authorization;
@@ -26,6 +54,9 @@ function getSession(req) {
   const now = Date.now();
   const row = db.prepare('SELECT * FROM sessions WHERE token = ? AND (expires_at IS NULL OR expires_at > ?)').get(token, now);
   if (!row) return null;
+  if (row.player_id) {
+    touchPlayerLastSeen(row.player_id);
+  }
   return {
     role: row.role,
     playerId: row.player_id,
@@ -99,6 +130,13 @@ app.post('/api/auth/admin', (req, res) => {
   const token = 'adm_' + crypto.randomBytes(16).toString('hex');
   saveSession(token, 'admin', player ? player.id : null, player ? player.name : 'Admin', userTimezone);
 
+  if (player) {
+    try {
+      db.prepare('UPDATE players SET last_login_at = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?').run(player.id);
+      lastSeenThrottle.set(player.id, Date.now());
+    } catch (e) {}
+  }
+
   res.json({
     success: true,
     role: 'admin',
@@ -137,6 +175,13 @@ app.post('/api/auth/admin/player', requireAdmin, (req, res) => {
     req.session.token
   );
 
+  if (player) {
+    try {
+      db.prepare('UPDATE players SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?').run(player.id);
+      lastSeenThrottle.set(player.id, Date.now());
+    } catch (e) {}
+  }
+
   res.json({
     success: true,
     role: 'admin',
@@ -166,8 +211,12 @@ app.post('/api/auth/player', (req, res) => {
   }
 
   const userTimezone = timezone || player.timezone || 'UTC';
-  if (timezone && timezone !== player.timezone) {
-    db.prepare('UPDATE players SET timezone = ? WHERE id = ?').run(timezone, player.id);
+  try {
+    db.prepare('UPDATE players SET last_login_at = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP' + (timezone && timezone !== player.timezone ? ', timezone = ?' : '') + ' WHERE id = ?')
+      .run(...(timezone && timezone !== player.timezone ? [timezone, player.id] : [player.id]));
+    lastSeenThrottle.set(player.id, Date.now());
+  } catch (e) {
+    console.warn('Error updating player login timestamp:', e.message);
   }
 
   const token = 'ply_' + crypto.randomBytes(16).toString('hex');
@@ -195,6 +244,18 @@ app.post('/api/auth/timezone', (req, res) => {
     }
   }
   res.json({ success: true, timezone });
+});
+
+app.post('/api/players/activity/ping', (req, res) => {
+  const sess = getSession(req);
+  if (sess && sess.playerId) {
+    try {
+      db.prepare('UPDATE players SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?').run(sess.playerId);
+      lastSeenThrottle.set(sess.playerId, Date.now());
+    } catch (e) {}
+    return res.json({ success: true, player_id: sess.playerId, last_seen_at: new Date().toISOString() });
+  }
+  res.json({ success: false, reason: 'No active player session' });
 });
 
 app.get('/api/auth/verify', (req, res) => {
@@ -503,18 +564,28 @@ app.get('/api/players', (req, res) => {
 
   try {
     const players = db.prepare(`
-      SELECT p.*,
-        COALESCE(json_group_array(gp.group_id), '[]') as group_ids
+      SELECT p.id, p.name, p.passcode, p.timezone, p.last_login_at, p.last_seen_at, p.created_at,
+        COALESCE(json_group_array(gp.group_id), '[]') as group_ids,
+        MAX(pr.updated_at) as last_prediction_at,
+        COUNT(CASE WHEN pr.home_score IS NOT NULL AND pr.away_score IS NOT NULL THEN 1 END) as total_predictions
       FROM players p
       LEFT JOIN group_players gp ON p.id = gp.player_id
+      LEFT JOIN predictions pr ON p.id = pr.player_id
       GROUP BY p.id
       ORDER BY p.name ASC
     `).all();
 
     const formatted = players.map(p => {
+      let groupIds = [];
+      try {
+        groupIds = [...new Set(JSON.parse(p.group_ids).filter(id => id !== null))];
+      } catch (e) {
+        groupIds = [];
+      }
       const pObj = {
         ...p,
-        group_ids: JSON.parse(p.group_ids).filter(id => id !== null)
+        group_ids: groupIds,
+        total_predictions: p.total_predictions || 0
       };
       if (!isAdmin) {
         delete pObj.passcode;
@@ -702,6 +773,12 @@ app.post('/api/predictions', requirePlayerOrAdmin, (req, res) => {
         updated_at = CURRENT_TIMESTAMP
     `);
     stmt.run(match_id, player_id, hScore, aScore);
+
+    try {
+      db.prepare('UPDATE players SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?').run(player_id);
+      lastSeenThrottle.set(Number(player_id), Date.now());
+    } catch (e) {}
+
     res.json({ success: true, match_id, player_id, home_score: hScore, away_score: aScore });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -764,7 +841,27 @@ app.get('/api/svg-assets', (req, res) => {
   }
 });
 
+// ─── DATABASE BACKUPS ENDPOINTS ──────────────────────────────────────────────
+app.post('/api/admin/backups', requireAdmin, async (req, res) => {
+  try {
+    const result = await backupDatabase();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/backups', requireAdmin, (req, res) => {
+  try {
+    const backups = listBackups();
+    res.json(backups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`EPL Predictor Server running on port ${PORT}`);
+  scheduleNightlyBackup();
 });
 

@@ -56,6 +56,8 @@ db.exec(`
     name TEXT UNIQUE NOT NULL,
     passcode TEXT DEFAULT '',
     timezone TEXT DEFAULT 'UTC',
+    last_login_at DATETIME DEFAULT NULL,
+    last_seen_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -180,13 +182,21 @@ try {
     console.log('Adding timezone column to players table...');
     db.exec(`ALTER TABLE players ADD COLUMN timezone TEXT DEFAULT 'UTC';`);
   }
+  if (!playerColumns.some(c => c.name === 'last_login_at')) {
+    console.log('Adding last_login_at column to players table...');
+    db.exec(`ALTER TABLE players ADD COLUMN last_login_at DATETIME DEFAULT NULL;`);
+  }
+  if (!playerColumns.some(c => c.name === 'last_seen_at')) {
+    console.log('Adding last_seen_at column to players table...');
+    db.exec(`ALTER TABLE players ADD COLUMN last_seen_at DATETIME DEFAULT NULL;`);
+  }
   const sessionColumns = db.prepare(`PRAGMA table_info(sessions)`).all();
   if (!sessionColumns.some(c => c.name === 'timezone')) {
     console.log('Adding timezone column to sessions table...');
     db.exec(`ALTER TABLE sessions ADD COLUMN timezone TEXT DEFAULT 'UTC';`);
   }
 } catch (e) {
-  console.warn('Timezone column migration check warning:', e.message);
+  console.warn('Timezone/activity columns migration check warning:', e.message);
 }
 
 export function generatePasscode() {
@@ -658,6 +668,143 @@ export function saveScoringRules(rules) {
 
 export function resetScoringRules() {
   return saveScoringRules(DEFAULT_SCORING_RULES);
+}
+
+// ─── DATABASE BACKUP SYSTEM & NIGHTLY SCHEDULER ──────────────────────────────
+/**
+ * Performs a hot, consistent point-in-time snapshot of the SQLite database.
+ * Automatically enforces retention policy to keep the last `maxBackups` daily files.
+ *
+ * @param {string|null} customDir - Optional custom directory path for backups
+ * @param {number} maxBackups - Max number of recent backup files to retain (default: 14)
+ * @returns {Promise<Object>} Backup metadata
+ */
+export async function backupDatabase(customDir = null, maxBackups = 14) {
+  const backupsDir = customDir || path.join(dataDir, 'backups');
+  if (!fs.existsSync(backupsDir)) {
+    fs.mkdirSync(backupsDir, { recursive: true });
+  }
+
+  const now = new Date();
+  const timestamp = now.toISOString().replace(/[:.]/g, '-');
+  const backupFilename = `epl_predictor_backup_${timestamp}.db`;
+  const backupPath = path.join(backupsDir, backupFilename);
+
+  try {
+    // checkpoint WAL to ensure clean snapshot
+    try {
+      db.pragma('wal_checkpoint(PASSIVE)');
+    } catch (e) {
+      console.warn('WAL checkpoint notice:', e.message);
+    }
+
+    // Hot snapshot via better-sqlite3 native backup method
+    await db.backup(backupPath);
+    const stats = fs.statSync(backupPath);
+
+    // Enforce retention policy: prune oldest backups exceeding maxBackups
+    const existingBackups = fs.readdirSync(backupsDir)
+      .filter(f => f.startsWith('epl_predictor_backup_') && f.endsWith('.db'))
+      .map(f => {
+        const fp = path.join(backupsDir, f);
+        return { name: f, path: fp, mtime: fs.statSync(fp).mtimeMs, size: fs.statSync(fp).size };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+
+    let prunedCount = 0;
+    if (existingBackups.length > maxBackups) {
+      const toDelete = existingBackups.slice(maxBackups);
+      toDelete.forEach(f => {
+        try {
+          fs.unlinkSync(f.path);
+          prunedCount++;
+        } catch (err) {
+          console.warn(`Failed to prune old backup ${f.name}:`, err.message);
+        }
+      });
+    }
+
+    const result = {
+      success: true,
+      filename: backupFilename,
+      path: backupPath,
+      sizeBytes: stats.size,
+      sizeFormatted: `${(stats.size / 1024).toFixed(2)} KB`,
+      createdAt: now.toISOString(),
+      retainedBackups: Math.min(existingBackups.length, maxBackups),
+      prunedCount,
+    };
+
+    console.log(`✅ [DB Backup] Successfully created snapshot: ${backupFilename} (${result.sizeFormatted}) [${result.retainedBackups} retained]`);
+    return result;
+  } catch (err) {
+    console.error('❌ [DB Backup] Failed to create database backup:', err);
+    throw err;
+  }
+}
+
+/**
+ * Lists all existing database backups in chronological order.
+ *
+ * @param {string|null} customDir - Optional custom directory path
+ * @returns {Array<Object>} List of backup metadata
+ */
+export function listBackups(customDir = null) {
+  const backupsDir = customDir || path.join(dataDir, 'backups');
+  if (!fs.existsSync(backupsDir)) {
+    return [];
+  }
+
+  return fs.readdirSync(backupsDir)
+    .filter(f => f.startsWith('epl_predictor_backup_') && f.endsWith('.db'))
+    .map(f => {
+      const fp = path.join(backupsDir, f);
+      const stats = fs.statSync(fp);
+      return {
+        filename: f,
+        path: fp,
+        sizeBytes: stats.size,
+        sizeFormatted: `${(stats.size / 1024).toFixed(2)} KB`,
+        createdAt: new Date(stats.mtimeMs).toISOString(),
+        mtime: stats.mtimeMs,
+      };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+}
+
+/**
+ * Initializes automated nightly backup schedule.
+ * Calculates milliseconds until next midnight (00:00) and triggers recurring 24h timer.
+ */
+export function scheduleNightlyBackup() {
+  const scheduleNext = () => {
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0); // Next 00:00:00
+
+    const delayMs = nextMidnight.getTime() - now.getTime();
+    console.log(`⏰ [DB Backup Scheduler] Next automated nightly backup scheduled in ${(delayMs / (1000 * 60 * 60)).toFixed(2)} hours (at ${nextMidnight.toISOString()})`);
+
+    setTimeout(async () => {
+      try {
+        console.log('🌙 [DB Backup Scheduler] Running automated nightly database backup...');
+        await backupDatabase();
+      } catch (err) {
+        console.error('❌ [DB Backup Scheduler] Automated backup encountered error:', err.message);
+      }
+      // Schedule next recurring day
+      setInterval(async () => {
+        try {
+          console.log('🌙 [DB Backup Scheduler] Running automated nightly database backup...');
+          await backupDatabase();
+        } catch (err) {
+          console.error('❌ [DB Backup Scheduler] Automated backup encountered error:', err.message);
+        }
+      }, 24 * 60 * 60 * 1000);
+    }, delayMs);
+  };
+
+  scheduleNext();
 }
 
 export default db;

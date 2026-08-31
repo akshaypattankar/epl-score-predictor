@@ -30,15 +30,17 @@ import {
   resetFplCacheMetaToNormal,
   apiFetchScoringRules,
   apiUpdateScoringRules,
-  apiResetScoringRules
+  apiResetScoringRules,
+  apiPingActivity
 } from './api.js';
 import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
 import { initRulesEditorModal, openRulesEditorModal, renderIconElement, generateLowestScenarioPreset } from './rulesEditor.js';
 import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
+import { renderWhatIfView, renderWhatIfDashboardWidget } from './whatIfStandings.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
-  activeView: 'dashboard', // 'dashboard' | 'scoring' | 'management'
+  activeView: 'dashboard', // 'dashboard' | 'whatif' | 'scoring' | 'management'
   fixtures: {},        // { [gw]: fixture[] }
   gwNumbers: [],
   teams: {},           // team dict with codes & names
@@ -51,6 +53,8 @@ const state = {
   selectedTeam: 'ALL',
   selectedTeams: [],   // Array of selected team names, e.g. ['Arsenal', 'Chelsea']. Empty array [] = All teams
   playerSearchQuery: '',
+  activityFilter: 'all', // 'all' | 'online' | 'today' | 'inactive' | 'never'
+  activitySearchQuery: '',
   timezone: localStorage.getItem('epl_timezone') || 'UTC',
   chartMode: localStorage.getItem('epl_chart_mode') || 'ribbon', // 'ribbon' | 'stepped' | 'linear'
   chartDrilldownGW: null, // null (Season Overview) or number e.g. 1 (isolated drilldown view)
@@ -507,6 +511,7 @@ function renderAuthHeader() {
   const logoutBtn = document.getElementById('authLogoutBtn');
   const guestBanner = document.getElementById('guestNoticeBanner');
   const mgmtBtn = document.getElementById('navManagementBtn');
+  const whatIfBtn = document.getElementById('navWhatIfBtn');
   const groupBox = document.getElementById('groupSelectBox');
   const adminPlayerBox = document.getElementById('adminPlayerBox');
   if (!badge || !loginBtn || !logoutBtn) return;
@@ -519,6 +524,7 @@ function renderAuthHeader() {
     logoutBtn.style.display = 'inline-block';
     if (guestBanner) guestBanner.style.display = 'none';
     if (mgmtBtn) mgmtBtn.style.display = 'inline-flex';
+    if (whatIfBtn) whatIfBtn.style.display = 'inline-flex';
     if (groupBox) groupBox.style.display = 'block';
     if (adminPlayerBox) {
       adminPlayerBox.style.display = 'block';
@@ -531,6 +537,7 @@ function renderAuthHeader() {
     logoutBtn.style.display = 'inline-block';
     if (guestBanner) guestBanner.style.display = 'none';
     if (mgmtBtn) mgmtBtn.style.display = 'none';
+    if (whatIfBtn) whatIfBtn.style.display = 'none';
     if (groupBox) groupBox.style.display = 'block';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   } else {
@@ -540,6 +547,7 @@ function renderAuthHeader() {
     logoutBtn.style.display = 'none';
     if (guestBanner && state.activeView === 'dashboard') guestBanner.style.display = 'flex';
     if (mgmtBtn) mgmtBtn.style.display = 'none';
+    if (whatIfBtn) whatIfBtn.style.display = 'none';
     if (groupBox) groupBox.style.display = 'none';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   }
@@ -614,7 +622,7 @@ function initAuthModalEvents() {
     renderAuthHeader();
     await reloadMasterData();
     renderDashboardComponents();
-    if (state.activeView === 'management') {
+    if (state.activeView === 'management' || state.activeView === 'whatif') {
       state.activeView = 'dashboard';
       renderViewByName('dashboard');
     }
@@ -1070,25 +1078,37 @@ function renderDashboardComponents() {
   renderTeamBreakdown();
   renderCumulativeChart();
   renderModeIndicator();
+  const whatIfContainer = document.getElementById('dashboardWhatIfContainer');
+  if (state.auth.role === 'admin') {
+    if (whatIfContainer) whatIfContainer.style.display = 'block';
+    renderWhatIfDashboardWidget(whatIfContainer, state, () => renderViewByName('whatif'));
+  } else {
+    if (whatIfContainer) {
+      whatIfContainer.innerHTML = '';
+      whatIfContainer.style.display = 'none';
+    }
+  }
   checkAndTriggerLivePolling();
 }
 
 // ─── View Navigation (SPA) ────────────────────────────────────────────────────
 function renderViewByName(targetView) {
-  if (targetView === 'management' && state.auth.role !== 'admin') {
+  if ((targetView === 'management' || targetView === 'whatif') && state.auth.role !== 'admin') {
     targetView = 'dashboard';
   }
   state.activeView = targetView;
   const dashBtn = document.getElementById('navDashboardBtn');
+  const whatIfBtn = document.getElementById('navWhatIfBtn');
   const scoringBtn = document.getElementById('navScoringBtn');
   const mgmtBtn = document.getElementById('navManagementBtn');
 
   const dashView = document.getElementById('dashboardView');
+  const whatIfView = document.getElementById('whatIfView');
   const scoringView = document.getElementById('scoringView');
   const mgmtView = document.getElementById('managementView');
 
-  [dashBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
-  [dashView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
+  [dashBtn, whatIfBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
+  [dashView, whatIfView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
 
   renderAuthHeader();
 
@@ -1096,6 +1116,10 @@ function renderViewByName(targetView) {
     dashBtn?.classList.add('active');
     if (dashView) dashView.style.display = 'block';
     renderDashboardComponents();
+  } else if (targetView === 'whatif') {
+    whatIfBtn?.classList.add('active');
+    if (whatIfView) whatIfView.style.display = 'block';
+    renderWhatIfView(state);
   } else if (targetView === 'scoring') {
     scoringBtn?.classList.add('active');
     if (scoringView) scoringView.style.display = 'block';
@@ -1109,10 +1133,18 @@ function renderViewByName(targetView) {
 
 function initNavigation() {
   const dashBtn = document.getElementById('navDashboardBtn');
+  const whatIfBtn = document.getElementById('navWhatIfBtn');
   const scoringBtn = document.getElementById('navScoringBtn');
   const mgmtBtn = document.getElementById('navManagementBtn');
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
+  whatIfBtn?.addEventListener('click', () => {
+    if (state.auth.role !== 'admin') {
+      renderViewByName('dashboard');
+      return;
+    }
+    renderViewByName('whatif');
+  });
   scoringBtn?.addEventListener('click', () => renderViewByName('scoring'));
   mgmtBtn?.addEventListener('click', () => {
     if (state.auth.role !== 'admin') {
@@ -5354,6 +5386,44 @@ function initManagementEvents() {
     state.playerSearchQuery = e.target.value.toLowerCase().trim();
     renderMasterPlayersTable();
   });
+
+  // Activity Tracker search input
+  document.getElementById('mgmtActivitySearchInput')?.addEventListener('input', (e) => {
+    state.activitySearchQuery = e.target.value.toLowerCase().trim();
+    renderPlayerActivityTable();
+  });
+
+  // Activity Tracker status filter pills
+  const filterPills = document.querySelectorAll('#mgmtActivityStatusFilters .filter-pill');
+  filterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      filterPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.activityFilter = pill.dataset.filter || 'all';
+      renderPlayerActivityTable();
+    });
+  });
+
+  // Activity Tracker refresh button
+  document.getElementById('mgmtRefreshActivityBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mgmtRefreshActivityBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '🔄 Refreshing…';
+    }
+    try {
+      await reloadMasterData();
+      renderPlayerActivityTable();
+      renderMasterPlayersTable();
+    } catch (err) {
+      console.warn('Error refreshing activity data:', err);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🔄 Refresh Timestamps';
+      }
+    }
+  });
 }
 
 function renderManagementPage() {
@@ -5361,6 +5431,7 @@ function renderManagementPage() {
   renderTeamSelectionGrid();
   renderGroupsGrid();
   renderMasterPlayersTable();
+  renderPlayerActivityTable();
 }
 
 function renderGroupsGrid() {
@@ -5573,6 +5644,228 @@ function renderMasterPlayersTable() {
   });
 }
 
+function parseUtcDate(val) {
+  if (!val) return null;
+  if (typeof val === 'number') return new Date(val);
+  let str = String(val).trim();
+  if (!str) return null;
+  if (!str.includes('T')) {
+    str = str.replace(' ', 'T');
+  }
+  if (!str.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += 'Z';
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatActivityTime(val, tz = 'UTC') {
+  const d = parseUtcDate(val);
+  if (!d) return { relative: 'Never', exact: 'No activity recorded' };
+  const now = Date.now();
+  const diffSec = Math.max(0, Math.floor((now - d.getTime()) / 1000));
+  let rel = '';
+  if (diffSec < 60) rel = 'Just now';
+  else if (diffSec < 3600) rel = `${Math.floor(diffSec / 60)}m ago`;
+  else if (diffSec < 86400) rel = `${Math.floor(diffSec / 3600)}h ago`;
+  else if (diffSec < 86400 * 7) rel = `${Math.floor(diffSec / 86400)}d ago`;
+  else rel = `${Math.floor(diffSec / (86400 * 7))}w ago`;
+
+  try {
+    const exact = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz || 'UTC',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    }).format(d);
+    return { relative: rel, exact };
+  } catch (e) {
+    return { relative: rel, exact: d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC' };
+  }
+}
+
+function getPlayerStatusInfo(player) {
+  const now = Date.now();
+  const dSeen = parseUtcDate(player.last_seen_at);
+  const dLogin = parseUtcDate(player.last_login_at);
+  const dPred = parseUtcDate(player.last_prediction_at);
+
+  const effectiveDate = dSeen || dLogin || dPred;
+  if (!effectiveDate) {
+    return {
+      status: 'never',
+      label: 'Never Logged In',
+      badgeClass: 'badge-never',
+      dot: '⚠️'
+    };
+  }
+
+  const diffMin = (now - effectiveDate.getTime()) / (1000 * 60);
+
+  if (diffMin <= 15) {
+    return {
+      status: 'online',
+      label: 'Active Now',
+      badgeClass: 'badge-online',
+      dot: '<span class="status-pulse-dot"></span>'
+    };
+  } else if (diffMin <= 24 * 60) {
+    return {
+      status: 'today',
+      label: 'Active Today',
+      badgeClass: 'badge-today',
+      dot: '🟡'
+    };
+  } else {
+    return {
+      status: 'inactive',
+      label: 'Inactive',
+      badgeClass: 'badge-inactive',
+      dot: '⚪'
+    };
+  }
+}
+
+function renderPlayerActivityTable() {
+  const tbody = document.getElementById('mgmtPlayerActivityBody');
+  if (!tbody) return;
+
+  const totalPlayers = state.masterPlayers.length;
+  let activeNowCount = 0;
+  let active24hCount = 0;
+  let totalPredictionsCount = 0;
+
+  const playerStatuses = new Map();
+  for (const p of state.masterPlayers) {
+    const statusInfo = getPlayerStatusInfo(p);
+    playerStatuses.set(p.id, statusInfo);
+
+    if (statusInfo.status === 'online') {
+      activeNowCount++;
+      active24hCount++;
+    } else if (statusInfo.status === 'today') {
+      active24hCount++;
+    }
+    totalPredictionsCount += (p.total_predictions || 0);
+  }
+
+  // Update Summary Metric Counters
+  const elTotal = document.getElementById('statTotalPlayers');
+  const elNow = document.getElementById('statActiveNow');
+  const el24h = document.getElementById('statActive24h');
+  const elPred = document.getElementById('statTotalPredictions');
+  if (elTotal) elTotal.textContent = totalPlayers;
+  if (elNow) elNow.textContent = activeNowCount;
+  if (el24h) el24h.textContent = active24hCount;
+  if (elPred) elPred.textContent = totalPredictionsCount;
+
+  // Filter players
+  let filtered = [...state.masterPlayers];
+
+  if (state.activityFilter && state.activityFilter !== 'all') {
+    filtered = filtered.filter(p => {
+      const s = playerStatuses.get(p.id);
+      return s && s.status === state.activityFilter;
+    });
+  }
+
+  if (state.activitySearchQuery) {
+    const q = state.activitySearchQuery.toLowerCase();
+    filtered = filtered.filter(p => p.name.toLowerCase().includes(q));
+  }
+
+  // Sort: active/online first, then most recently seen, then alphabetically
+  filtered.sort((a, b) => {
+    const dA = parseUtcDate(a.last_seen_at || a.last_login_at || a.last_prediction_at);
+    const dB = parseUtcDate(b.last_seen_at || b.last_login_at || b.last_prediction_at);
+    if (dA && dB) return dB.getTime() - dA.getTime();
+    if (dA && !dB) return -1;
+    if (!dA && dB) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const countBadge = document.getElementById('mgmtActivityCountBadge');
+  if (countBadge) {
+    countBadge.textContent = `${filtered.length} of ${totalPlayers} Players`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:28px; color:var(--text-muted);">No player activity records matching current filter.</td></tr>`;
+    return;
+  }
+
+  const userTz = state.timezone || 'UTC';
+
+  tbody.innerHTML = filtered.map(p => {
+    const statusInfo = playerStatuses.get(p.id) || getPlayerStatusInfo(p);
+    const seenInfo = formatActivityTime(p.last_seen_at, userTz);
+    const loginInfo = formatActivityTime(p.last_login_at, userTz);
+    const predInfo = formatActivityTime(p.last_prediction_at, userTz);
+
+    const initial = (p.name || '?').slice(0, 1).toUpperCase();
+    const groupPills = state.groups
+      .filter(g => p.group_ids && p.group_ids.includes(g.id))
+      .map(g => `<span class="group-tag-pill active" style="cursor:default; font-size:0.75rem; padding:2px 8px;">✓ ${g.name}</span>`)
+      .join('') || `<span style="color:var(--text-dim); font-size:0.78rem;">No groups assigned</span>`;
+
+    return `
+      <tr>
+        <td>
+          <div class="player-cell-content">
+            <span class="player-avatar-chip">${initial}</span>
+            <div>
+              <div class="player-name-text">${p.name}</div>
+              <div class="player-tz-text">🌐 ${p.timezone || 'UTC'} • ID #${p.id}</div>
+            </div>
+          </div>
+        </td>
+        <td style="text-align: center;">
+          <span class="status-badge ${statusInfo.badgeClass}">
+            ${statusInfo.dot} ${statusInfo.label}
+          </span>
+        </td>
+        <td>
+          <div class="activity-time-main">${seenInfo.relative}</div>
+          <div class="activity-time-sub" title="Exact Timestamp">${seenInfo.exact}</div>
+        </td>
+        <td>
+          <div class="activity-time-main">${loginInfo.relative}</div>
+          <div class="activity-time-sub" title="Exact Timestamp">${loginInfo.exact}</div>
+        </td>
+        <td>
+          <div class="activity-time-main">${predInfo.relative !== 'Never' ? predInfo.relative : 'No predictions yet'}</div>
+          <div class="activity-time-sub" title="Exact Timestamp">${predInfo.relative !== 'Never' ? predInfo.exact : '—'}</div>
+        </td>
+        <td style="text-align: center;">
+          <span class="activity-pred-pill">
+            ⚽ ${p.total_predictions || 0}
+          </span>
+        </td>
+        <td>
+          <div class="group-tag-pill-container">
+            ${groupPills}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function startActivityHeartbeat() {
+  setInterval(async () => {
+    if (state.auth.role === 'player' || (state.auth.role === 'admin' && state.auth.activePlayerId)) {
+      if (!document.hidden) {
+        await apiPingActivity();
+      }
+    }
+  }, 60_000);
+}
+
 function initCopyBtn() {
   document.getElementById('copyLeaderboardBtn')?.addEventListener('click', () => {
     const lb = calcLeaderboard();
@@ -5695,6 +5988,7 @@ async function init() {
   initScoreSimulator();
   initCopyBtn();
   startLockRefresh();
+  startActivityHeartbeat();
   initPointsTooltip();
 
   document.getElementById('matrixBody').innerHTML = `

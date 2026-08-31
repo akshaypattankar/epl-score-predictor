@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "backup": "node server/backup.js",
+    "backup:list": "node server/backup.js --list",
     "dump-credentials": "node server/dump_credentials.js"
   },
   "dependencies": {

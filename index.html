@@ -40,8 +40,15 @@
 
         <!-- Main Navigation View Tabs -->
         <nav class="nav-view-tabs">
-          <button class="nav-tab active" id="navDashboardBtn">📊 Dashboard</button>
-          <button class="nav-tab" id="navScoringBtn">📖 Rules</button>
+          <button class="nav-tab active" id="navDashboardBtn">
+            <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" /> Dashboard
+          </button>
+          <button class="nav-tab" id="navWhatIfBtn" style="display: none;">
+            <span class="nav-tab-icon" style="font-size: 1.1rem; line-height: 1; display: inline-block;">🔮</span> What-If Standings
+          </button>
+          <button class="nav-tab" id="navScoringBtn">
+            <img src="assets/report/rules.png" alt="Rules" class="nav-tab-icon" /> Rules
+          </button>
           <button class="nav-tab" id="navManagementBtn" style="display: none;">⚙️ Manage Leagues & Players</button>
         </nav>
 
@@ -354,18 +361,28 @@
         </div>
       </section>
 
+      <!-- WHAT-IF LEAGUE STANDINGS DASHBOARD SNAPSHOT WIDGET -->
+      <div id="dashboardWhatIfContainer"></div>
+
     </div><!-- /#dashboardView -->
 
     <!-- ═════════════════════════════════════════════════════ -->
-    <!-- ── VIEW 2: SCORING & RULES EXPLAINER PAGE ─────────── -->
+    <!-- ── VIEW 2: WHAT-IF LEAGUE STANDINGS SIMULATOR ─────── -->
+    <!-- ═════════════════════════════════════════════════════ -->
+    <div id="whatIfView" style="display: none;">
+      <!-- Rendered dynamically by whatIfStandings.js -->
+    </div>
+
+    <!-- ═════════════════════════════════════════════════════ -->
+    <!-- ── VIEW 3: SCORING & RULES EXPLAINER PAGE ─────────── -->
     <!-- ═════════════════════════════════════════════════════ -->
     <div id="scoringView" style="display: none;">
 
       <!-- Section Header -->
       <div class="mgmt-page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
-            📖 Official Scoring Engine Specification
+          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+            <img src="assets/report/rules.png" alt="Rules" class="page-title-icon" style="width: 28px; height: 28px; object-fit: contain; vertical-align: middle;" /> Official Scoring Engine Specification
           </h2>
           <p style="color: var(--text-muted); font-size: 0.9rem;">
             Learn how predictions earn base points across 6 tiers, plus additive bonus points for high-scoring thrillers
@@ -655,6 +672,93 @@
             </thead>
             <tbody id="mgmtPlayersBody">
               <!-- Rendered dynamically by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PLAYER LAST SEEN & ACTIVITY TRACKER SECTION -->
+      <section class="glass-card" style="margin-top: 24px;">
+        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3>🕒 Player Last Seen & Activity Tracker</h3>
+              <span class="status-live-badge" id="mgmtActivityCountBadge">0 Players</span>
+            </div>
+            <p>Real-time access timestamps, last login dates, and prediction engagement for all players</p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-secondary" id="mgmtRefreshActivityBtn" style="padding: 8px 14px; font-size: 0.85rem;">
+              🔄 Refresh Timestamps
+            </button>
+          </div>
+        </div>
+
+        <!-- Activity Metric Summary Cards -->
+        <div class="activity-summary-grid" id="mgmtActivitySummaryGrid">
+          <div class="activity-stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-details">
+              <span class="stat-val" id="statTotalPlayers">0</span>
+              <span class="stat-lbl">Total Registered</span>
+            </div>
+          </div>
+          <div class="activity-stat-card">
+            <div class="stat-icon">🟢</div>
+            <div class="stat-details">
+              <span class="stat-val" id="statActiveNow">0</span>
+              <span class="stat-lbl">Online / Active Now</span>
+            </div>
+          </div>
+          <div class="activity-stat-card">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-details">
+              <span class="stat-val" id="statActive24h">0</span>
+              <span class="stat-lbl">Active Past 24h</span>
+            </div>
+          </div>
+          <div class="activity-stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-details">
+              <span class="stat-val" id="statTotalPredictions">0</span>
+              <span class="stat-lbl">Predictions Submitted</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="mgmt-action-row" style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+          <div class="status-filter-pills" id="mgmtActivityStatusFilters">
+            <button class="filter-pill active" data-filter="all">All Players</button>
+            <button class="filter-pill" data-filter="online">🟢 Active Now (&lt; 15m)</button>
+            <button class="filter-pill" data-filter="today">🟡 Active Today (&lt; 24h)</button>
+            <button class="filter-pill" data-filter="inactive">⚪ Inactive / Idle</button>
+            <button class="filter-pill" data-filter="never">⚠️ Never Logged In</button>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-muted);">Search:</span>
+            <input type="text" id="mgmtActivitySearchInput" class="form-input" placeholder="Search player name..."
+              style="max-width: 200px; padding: 6px 10px; font-size: 0.85rem;" />
+          </div>
+        </div>
+
+        <!-- Activity Table -->
+        <div class="table-responsive">
+          <table class="data-table mgmt-activity-table" id="mgmtPlayerActivityTable">
+            <thead>
+              <tr>
+                <th style="width: 200px;">Player</th>
+                <th style="width: 140px; text-align: center;">Current Status</th>
+                <th style="width: 190px;">Last Seen / Checked</th>
+                <th style="width: 190px;">Last Login</th>
+                <th style="width: 190px;">Last Prediction</th>
+                <th style="width: 110px; text-align: center;">Predictions</th>
+                <th>League Groups</th>
+              </tr>
+            </thead>
+            <tbody id="mgmtPlayerActivityBody">
+              <!-- Populated dynamically by JS -->
             </tbody>
           </table>
         </div>

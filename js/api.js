@@ -1,5 +1,5 @@
 // api.js - Backend API Client & FPL Proxy with Auth & Team Crest Support
-const FALLBACK_TEAMS = {
+export const FALLBACK_TEAMS = {
   1: 'Arsenal', 2: 'Aston Villa', 3: 'Bournemouth', 4: 'Brentford', 5: 'Brighton',
   6: 'Chelsea', 7: 'Crystal Palace', 8: 'Everton', 9: 'Fulham', 10: 'Ipswich Town',
   11: 'Leicester City', 12: 'Liverpool', 13: 'Man City', 14: 'Man United',
@@ -7,7 +7,7 @@ const FALLBACK_TEAMS = {
   19: 'West Ham', 20: 'Wolves',
 };
 
-const FALLBACK_TEAM_CODES = {
+export const FALLBACK_TEAM_CODES = {
   1: 3, 2: 7, 3: 91, 4: 94, 5: 36,
   6: 8, 7: 31, 8: 11, 9: 54, 10: 40,
   11: 13, 12: 14, 13: 43, 14: 1, 15: 4,
@@ -199,6 +199,20 @@ export async function apiResetPasscode(playerId) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to reset passcode');
   return data;
+}
+
+export async function apiPingActivity() {
+  const token = getAuthToken();
+  if (!token) return { success: false };
+  try {
+    const res = await fetch('/api/players/activity/ping', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    });
+    return await res.json();
+  } catch (err) {
+    return { success: false };
+  }
 }
 
 // ─── FPL API & CACHE METADATA ───────────────────────────────────────────────
