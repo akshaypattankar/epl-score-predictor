@@ -291,6 +291,64 @@ function isPlayerEditable(playerId) {
   return false;
 }
 
+export function getTimezoneAbbr(tz = state.timezone || 'UTC', d = new Date()) {
+  if (!tz || tz === 'UTC') return 'UTC';
+  if (tz === 'Asia/Kolkata' || tz === 'Asia/Calcutta') return 'IST';
+
+  // 1. Try Intl short timezone name
+  let tzName = '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(d);
+    const p = parts.find(x => x.type === 'timeZoneName');
+    if (p && p.value) {
+      tzName = p.value.trim();
+    }
+  } catch (e) {}
+
+  // If tzName is a standard abbreviation (e.g. 'BST', 'GMT', 'EDT', 'EST', 'CET', 'CEST', 'JST', 'AEST') and not an offset
+  if (tzName && !/^GMT[+-]|^UTC[+-]|^[+-]\d/i.test(tzName)) {
+    return tzName;
+  }
+
+  // 2. Known static map for standard timezone acronyms
+  const KNOWN_TZ_MAP = {
+    'Asia/Kolkata': 'IST',
+    'Asia/Calcutta': 'IST',
+    'Asia/Dubai': 'GST',
+    'Asia/Singapore': 'SGT',
+    'Asia/Tokyo': 'JST',
+    'Africa/Lagos': 'WAT',
+    'Africa/Johannesburg': 'SAST',
+    'America/New_York': 'ET',
+    'America/Chicago': 'CT',
+    'America/Denver': 'MT',
+    'America/Los_Angeles': 'PT',
+    'Europe/Paris': 'CET',
+    'Europe/London': 'UK',
+    'Australia/Sydney': 'AEST',
+    'Pacific/Auckland': 'NZST',
+  };
+
+  if (KNOWN_TZ_MAP[tz]) {
+    return KNOWN_TZ_MAP[tz];
+  }
+
+  // 3. Fallback: extract from #timezoneSelect dropdown option text if available (e.g. "India (IST)" -> "IST")
+  try {
+    const select = document.getElementById('timezoneSelect');
+    if (select) {
+      const opt = select.querySelector(`option[value="${tz}"]`);
+      if (opt && opt.textContent) {
+        const m = opt.textContent.match(/\(([^)]+)\)$/);
+        if (m && m[1]) return m[1].trim();
+      }
+    }
+  } catch (e) {}
+
+  // 4. Return fallback if tzName was found or tz city name
+  return tzName || (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
+}
+
 function formatKO(isoStr) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
@@ -298,20 +356,14 @@ function formatKO(isoStr) {
   try {
     const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
     const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-    let tzName = '';
-    try {
-      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(d);
-      const p = parts.find(x => x.type === 'timeZoneName');
-      if (p) tzName = ' ' + p.value;
-    } catch (e) {
-      tzName = ' ' + (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
-    }
-    return `${datePart} ${timePart}${tzName}`;
+    const tzName = getTimezoneAbbr(tz, d);
+    return `${datePart} ${timePart} ${tzName}`.trim();
   } catch (e) {
     return d.toUTCString().slice(0, 22);
   }
 }
 
+let updateClockTick = null;
 function startClock() {
   const el = document.getElementById('utcClock');
   if (!el) return;
@@ -320,19 +372,13 @@ function startClock() {
     const tz = state.timezone || 'UTC';
     try {
       const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz });
-      let tzName = '';
-      try {
-        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(now);
-        const p = parts.find(x => x.type === 'timeZoneName');
-        if (p) tzName = ' ' + p.value;
-      } catch (e) {
-        tzName = ' ' + (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
-      }
-      el.textContent = `${timeStr}${tzName}`;
+      const tzName = getTimezoneAbbr(tz, now);
+      el.textContent = `${timeStr} ${tzName}`.trim();
     } catch (e) {
       el.textContent = now.toUTCString().split(' ').slice(4, 5)[0] + ' UTC';
     }
   }
+  updateClockTick = tick;
   tick();
   setInterval(tick, 1000);
 }
@@ -609,6 +655,9 @@ function initAuthModalEvents() {
   const closePlayer = document.getElementById('closePlayerModalBtn');
   const closeAdmin = document.getElementById('closeAdminModalBtn');
 
+  const backFromPlayerBtn = document.getElementById('backToChoiceFromPlayerBtn');
+  const backFromAdminBtn = document.getElementById('backToChoiceFromAdminBtn');
+
   const choosePlayerBtn = document.getElementById('choosePlayerLoginBtn');
   const chooseAdminBtn = document.getElementById('chooseAdminLoginBtn');
 
@@ -616,7 +665,15 @@ function initAuthModalEvents() {
   const adminForm = document.getElementById('adminLoginForm');
 
   const openChoiceModal = () => {
-    choiceModal.style.display = 'flex';
+    if (playerModal) playerModal.style.display = 'none';
+    if (adminModal) adminModal.style.display = 'none';
+    if (choiceModal) choiceModal.style.display = 'flex';
+  };
+
+  const closeAllAuthModals = () => {
+    if (choiceModal) choiceModal.style.display = 'none';
+    if (playerModal) playerModal.style.display = 'none';
+    if (adminModal) adminModal.style.display = 'none';
   };
 
   loginBtn?.addEventListener('click', openChoiceModal);
@@ -635,9 +692,25 @@ function initAuthModalEvents() {
     }
   });
 
-  closeChoice?.addEventListener('click', () => choiceModal.style.display = 'none');
-  closePlayer?.addEventListener('click', () => playerModal.style.display = 'none');
-  closeAdmin?.addEventListener('click', () => adminModal.style.display = 'none');
+  closeChoice?.addEventListener('click', () => {
+    if (choiceModal) choiceModal.style.display = 'none';
+  });
+  closePlayer?.addEventListener('click', () => {
+    if (playerModal) playerModal.style.display = 'none';
+  });
+  closeAdmin?.addEventListener('click', () => {
+    if (adminModal) adminModal.style.display = 'none';
+  });
+
+  backFromPlayerBtn?.addEventListener('click', openChoiceModal);
+  backFromAdminBtn?.addEventListener('click', openChoiceModal);
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeAllAuthModals();
+    }
+  });
 
   [choiceModal, playerModal, adminModal].forEach(modal => {
     modal?.addEventListener('click', (e) => {
@@ -646,24 +719,37 @@ function initAuthModalEvents() {
   });
 
   choosePlayerBtn?.addEventListener('click', () => {
-    choiceModal.style.display = 'none';
-    playerModal.style.display = 'flex';
+    if (choiceModal) choiceModal.style.display = 'none';
+    if (playerModal) playerModal.style.display = 'flex';
     const nameInput = document.getElementById('loginPlayerNameInput');
     if (nameInput) {
       nameInput.value = '';
-      nameInput.focus();
+      setTimeout(() => nameInput.focus(), 50);
     }
-    document.getElementById('loginPasscodeInput').value = '';
-    document.getElementById('playerLoginError').style.display = 'none';
+    const passInput = document.getElementById('loginPasscodeInput');
+    if (passInput) passInput.value = '';
+    const errDiv = document.getElementById('playerLoginError');
+    if (errDiv) {
+      errDiv.textContent = '';
+      errDiv.style.display = 'none';
+    }
   });
 
   chooseAdminBtn?.addEventListener('click', () => {
-    choiceModal.style.display = 'none';
-    adminModal.style.display = 'flex';
-    document.getElementById('adminPasswordInput').value = '';
+    if (choiceModal) choiceModal.style.display = 'none';
+    if (adminModal) adminModal.style.display = 'flex';
+    const pwdInput = document.getElementById('adminPasswordInput');
+    if (pwdInput) {
+      pwdInput.value = '';
+      setTimeout(() => pwdInput.focus(), 50);
+    }
     const adminPlayerInput = document.getElementById('adminPlayerNameInput');
     if (adminPlayerInput) adminPlayerInput.value = '';
-    document.getElementById('adminLoginError').style.display = 'none';
+    const errDiv = document.getElementById('adminLoginError');
+    if (errDiv) {
+      errDiv.textContent = '';
+      errDiv.style.display = 'none';
+    }
   });
 
   playerForm?.addEventListener('submit', async (e) => {
@@ -681,21 +767,23 @@ function initAuthModalEvents() {
         const tzSelect = document.getElementById('timezoneSelect');
         if (tzSelect) tzSelect.value = res.timezone;
       }
-      playerModal.style.display = 'none';
+      if (playerModal) playerModal.style.display = 'none';
       renderAuthHeader();
       await reloadMasterData();
       if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
       populateGroupDropdown();
       renderDashboardComponents();
     } catch (err) {
-      errDiv.textContent = err.message;
-      errDiv.style.display = 'block';
+      if (errDiv) {
+        errDiv.textContent = err.message;
+        errDiv.style.display = 'block';
+      }
     }
   });
 
   adminForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pwd = document.getElementById('adminPasswordInput').value;
+    const pwd = document.getElementById('adminPasswordInput')?.value;
     const pName = document.getElementById('adminPlayerNameInput')?.value.trim() || '';
     const errDiv = document.getElementById('adminLoginError');
 
@@ -713,7 +801,7 @@ function initAuthModalEvents() {
         const tzSelect = document.getElementById('timezoneSelect');
         if (tzSelect) tzSelect.value = res.timezone;
       }
-      adminModal.style.display = 'none';
+      if (adminModal) adminModal.style.display = 'none';
       renderAuthHeader();
       await reloadMasterData();
       if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
@@ -724,8 +812,10 @@ function initAuthModalEvents() {
         state.pendingAdminTargetView = null;
       }
     } catch (err) {
-      errDiv.textContent = err.message;
-      errDiv.style.display = 'block';
+      if (errDiv) {
+        errDiv.textContent = err.message;
+        errDiv.style.display = 'block';
+      }
     }
   });
 }
@@ -751,6 +841,9 @@ function initTimezoneSelector() {
   select.addEventListener('change', async (e) => {
     state.timezone = e.target.value;
     localStorage.setItem('epl_timezone', state.timezone);
+    if (typeof updateClockTick === 'function') {
+      updateClockTick();
+    }
     if (state.auth && state.auth.token) {
       await apiSaveTimezone(state.timezone);
     }
@@ -1145,22 +1238,35 @@ function renderViewByName(targetView) {
 
   renderAuthHeader();
 
+  let activeBtn = dashBtn;
   if (targetView === 'dashboard') {
     dashBtn?.classList.add('active');
+    activeBtn = dashBtn;
     if (dashView) dashView.style.display = 'block';
     renderDashboardComponents();
   } else if (targetView === 'whatif') {
     whatIfBtn?.classList.add('active');
+    activeBtn = whatIfBtn;
     if (whatIfView) whatIfView.style.display = 'block';
     renderWhatIfView(state);
   } else if (targetView === 'scoring') {
     scoringBtn?.classList.add('active');
+    activeBtn = scoringBtn;
     if (scoringView) scoringView.style.display = 'block';
     renderScoringViewSummary();
   } else if (targetView === 'management') {
     mgmtBtn?.classList.add('active');
+    activeBtn = mgmtBtn;
     if (mgmtView) mgmtView.style.display = 'block';
     renderManagementPage();
+  }
+
+  // Smoothly scroll active tab into view in nav strip on mobile
+  if (activeBtn) {
+    const navStrip = document.getElementById('navViewTabs');
+    if (navStrip && navStrip.scrollWidth > navStrip.clientWidth) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   }
 }
 
@@ -1169,6 +1275,9 @@ function initNavigation() {
   const whatIfBtn = document.getElementById('navWhatIfBtn');
   const scoringBtn = document.getElementById('navScoringBtn');
   const mgmtBtn = document.getElementById('navManagementBtn');
+
+  const mgmtBackBtn = document.getElementById('mgmtBackToDashboardBtn');
+  const scoringBackBtn = document.getElementById('scoringBackToDashboardBtn');
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
   whatIfBtn?.addEventListener('click', () => {
@@ -1186,6 +1295,9 @@ function initNavigation() {
     }
     renderViewByName('management');
   });
+
+  mgmtBackBtn?.addEventListener('click', () => renderViewByName('dashboard'));
+  scoringBackBtn?.addEventListener('click', () => renderViewByName('dashboard'));
 }
 
 // ─── Group Dropdown ──────────────────────────────────────────────────────────
@@ -2432,6 +2544,11 @@ export function adjustPredictionTeamNames() {
 function attachInputHandlers() {
   document.querySelectorAll('.score-input').forEach(input => {
     input.addEventListener('blur', handleInputBlur);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.blur();
+      }
+    });
     input.addEventListener('input', () => {
       const v = parseInt(input.value, 10);
       if (!isNaN(v) && v < 0) input.value = 0;
@@ -2481,7 +2598,11 @@ async function handleInputBlur(e) {
       setTimeout(() => inp.classList.remove('saved-flash'), 800);
     });
 
-    showSaveToast();
+    if (hVal !== '' || aVal !== '') {
+      showSaveToast('Saved to server', 'success');
+    } else {
+      showSaveToast('Prediction cleared', 'info');
+    }
 
     updatePtsBadge(matchId, playerId);
     updateMatrixTotals();
@@ -2491,7 +2612,7 @@ async function handleInputBlur(e) {
     if (hasActiveTeamFilter()) renderTeamBreakdown();
   } catch (err) {
     console.error('Failed to save prediction to server:', err);
-    alert(err.message);
+    showSaveToast(err.message || 'Failed to save', 'error');
   }
 }
 
@@ -2551,11 +2672,43 @@ function updatePtsBadge(matchId, playerId) {
   }
 }
 
-function showSaveToast() {
+let saveToastTimeout = null;
+function showSaveToast(msg = 'Saved to server', type = 'success') {
   const toast = document.getElementById('saveToast');
   if (!toast) return;
+  const toastMsg = document.getElementById('saveToastMsg');
+  const toastIcon = toast.querySelector('.save-toast-icon');
+
+  if (saveToastTimeout) {
+    clearTimeout(saveToastTimeout);
+    saveToastTimeout = null;
+  }
+
+  toast.className = 'save-toast';
+  if (type === 'error') {
+    toast.classList.add('error');
+    if (toastIcon) toastIcon.textContent = '❌';
+  } else if (type === 'info') {
+    toast.classList.add('info');
+    if (toastIcon) toastIcon.textContent = 'ℹ️';
+  } else {
+    if (toastIcon) toastIcon.textContent = '☁️';
+  }
+
+  if (toastMsg) {
+    toastMsg.textContent = msg;
+  } else {
+    toast.textContent = msg;
+  }
+
+  // Force reflow for smooth re-trigger animation
+  void toast.offsetWidth;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
+
+  saveToastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+    saveToastTimeout = null;
+  }, 2200);
 }
 
 // ─── Render: Full Leaderboard ─────────────────────────────────────────────────
@@ -5816,7 +5969,7 @@ function formatActivityTime(val, tz = 'UTC') {
   else rel = `${Math.floor(diffSec / (86400 * 7))}w ago`;
 
   try {
-    const exact = new Intl.DateTimeFormat('en-GB', {
+    const exactDate = new Intl.DateTimeFormat('en-GB', {
       timeZone: tz || 'UTC',
       day: 'numeric',
       month: 'short',
@@ -5824,10 +5977,10 @@ function formatActivityTime(val, tz = 'UTC') {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: true,
-      timeZoneName: 'short'
+      hour12: true
     }).format(d);
-    return { relative: rel, exact };
+    const tzAbbr = getTimezoneAbbr(tz, d);
+    return { relative: rel, exact: `${exactDate} ${tzAbbr}`.trim() };
   } catch (e) {
     return { relative: rel, exact: d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC' };
   }

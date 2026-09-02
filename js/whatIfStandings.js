@@ -413,7 +413,10 @@ export function renderWhatIfView(appState) {
       </div>
 
       <!-- Quick Export / Action Buttons -->
-      <div style="display: flex; gap: 8px; align-items: center;">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary btn-back-dashboard" id="whatIfBackToDashboardBtn" title="Return to Match Predictions Dashboard" style="font-size: 0.85rem; padding: 8px 14px;">
+          📊 ← Back to Dashboard
+        </button>
         <button class="btn btn-secondary" id="exportWhatIfCsvBtn" title="Download standings comparison as CSV" style="font-size: 0.85rem; padding: 8px 14px;">
           📥 Export CSV
         </button>
@@ -920,6 +923,14 @@ function attachWhatIfEvents(appState) {
       renderWhatIfView(appState);
     });
   });
+
+  // Back to Dashboard
+  const backDashBtn = document.getElementById('whatIfBackToDashboardBtn');
+  if (backDashBtn) {
+    backDashBtn.addEventListener('click', () => {
+      document.getElementById('navDashboardBtn')?.click();
+    });
+  }
 
   // Export CSV
   const exportCsvBtn = document.getElementById('exportWhatIfCsvBtn');

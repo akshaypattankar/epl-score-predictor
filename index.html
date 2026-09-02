@@ -39,17 +39,25 @@
         </div>
 
         <!-- Main Navigation View Tabs -->
-        <nav class="nav-view-tabs">
-          <button class="nav-tab active" id="navDashboardBtn">
-            <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" /> Dashboard
+        <nav class="nav-view-tabs" id="navViewTabs">
+          <button class="nav-tab active" id="navDashboardBtn" title="Predictions Dashboard">
+            <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" />
+            <span class="nav-tab-text">Dashboard</span>
           </button>
-          <button class="nav-tab" id="navWhatIfBtn" style="display: none;">
-            <span class="nav-tab-icon" style="font-size: 1.1rem; line-height: 1; display: inline-block;">🔮</span> What-If Standings
+          <button class="nav-tab" id="navWhatIfBtn" style="display: none;" title="What-If Standings Simulator">
+            <span class="nav-tab-icon" style="font-size: 1.1rem; line-height: 1; display: inline-block;">🔮</span>
+            <span class="nav-tab-text-full">What-If Standings</span>
+            <span class="nav-tab-text-short">What-If</span>
           </button>
-          <button class="nav-tab" id="navScoringBtn">
-            <img src="assets/report/rules.png" alt="Rules" class="nav-tab-icon" /> Rules
+          <button class="nav-tab" id="navScoringBtn" title="Scoring Rules Explainer">
+            <img src="assets/report/rules.png" alt="Rules" class="nav-tab-icon" />
+            <span class="nav-tab-text">Rules</span>
           </button>
-          <button class="nav-tab" id="navManagementBtn" style="display: none;">⚙️ Manage Leagues & Players</button>
+          <button class="nav-tab" id="navManagementBtn" style="display: none;" title="Manage Leagues & Players">
+            <span class="nav-tab-icon" style="font-size: 1.05rem; line-height: 1; display: inline-block;">⚙️</span>
+            <span class="nav-tab-text-full">Manage Leagues & Players</span>
+            <span class="nav-tab-text-short">Manage</span>
+          </button>
         </nav>
 
         <!-- Right Side: Preferences, Auth, Clock -->
@@ -263,7 +271,6 @@
             <tfoot id="matrixFoot"></tfoot>
           </table>
         </div>
-        <div class="save-toast" id="saveToast">✅ Saved to Server</div>
       </section>
 
       <!-- CUMULATIVE PROGRESSION CHART -->
@@ -393,6 +400,9 @@
           </p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-back-dashboard" id="scoringBackToDashboardBtn" title="Return to Match Predictions Dashboard">
+            📊 ← Dashboard
+          </button>
           <button class="btn btn-secondary" id="exportScoringRulesPdfBtn" style="padding: 9px 15px; font-size: 0.88rem;">
             📄 Export PDF
           </button>
@@ -571,7 +581,7 @@
     <div id="managementView" style="display: none;">
 
       <!-- Section Header -->
-      <div class="mgmt-page-header">
+      <div class="mgmt-page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
         <div>
           <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
             ⚙️ League & Player Directory
@@ -579,6 +589,11 @@
           <p style="color: var(--text-muted); font-size: 0.9rem;">
             Manage all participants in your master directory and toggle their league group memberships with one click.
           </p>
+        </div>
+        <div>
+          <button type="button" class="btn btn-secondary btn-back-dashboard" id="mgmtBackToDashboardBtn" title="Return to Match Predictions Dashboard">
+            📊 ← Back to Dashboard
+          </button>
         </div>
       </div>
 
@@ -793,80 +808,127 @@
   <!-- ── AUTHENTICATION MODALS ────────────────────────────────────────── -->
   <!-- Auth Selection Modal -->
   <div class="modal-overlay" id="authChoiceModal" style="display: none;">
-    <div class="modal-card glass-card">
+    <div class="modal-card glass-card auth-modal-card">
       <div class="modal-header">
-        <h3>🔐 Select Login Type</h3>
-        <button class="modal-close-btn" id="closeChoiceModalBtn">✕</button>
+        <div class="modal-title-group">
+          <div class="modal-badge-icon">🔐</div>
+          <div>
+            <h3 class="modal-title">Select Sign-In Mode</h3>
+            <p class="modal-subtitle">Choose how you want to access your Premier League league</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeChoiceModalBtn" aria-label="Close dialog">✕</button>
       </div>
-      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 20px 0;">
-        <button class="btn btn-primary" id="choosePlayerLoginBtn"
-          style="padding: 14px; font-size: 0.95rem; justify-content: center;">
-          ⚽ Player Login (Enter 6-Char Passcode)
-        </button>
-        <button class="btn" id="chooseAdminLoginBtn"
-          style="padding: 14px; font-size: 0.95rem; justify-content: center; background: rgba(255,255,255,0.06); border: 1px solid var(--border-glass);">
-          👑 Admin Mode (Manage Leagues & Passcodes)
-        </button>
+      <div class="modal-body auth-modal-body">
+        <div class="auth-choice-grid">
+          <!-- Player Option Card -->
+          <button type="button" class="auth-choice-card player-choice" id="choosePlayerLoginBtn">
+            <div class="auth-choice-icon-wrap">⚽</div>
+            <div class="auth-choice-info">
+              <div class="auth-choice-title">Player Sign-In</div>
+              <div class="auth-choice-desc">Enter your 6-character passcode to edit match predictions and track your rank.</div>
+            </div>
+            <div class="auth-choice-action">
+              <span class="auth-choice-arrow">→</span>
+            </div>
+          </button>
+
+          <!-- Admin Option Card -->
+          <button type="button" class="auth-choice-card admin-choice" id="chooseAdminLoginBtn">
+            <div class="auth-choice-icon-wrap admin-icon">👑</div>
+            <div class="auth-choice-info">
+              <div class="auth-choice-title">League Admin</div>
+              <div class="auth-choice-desc">Access league management, edit custom scoring rules, and view player passcodes.</div>
+            </div>
+            <div class="auth-choice-action">
+              <span class="auth-choice-arrow">→</span>
+            </div>
+          </button>
+        </div>
+        <div class="auth-modal-note">
+          <span class="auth-note-icon">ℹ️</span>
+          <span class="auth-note-text">Guest mode allows viewing fixtures and public scores. Signing in unlocks predictions.</span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Player Login Modal -->
   <div class="modal-overlay" id="playerLoginModal" style="display: none;">
-    <div class="modal-card glass-card">
+    <div class="modal-card glass-card auth-modal-card">
       <div class="modal-header">
-        <h3>⚽ Player Login</h3>
-        <button class="modal-close-btn" id="closePlayerModalBtn">✕</button>
+        <div class="modal-title-group">
+          <button type="button" class="modal-back-btn" id="backToChoiceFromPlayerBtn" title="Back to login choices" aria-label="Back">←</button>
+          <div class="modal-badge-icon">⚽</div>
+          <div>
+            <h3 class="modal-title">Player Sign-In</h3>
+            <p class="modal-subtitle">Unlock your predictions and compete in mini-leagues</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closePlayerModalBtn" aria-label="Close dialog">✕</button>
       </div>
-      <form id="playerLoginForm" class="modal-body"
-        style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
-        <div>
-          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Your
-            Name:</label>
+      <form id="playerLoginForm" class="modal-body auth-modal-body">
+        <div class="form-group">
+          <label for="loginPlayerNameInput" class="form-label">
+            <span>👤</span> Player Name
+          </label>
           <input type="text" id="loginPlayerNameInput" class="form-input" placeholder="e.g. Alice" required
-            autocomplete="off" />
+            autocomplete="name" />
         </div>
-        <div>
-          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Enter
-            6-Character Passcode:</label>
-          <input type="text" id="loginPasscodeInput" class="form-input" placeholder="K9X2P7" maxlength="6"
-            style="text-transform: uppercase; letter-spacing: 3px; font-weight: 700; font-family: monospace; font-size: 1.1rem; text-align: center;"
-            required />
+        <div class="form-group">
+          <label for="loginPasscodeInput" class="form-label">
+            <span>🔑</span> 6-Character Passcode
+          </label>
+          <input type="text" id="loginPasscodeInput" class="form-input auth-passcode-input" placeholder="K9X2P7" maxlength="6"
+            required autocomplete="off" spellcheck="false" />
+          <span class="form-hint">Case-insensitive code provided by your league admin</span>
         </div>
-        <div id="playerLoginError" style="color: #ff5555; font-size: 0.85rem; display: none; text-align: center;"></div>
-        <button type="submit" class="btn btn-primary"
-          style="margin-top: 8px; justify-content: center; padding: 12px;">Unlock Prediction Editing</button>
+        <div id="playerLoginError" class="auth-error-banner" style="display: none;"></div>
+        <button type="submit" class="btn btn-primary btn-auth-submit" id="playerLoginSubmitBtn">
+          <span>🔓</span> Unlock Prediction Editing
+        </button>
       </form>
     </div>
   </div>
 
   <!-- Admin Login Modal -->
   <div class="modal-overlay" id="adminLoginModal" style="display: none;">
-    <div class="modal-card glass-card">
+    <div class="modal-card glass-card auth-modal-card">
       <div class="modal-header">
-        <h3>👑 Admin Login</h3>
-        <button class="modal-close-btn" id="closeAdminModalBtn">✕</button>
+        <div class="modal-title-group">
+          <button type="button" class="modal-back-btn" id="backToChoiceFromAdminBtn" title="Back to login choices" aria-label="Back">←</button>
+          <div class="modal-badge-icon admin-badge-icon">👑</div>
+          <div>
+            <h3 class="modal-title">League Admin Login</h3>
+            <p class="modal-subtitle">Authenticate for administrative and scoring controls</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeAdminModalBtn" aria-label="Close dialog">✕</button>
       </div>
-      <form id="adminLoginForm" class="modal-body"
-        style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
-        <div>
-          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Admin
-            Password:</label>
+      <form id="adminLoginForm" class="modal-body auth-modal-body">
+        <div class="form-group">
+          <label for="adminPasswordInput" class="form-label">
+            <span>🔒</span> Admin Password
+          </label>
           <input type="password" id="adminPasswordInput" class="form-input" placeholder="Enter admin password..."
-            required />
+            required autocomplete="current-password" />
         </div>
-        <div>
-          <label style="display: block; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-muted);">Participate
-            as Player (Optional):</label>
+        <div class="form-group">
+          <label for="adminPlayerNameInput" class="form-label">
+            <span>👤</span> Participate as Player <span class="label-optional">(Optional)</span>
+          </label>
           <input type="text" id="adminPlayerNameInput" class="form-input"
-            placeholder="e.g. Alice (or leave blank for Admin only)" autocomplete="off" />
+            placeholder="e.g. Alice (leave blank for Admin only)" autocomplete="off" />
+          <span class="form-hint">Allows making predictions while in Admin mode</span>
         </div>
-        <div id="adminLoginError" style="color: #ff5555; font-size: 0.85rem; display: none; text-align: center;"></div>
-        <button type="submit" class="btn btn-primary"
-          style="margin-top: 8px; justify-content: center; padding: 12px;">Authenticate Admin</button>
+        <div id="adminLoginError" class="auth-error-banner" style="display: none;"></div>
+        <button type="submit" class="btn btn-primary btn-auth-submit" id="adminLoginSubmitBtn">
+          <span>👑</span> Authenticate as Admin
+        </button>
       </form>
     </div>
   </div>
+
 
   <!-- ── SCORING RULES EDITOR MODAL ────────────────────────────────────── -->
   <div class="modal-overlay" id="scoringRulesModal" style="display: none;">
@@ -912,6 +974,12 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Global Floating Save / Notification Toast -->
+  <div class="save-toast" id="saveToast" aria-live="polite" role="status">
+    <span class="save-toast-icon">☁️</span>
+    <span class="save-toast-msg" id="saveToastMsg">Saved to Server</span>
   </div>
 
   <!-- Main JS -->
