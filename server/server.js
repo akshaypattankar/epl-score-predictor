@@ -487,17 +487,18 @@ app.get('/api/groups', (req, res) => {
 
 // Create new group (Admin only)
 app.post('/api/groups', requireAdmin, (req, res) => {
-  const { name, teams_filter } = req.body;
+  const { name, teams_filter, start_gw } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Group name is required' });
 
   const filterVal = (Array.isArray(teams_filter) && teams_filter.length > 0)
     ? JSON.stringify(teams_filter)
     : (typeof teams_filter === 'string' ? teams_filter : 'ALL');
+  const startGwVal = (start_gw !== undefined && start_gw !== null && start_gw !== '') ? Math.max(1, Math.min(38, parseInt(start_gw, 10) || 1)) : 1;
 
   try {
-    const stmt = db.prepare('INSERT INTO groups (name, teams_filter) VALUES (?, ?)');
-    const info = stmt.run(name.trim(), filterVal);
-    res.status(201).json({ id: info.lastInsertRowid, name: name.trim(), teams_filter: filterVal, player_count: 0 });
+    const stmt = db.prepare('INSERT INTO groups (name, teams_filter, start_gw) VALUES (?, ?, ?)');
+    const info = stmt.run(name.trim(), filterVal, startGwVal);
+    res.status(201).json({ id: info.lastInsertRowid, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal, player_count: 0 });
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
       return res.status(400).json({ error: 'A group with that name already exists' });
@@ -509,7 +510,7 @@ app.post('/api/groups', requireAdmin, (req, res) => {
 // Rename/Update group (Admin only)
 app.put('/api/groups/:id', requireAdmin, (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  const { name, teams_filter } = req.body;
+  const { name, teams_filter, start_gw } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Group name is required' });
 
   const filterVal = (Array.isArray(teams_filter) && teams_filter.length > 0)
@@ -517,10 +518,20 @@ app.put('/api/groups/:id', requireAdmin, (req, res) => {
     : (typeof teams_filter === 'string' ? teams_filter : 'ALL');
 
   try {
-    const stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ? WHERE id = ?');
-    const result = stmt.run(name.trim(), filterVal, groupId);
-    if (result.changes === 0) return res.status(404).json({ error: 'Group not found' });
-    res.json({ id: groupId, name: name.trim(), teams_filter: filterVal });
+    let stmt, result;
+    if (start_gw !== undefined && start_gw !== null) {
+      const startGwVal = Math.max(1, Math.min(38, parseInt(start_gw, 10) || 1));
+      stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ?, start_gw = ? WHERE id = ?');
+      result = stmt.run(name.trim(), filterVal, startGwVal, groupId);
+      if (result.changes === 0) return res.status(404).json({ error: 'Group not found' });
+      res.json({ id: groupId, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal });
+    } else {
+      stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ? WHERE id = ?');
+      result = stmt.run(name.trim(), filterVal, groupId);
+      if (result.changes === 0) return res.status(404).json({ error: 'Group not found' });
+      const current = db.prepare('SELECT start_gw FROM groups WHERE id = ?').get(groupId);
+      res.json({ id: groupId, name: name.trim(), teams_filter: filterVal, start_gw: current ? current.start_gw : 1 });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

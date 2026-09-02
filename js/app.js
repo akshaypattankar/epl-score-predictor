@@ -55,6 +55,7 @@ const state = {
   playerSearchQuery: '',
   activityFilter: 'all', // 'all' | 'online' | 'today' | 'inactive' | 'never'
   activitySearchQuery: '',
+  leaderboardSortMode: localStorage.getItem('epl_lb_sort_mode') || 'total', // 'total' | 'ppm'
   timezone: localStorage.getItem('epl_timezone') || 'UTC',
   chartMode: localStorage.getItem('epl_chart_mode') || 'ribbon', // 'ribbon' | 'stepped' | 'linear'
   chartDrilldownGW: null, // null (Season Overview) or number e.g. 1 (isolated drilldown view)
@@ -354,11 +355,17 @@ function isTeamInList(teamName, list) {
   return list.some(item => normalizeTeamName(item) === targetNorm);
 }
 
-// Helper: filter fixtures according to active group's teams_filter
+// Helper: filter fixtures according to active group's teams_filter and start_gw
 function filterFixturesByGroup(fixtureList, group = state.activeGroup) {
+  if (!fixtureList || !Array.isArray(fixtureList)) return [];
+  const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
+  let filtered = fixtureList;
+  if (startGw > 1) {
+    filtered = filtered.filter(f => !f.event || Number(f.event) >= startGw);
+  }
   const groupFilter = getGroupTeamsFilter(group);
-  if (!groupFilter) return fixtureList;
-  return fixtureList.filter(f => isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter));
+  if (!groupFilter) return filtered;
+  return filtered.filter(f => isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter));
 }
 
 // Helper: filter fixtures according to active group's teams_filter AND active team filter (selectedTeams)
@@ -783,9 +790,14 @@ function calcLeaderboard() {
       name: p.name,
       color: getPlayerColor(p),
       total: 0,
+      matchesPredicted: 0,
       bullseyes: 0,
       correctOutcomes: 0,
       gwPts: {},
+      firstPredictedGW: null,
+      ppm: 0,
+      ppg: 0,
+      gwsPlayed: 0
     };
     for (const t of SCORING_TIERS) {
       row[`t${t.tier}`] = 0;
@@ -807,6 +819,10 @@ function calcLeaderboard() {
         );
         if (!res) continue;
         r.total += res.total;
+        r.matchesPredicted++;
+        if (r.firstPredictedGW === null || Number(gw) < r.firstPredictedGW) {
+          r.firstPredictedGW = Number(gw);
+        }
         r.gwPts[gw] = (r.gwPts[gw] ?? 0) + res.total;
         if (res.isExactScore) r.bullseyes++;
         if (res.isCorrectOutcome) r.correctOutcomes++;
@@ -818,7 +834,24 @@ function calcLeaderboard() {
     }
   }
 
-  results.sort((a, b) => b.total - a.total || (b.t1 || 0) - (a.t1 || 0) || (b.t2 || 0) - (a.t2 || 0) || (b.t3 || 0) - (a.t3 || 0));
+  // Calculate efficiency metrics (PPM = Points Per Match, PPG = Points Per Gameweek)
+  results.forEach(r => {
+    r.ppm = r.matchesPredicted > 0 ? Number((r.total / r.matchesPredicted).toFixed(2)) : 0;
+    const gwsPlayed = Object.keys(r.gwPts).length;
+    r.gwsPlayed = gwsPlayed;
+    r.ppg = gwsPlayed > 0 ? Number((r.total / gwsPlayed).toFixed(2)) : 0;
+  });
+
+  // Sort primarily by total points, and use PPM as tie breaker (then tier bullseyes / alphabetical name)
+  results.sort((a, b) => 
+    (b.total - a.total) || 
+    (b.ppm - a.ppm) || 
+    (b.t1 || 0) - (a.t1 || 0) || 
+    (b.t2 || 0) - (a.t2 || 0) || 
+    (b.t3 || 0) - (a.t3 || 0) || 
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  );
+
   results.forEach((r, i) => r.rank = i + 1);
   return results;
 }
@@ -1606,21 +1639,32 @@ function renderSnapshot(lb) {
         </div>`
       : '';
 
+    const mainScore = r.total;
+    const mainUnit = 'pts';
+    const statsSubtext = `${r.ppm.toFixed(2)} PPM • ${r.matchesPredicted} MP`;
+
     return `
       <div class="snapshot-card rank-${r.rank} ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
-        <div class="rank-medal-badge rank-${r.rank}" style="background:${shades.badgeBg}; border-color:${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="Rank #${r.rank}">
-          <span class="rank-medal-icon">${medals[r.rank - 1] ?? `#${r.rank}`}</span>
+        <div class="snapshot-avatar-col">
+          <div class="rank-medal-badge rank-${r.rank}" style="background:${shades.badgeBg}; border-color:${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="Rank #${r.rank}">
+            <span class="rank-medal-icon">${medals[r.rank - 1] ?? `#${r.rank}`}</span>
+          </div>
+          ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
         </div>
         <div class="snapshot-info">
           <div class="snapshot-header-row">
             <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${r.name}">${r.name}</span>
           </div>
           <div class="snapshot-pts-row">
-            <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${r.total}</span>
-            <span class="snapshot-pts-unit">pts</span>
-            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+            <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${mainScore}</span>
+            <span class="snapshot-pts-unit">${mainUnit}</span>
           </div>
-          <div class="snapshot-meta">GW ${state.activeGW ?? '?'}</div>
+          <div class="snapshot-stats-row">
+            ${statsSubtext}
+          </div>
+          <div class="snapshot-meta">
+            GW ${state.activeGW ?? '?'}
+          </div>
         </div>
         ${tierChipsHtml}
       </div>
@@ -1834,10 +1878,15 @@ function renderTeamBreakdown() {
           </div>`
         : '';
 
+      const ppmVal = played > 0 ? (pts / played).toFixed(2) : '0.00';
+
       return `
         <div class="snapshot-card ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
-          <div class="rank-medal-badge" style="background: ${shades.badgeBg}; border-color: ${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="${p.name}">
-            <span class="rank-medal-icon" style="font-size: 0.85rem; font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
+          <div class="snapshot-avatar-col">
+            <div class="rank-medal-badge" style="background: ${shades.badgeBg}; border-color: ${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="${p.name}">
+              <span class="rank-medal-icon" style="font-size: 0.85rem; font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
+            </div>
+            ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
           </div>
           <div class="snapshot-info">
             <div class="snapshot-header-row">
@@ -1846,7 +1895,9 @@ function renderTeamBreakdown() {
             <div class="snapshot-pts-row">
               <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${pts}</span>
               <span class="snapshot-pts-unit">pts</span>
-              ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+            </div>
+            <div class="snapshot-stats-row">
+              ${ppmVal} PPM • ${played} MP
             </div>
             <div class="snapshot-meta">${played} match${played === 1 ? '' : 'es'}</div>
           </div>
@@ -1901,8 +1952,12 @@ function renderTeamBreakdown() {
       } else if (scoreInfo.hasScore && !hasPred && (timeLocked || scoreInfo.isLive || scoreInfo.isFinished)) {
         res = { total: 0, tier: 6, isExactScore: false, isCorrectOutcome: false, base: 0, highScoringBonus: 0, drawBonus: 0 };
       }
-
-      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}${scoreInfo.isLive ? ' pts-live' : ''}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}" title="${(scoreInfo.isLive ? '[LIVE] ' : '')}${tierLabel(res.tier)} (${res.total} pts against ${scoreInfo.home}–${scoreInfo.away})">${res.total}</span>` : '';
+      const tierObj = res ? SCORING_TIERS.find(t => t.tier === res.tier) : null;
+      const tierIcon = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 13) : '';
+      const activeBonuses = res?.activeBonuses || [];
+      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+      const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
+      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}${scoreInfo.isLive ? ' pts-live' : ''}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}" title="${(scoreInfo.isLive ? '[LIVE] ' : '')}${tierLabel(res.tier)}${bonusTitles} (${res.total} pts against ${scoreInfo.home}–${scoreInfo.away})"><span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${res.total}</span>${bonusIconsHtml}</span>` : '';
 
       if (!canEdit) {
         return `
@@ -2179,12 +2234,14 @@ function renderMatrix() {
       const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
       const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
       const tierIcon = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
-      const hasBonus = result && (result.highScoringBonus > 0 || result.drawBonus > 0 || result.customBonusesTotal > 0);
+      const activeBonuses = result?.activeBonuses || [];
+      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+      const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
       const ptsText = result
-        ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${result.total}</span>${hasBonus ? '<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px;">🔥</span>' : ''}`
+        ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
         : (locked ? '-' : '?');
       const ptsTitle = result
-        ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
+        ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + bonusTitles + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
         : (locked ? 'Awaiting kickoff' : 'Open for predictions');
 
       const inputTitle = (type, teamName) => {
@@ -2470,12 +2527,14 @@ function updatePtsBadge(matchId, playerId) {
   const ptsClass = result ? `${ptsBadgeClass(result)}${scoreInfo.isLive ? ' pts-live' : ''}` : 'pending';
   const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
   const tierIconHtml = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
-  const hasBonus = result && (result.highScoringBonus > 0 || result.drawBonus > 0 || result.customBonusesTotal > 0);
+  const activeBonuses = result?.activeBonuses || [];
+  const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+  const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
   const badgeInner = result
-    ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIconHtml}</span><span class="pts-val">${result.total}</span>${hasBonus ? '<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px;">🔥</span>' : ''}`
+    ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIconHtml}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
     : (isLocked(fixture) ? '-' : '?');
   const ptsTitle = result
-    ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + (result.highScoringBonus ? ' +🔥' : '') + (result.drawBonus ? ' +✨' : '') + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
+    ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + bonusTitles + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
     : (isLocked(fixture) ? 'Awaiting kickoff' : 'Open for predictions');
 
   badge.className = `pts-badge pts-interactive ${ptsClass}`;
@@ -2508,6 +2567,8 @@ function renderLeaderboard() {
   const leaderboardSubtitle = document.getElementById('leaderboardSubtitle');
   const leaderboardMeta = document.getElementById('leaderboardMeta');
 
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+
   if (leaderboardSubtitle) {
     if (selectedTeams.length === 1) {
       const details = getClubDetails(selectedTeams[0]);
@@ -2515,21 +2576,26 @@ function renderLeaderboard() {
       leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for matches involving ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}`;
     } else if (selectedTeams.length > 1) {
       leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for matches involving ${selectedTeams.length} Selected Teams (${selectedTeams.join(', ')})`;
+    } else if (startGw > 1) {
+      leaderboardSubtitle.textContent = `Active mini-league standings evaluated from Gameweek ${startGw} onwards`;
     } else {
-      leaderboardSubtitle.textContent = `Scoring tier breakdown and total points for active group`;
+      leaderboardSubtitle.textContent = `Scoring tier breakdown, points efficiency, and totals for active group`;
     }
   }
 
   if (leaderboardMeta) {
+    const metaChips = [];
+    if (startGw > 1) {
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-purple);border-color:var(--accent-purple)">🚩 Active: GW ${startGw}+</span>`);
+    }
     if (selectedTeams.length === 1) {
       const details = getClubDetails(selectedTeams[0]);
       const shortLabel = details?.short || details?.shortName || '';
-      leaderboardMeta.innerHTML = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}</span>`;
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}</span>`);
     } else if (selectedTeams.length > 1) {
-      leaderboardMeta.innerHTML = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`;
-    } else {
-      leaderboardMeta.innerHTML = '';
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`);
     }
+    leaderboardMeta.innerHTML = metaChips.join(' ');
   }
 
   const thead = document.getElementById('leaderboardHead') || document.querySelector('#leaderboardTable thead');
@@ -2537,6 +2603,10 @@ function renderLeaderboard() {
     thead.innerHTML = `
       <tr>
         <th class="lb-player-th" style="text-align: left; white-space: nowrap;">Player</th>
+        <th class="lb-mp-th" title="Matches Predicted / Evaluated" style="text-align: center; width: 70px;">
+          <div class="th-tier-title">MP</div>
+          <div class="th-tier-sub">Matches</div>
+        </th>
         ${SCORING_TIERS.map(t => `
           <th class="lb-tier-th" data-tier="${t.tier}" tabindex="0" role="button" aria-label="Tier ${t.tier} Rules: ${t.name}" title="Click or tap to learn what Tier ${t.tier} means">
             <div class="th-tier-title" style="display:flex; align-items:center; justify-content:center; gap:4px;">
@@ -2545,7 +2615,11 @@ function renderLeaderboard() {
             <div class="th-tier-sub">${t.pts} ${t.pts === 1 ? 'pt' : 'pts'}</div>
           </th>
         `).join('')}
-        <th class="lb-total-th" title="Total Cumulative Points">
+        <th class="lb-ppm-th" style="text-align: center; width: 85px;" title="Points Per Match Efficiency Rating (used as tie-breaker)">
+          <div class="th-tier-title">PPM</div>
+          <div class="th-tier-sub">Pts / M</div>
+        </th>
+        <th class="lb-total-th" style="text-align: center; width: 90px;" title="Total Cumulative Points">
           <div class="th-tier-title">Total</div>
           <div class="th-tier-sub">Pts</div>
         </th>
@@ -2556,7 +2630,7 @@ function renderLeaderboard() {
   if (state.auth.role === 'guest') {
     tbody.innerHTML = `
       <tr>
-        <td colspan="${2 + SCORING_TIERS.length}" style="text-align:center; padding: 30px; color: var(--text-muted);">
+        <td colspan="${4 + SCORING_TIERS.length}" style="text-align:center; padding: 30px; color: var(--text-muted);">
           🔒 <strong>Leaderboard Table Hidden for Guests:</strong> Log in with a 6-character player passcode or admin password to view rankings and point totals.
         </td>
       </tr>`;
@@ -2567,7 +2641,7 @@ function renderLeaderboard() {
   if (lb.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="${2 + SCORING_TIERS.length}" style="text-align:center; padding: 24px; color: var(--text-muted);">
+        <td colspan="${4 + SCORING_TIERS.length}" style="text-align:center; padding: 24px; color: var(--text-muted);">
           No player data available for this group.
         </td>
       </tr>`;
@@ -2580,6 +2654,13 @@ function renderLeaderboard() {
     const isYou = state.auth.activePlayerId === r.id;
     const shades = getPlayerColorShades(r);
     const rankDisplay = medals[r.rank - 1] ?? `#${r.rank}`;
+
+    // Late joiner tag if first predicted GW is later than group start GW
+    const isLateJoiner = r.firstPredictedGW && r.firstPredictedGW > startGw;
+    const lateJoinerTag = isLateJoiner
+      ? `<span class="late-joiner-chip" title="First predicted in Gameweek ${r.firstPredictedGW} (${r.matchesPredicted} matches played)">🚩 GW${r.firstPredictedGW}</span>`
+      : '';
+
     return `
       <tr class="${isYou ? 'active-player-row' : ''}" style="${isYou ? `background:${shades.bgSubtle}; border-left:3px solid ${shades.primary};` : ''}">
         <td class="lb-player-cell" style="white-space:nowrap;">
@@ -2587,17 +2668,26 @@ function renderLeaderboard() {
             <span class="lb-rank-badge rank-${r.rank}">${rankDisplay}</span>
             <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;min-width:8px;border-radius:50%;background:${shades.primary};box-shadow:0 0 6px ${shades.glow};flex-shrink:0;"></span>
             <span class="lb-player-name" style="color:${shades.primary};font-weight:700;white-space:nowrap;">${r.name}</span>
+            ${lateJoinerTag}
             ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};flex-shrink:0;">You</span>` : ''}
           </div>
         </td>
+        <td class="lb-mp-cell" title="${r.matchesPredicted} matches predicted">${r.matchesPredicted}</td>
         ${SCORING_TIERS.map(t => {
-      const count = r[`t${t.tier}`] || 0;
-      return `<td class="lb-tier-cell ${count === 0 ? 'lb-zero' : ''}" data-tier="${t.tier}" data-player-name="${r.name}" data-count="${count}" tabindex="0" role="button" aria-label="Tier ${t.tier} (${t.name}) count for ${r.name}: ${count}" title="Click or tap to learn what Tier ${t.tier} (${t.name}) means">${count}</td>`;
-    }).join('')}
+          const count = r[`t${t.tier}`] || 0;
+          return `<td class="lb-tier-cell ${count === 0 ? 'lb-zero' : ''}" data-tier="${t.tier}" data-player-name="${r.name}" data-count="${count}" tabindex="0" role="button" aria-label="Tier ${t.tier} (${t.name}) count for ${r.name}: ${count}" title="Click or tap to learn what Tier ${t.tier} (${t.name}) means">${count}</td>`;
+        }).join('')}
+        <td class="lb-ppm-cell">
+          <span class="lb-ppm-chip" title="${r.ppm.toFixed(2)} average points per match (tie-breaker)">${r.ppm.toFixed(2)}</span>
+        </td>
         <td class="lb-pts">${r.total}</td>
       </tr>
     `;
   }).join('');
+}
+
+function initLeaderboardControls() {
+  // Leaderboard controls placeholder
 }
 
 // ─── Team Abbreviation & Kickoff Helpers ─────────────────────────────────────────
@@ -2670,12 +2760,47 @@ export function getCrestUrl(code) {
   return `assets/team_crests/png_crests/${code}.png`;
 }
 
+export function getDefaultChartExpandedGWs(group = state.activeGroup) {
+  if (!state.gwNumbers || state.gwNumbers.length === 0) return new Set([1]);
+
+  const finishedGWs = [];
+  const upcomingGWs = [];
+
+  for (const gw of state.gwNumbers) {
+    if (isGWFinishedForGroup(gw, group)) {
+      finishedGWs.push(gw);
+    } else {
+      upcomingGWs.push(gw);
+    }
+  }
+
+  const expanded = new Set();
+
+  // 1. Current upcoming gameweek if any (first upcoming/ongoing GW)
+  if (upcomingGWs.length > 0) {
+    expanded.add(upcomingGWs[0]);
+    // 2. Last two finished gameweeks
+    const lastTwoFinished = finishedGWs.slice(-2);
+    lastTwoFinished.forEach(gw => expanded.add(gw));
+  } else {
+    // If all gameweeks are finished (e.g. season concluded), expand last 3 finished GWs
+    const lastThreeFinished = finishedGWs.slice(-3);
+    lastThreeFinished.forEach(gw => expanded.add(gw));
+  }
+
+  if (expanded.size === 0) {
+    const fallback = state.activeGW ? Number(state.activeGW) : (state.gwNumbers[0] ? Number(state.gwNumbers[0]) : 1);
+    expanded.add(fallback);
+  }
+
+  return expanded;
+}
+
 export function toggleChartExpandedGW(gw) {
   if (!isChartExpandable()) return;
   const num = Number(gw);
   if (!state.chartExpandedGWs) {
-    const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
-    state.chartExpandedGWs = new Set([defaultGw]);
+    state.chartExpandedGWs = getDefaultChartExpandedGWs();
   }
   if (state.chartExpandedGWs.has(num)) {
     state.chartExpandedGWs.delete(num);
@@ -2688,17 +2813,7 @@ export function toggleChartExpandedGW(gw) {
 
 export function expandToCurrentGW() {
   if (!isChartExpandable()) return;
-  if (!state.chartExpandedGWs) {
-    state.chartExpandedGWs = new Set();
-  } else {
-    state.chartExpandedGWs.clear();
-  }
-  const currentGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
-  state.gwNumbers.forEach(g => {
-    if (g <= currentGw) {
-      state.chartExpandedGWs.add(g);
-    }
-  });
+  state.chartExpandedGWs = getDefaultChartExpandedGWs();
   renderCumulativeChart();
 }
 
@@ -2838,8 +2953,7 @@ function renderCumulativeChart() {
     if (!expandable) {
       state.chartExpandedGWs = new Set();
     } else if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
-      const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
-      state.chartExpandedGWs = new Set([defaultGw]);
+      state.chartExpandedGWs = getDefaultChartExpandedGWs();
     }
 
     if (drilldownModeSelect) {
@@ -2866,8 +2980,7 @@ function renderAllGameweeksChart() {
   if (!expandable) {
     state.chartExpandedGWs = new Set();
   } else if (state.chartExpandedGWs === null || state.chartExpandedGWs === undefined) {
-    const defaultGw = state.activeGW ? Number(state.activeGW) : (state.gwNumbers?.[0] ? Number(state.gwNumbers[0]) : 1);
-    state.chartExpandedGWs = new Set([defaultGw]);
+    state.chartExpandedGWs = getDefaultChartExpandedGWs();
   }
   const expandedGwList = [...state.chartExpandedGWs].sort((a, b) => a - b);
 
@@ -3095,7 +3208,7 @@ function renderAllGameweeksChart() {
   const yLabelX = 20;
   const yLabelY = padTop + (chartH / 2);
   const yAxisLabelSvg = `
-    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : 'POINTS'}</text>
+    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">CUMULATIVE POINTS</text>
   `;
 
   // 2. X-Axis Baseline & Multilevel Interactive Ticks
@@ -3124,15 +3237,15 @@ function renderAllGameweeksChart() {
       const tickTitle = expandable ? `GW ${it.gw} (Click to expand inline)` : `GW ${it.gw}`;
       xLabelsSvg += `
         <g class="chart-gw-tick-group" data-item-idx="${i}" data-gw="${it.gw}" role="button" tabindex="0" style="${expandable ? 'cursor: pointer;' : 'cursor: default;'}" title="${tickTitle}">
-          <rect class="chart-gw-tick-bg" x="${x - 13}" y="${yBase + 4}" width="26" height="42" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
-          <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 5}" stroke="${isPlayed ? 'var(--accent-purple)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
-          <text class="chart-axis-tick chart-gw-tick-text" x="${x}" y="${yBase + 24}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${it.gw}</text>
+          <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 5}" stroke="${isPlayed ? 'var(--text-muted)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
+          <text class="chart-axis-tick chart-gw-tick-label" x="${x}" y="${yBase + 15}" fill="var(--text-dim)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-main)">GW</text>
+          <text class="chart-axis-tick chart-gw-tick-num" x="${x}" y="${yBase + 27}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-dim)'}" font-size="10.5" font-weight="${isPlayed ? '700' : '500'}" text-anchor="middle" font-family="var(--font-main)">${it.gw}</text>
         </g>
       `;
     }
   });
 
-  // Level 2: Gameweek Grouping Band
+  // Level 2: Gameweek Grouping Band (shown when Gameweeks are expanded to matches)
   let gwGroupsSvg = '';
   const expandedGws = new Set();
   xItems.forEach(it => {
@@ -3154,19 +3267,9 @@ function renderAllGameweeksChart() {
 
       gwGroupsSvg += `
         <g class="chart-gw-group-level" data-gw="${gwNum}" role="button" tabindex="0" style="cursor:pointer;" title="GW ${gwNum} (Click to collapse)" onclick="window.toggleChartExpandedGW(${gwNum})">
-          <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--accent-purple)" stroke-width="1.2" opacity="0.65" />
-          <rect x="${midX - 25}" y="${yGroup + 6}" width="50" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
-          <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="10" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gwNum}</text>
+          <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--border-active)" stroke-width="1.2" opacity="0.65" />
+          <text class="chart-axis-tick" x="${midX}" y="${yGroup + 16}" fill="var(--text-muted)" font-size="10" font-weight="600" text-anchor="middle" font-family="var(--font-main)">GW ${gwNum}</text>
         </g>
-      `;
-    }
-  });
-
-  xItems.forEach((it, i) => {
-    const x = getX(i);
-    if (it.type === 'gw') {
-      gwGroupsSvg += `
-        <text class="chart-axis-tick chart-gw-subtick-text" x="${x}" y="${yBase + 66}" fill="var(--text-dim)" font-size="8" font-weight="700" text-anchor="middle" font-family="var(--font-main)" opacity="0.75">GW</text>
       `;
     }
   });
@@ -3872,7 +3975,7 @@ function renderGameweekMatchesChart(gw) {
   const yLabelX = 20;
   const yLabelY = padTop + (chartH / 2);
   const yAxisLabelSvg = `
-    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">${isRibbon ? 'CUMULATIVE POINTS' : `GW ${gw} POINTS`}</text>
+    <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">CUMULATIVE POINTS</text>
   `;
 
   // 2. X-Axis Baseline & Rich Detailed Match Cards
@@ -3949,9 +4052,8 @@ function renderGameweekMatchesChart(gw) {
 
     gwGroupsSvg += `
       <g class="chart-gw-group-level" data-gw="${gw}">
-        <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--accent-purple)" stroke-width="1.2" opacity="0.65" />
-        <rect x="${midX - 55}" y="${yGroup + 6}" width="110" height="18" rx="4" fill="rgba(168, 85, 247, 0.18)" stroke="rgba(168, 85, 247, 0.55)" stroke-width="1" />
-        <text x="${midX}" y="${yGroup + 19}" fill="#e9d5ff" font-size="9.5" font-weight="800" text-anchor="middle" font-family="var(--font-title)" letter-spacing="0.05em">GW ${gw} · ${sortedMatches.length} Matches</text>
+        <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--border-active)" stroke-width="1.2" opacity="0.65" />
+        <text class="chart-axis-tick" x="${midX}" y="${yGroup + 16}" fill="var(--text-muted)" font-size="9.5" font-weight="600" text-anchor="middle" font-family="var(--font-main)">GW ${gw} · ${sortedMatches.length} Matches</text>
       </g>
     `;
   }
@@ -4635,7 +4737,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       </div>
       <div class="pts-rules-list">
         ${SCORING_BONUSES.map(b => {
-    const isAchieved = breakdown.bonuses && breakdown.bonuses.some(ab => ab.type === b.type);
+    const isAchieved = breakdown.bonuses && breakdown.bonuses.some(ab => ab.id === b.id || ab.type === b.id || ab.name === b.name);
     return `
             <div class="pts-rule-row ${isAchieved ? 'active-tier bonus-row' : 'bonus-row'}">
               <div class="pts-rule-icon-box bonus-box">${renderIconElement(b.icon, b.icon_type, 22)}</div>
@@ -5327,6 +5429,15 @@ function initManagementEvents() {
     });
   });
 
+  // Populate starting gameweek options in group creation form
+  const startGwSelect = document.getElementById('mgmtGroupStartGwSelect');
+  if (startGwSelect && startGwSelect.options.length <= 1) {
+    startGwSelect.innerHTML = `
+      <option value="1" selected>GW 1 (Full Season)</option>
+      ${Array.from({ length: 37 }, (_, i) => i + 2).map(gw => `<option value="${gw}">GW ${gw} (Mid-Season)</option>`).join('')}
+    `;
+  }
+
   document.getElementById('mgmtCreateGroupBtn')?.addEventListener('click', async () => {
     const input = document.getElementById('mgmtNewGroupNameInput');
     const name = input.value.trim();
@@ -5343,8 +5454,10 @@ function initManagementEvents() {
       teamsFilter = selected;
     }
 
+    const startGw = parseInt(document.getElementById('mgmtGroupStartGwSelect')?.value, 10) || 1;
+
     try {
-      const newGroup = await apiCreateGroup(name, teamsFilter);
+      const newGroup = await apiCreateGroup(name, teamsFilter, startGw);
       state.groups.push(newGroup);
       state.activeGroup = newGroup;
       input.value = '';
@@ -5447,6 +5560,8 @@ function renderGroupsGrid() {
     const groupPlayers = state.masterPlayers.filter(p => p.group_ids.includes(g.id));
     const filter = getGroupTeamsFilter(g);
     const scopeLabel = filter ? `🎯 Scope: ${filter.length} Teams (${filter.slice(0, 3).join(', ')}${filter.length > 3 ? '...' : ''})` : '⚽ Scope: All Teams';
+    const startGw = g.start_gw ? Number(g.start_gw) : 1;
+    const startGwLabel = startGw > 1 ? `🚩 Starts: GW ${startGw}` : '🚩 Full Season (GW 1)';
 
     return `
       <div class="mgmt-group-card">
@@ -5457,8 +5572,15 @@ function renderGroupsGrid() {
         <div style="font-size:0.8rem; color:var(--accent-purple); font-weight:600; margin: 4px 0;">
           ${scopeLabel}
         </div>
-        <div style="font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin: 4px 0; font-size:0.82rem;">
+          <span style="color:var(--text-muted); font-weight:600;">Start GW:</span>
+          <select class="control-dropdown mgmt-group-start-gw-select" data-id="${g.id}" style="padding:2px 8px; font-size:0.78rem; min-width:110px;" title="First gameweek counted in this group">
+            ${Array.from({ length: 38 }, (_, i) => i + 1).map(num => `<option value="${num}" ${num === startGw ? 'selected' : ''}>GW ${num}${num === 1 ? ' (Full)' : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-muted); display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
           <span>👥 ${groupPlayers.length} Members</span>
+          <span class="mgmt-group-start-gw-badge">${startGwLabel}</span>
           <span style="color:var(--text-dim);">ID #${g.id}</span>
         </div>
       </div>
@@ -5473,10 +5595,32 @@ function renderGroupsGrid() {
       try {
         const group = state.groups.find(g => g.id === gId);
         const filterVal = group ? group.teams_filter : 'ALL';
-        await apiRenameGroup(gId, val, filterVal);
+        const startGwVal = group ? (group.start_gw || 1) : 1;
+        await apiRenameGroup(gId, val, filterVal, startGwVal);
         if (group) group.name = val;
         populateGroupDropdown();
         renderMasterPlayersTable();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  grid.querySelectorAll('.mgmt-group-start-gw-select').forEach(select => {
+    select.addEventListener('change', async () => {
+      const gId = parseInt(select.dataset.id, 10);
+      const startGwVal = parseInt(select.value, 10) || 1;
+      const group = state.groups.find(g => g.id === gId);
+      if (!group) return;
+      try {
+        const filterVal = group.teams_filter || 'ALL';
+        await apiRenameGroup(gId, group.name, filterVal, startGwVal);
+        group.start_gw = startGwVal;
+        if (state.activeGroup && state.activeGroup.id === gId) {
+          state.activeGroup.start_gw = startGwVal;
+          renderDashboardComponents();
+        }
+        renderGroupsGrid();
       } catch (err) {
         alert(err.message);
       }
@@ -5968,6 +6112,7 @@ async function init() {
   initTimezoneSelector();
   initNavigation();
   initGroupEvents();
+  initLeaderboardControls();
   initGWSkipControls();
   initManagementEvents();
   initChartControls();

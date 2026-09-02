@@ -338,22 +338,22 @@ export async function apiFetchGroups() {
   return res.json();
 }
 
-export async function apiCreateGroup(name, teamsFilter = 'ALL') {
+export async function apiCreateGroup(name, teamsFilter = 'ALL', startGw = 1) {
   const res = await fetch('/api/groups', {
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ name, teams_filter: teamsFilter }),
+    body: JSON.stringify({ name, teams_filter: teamsFilter, start_gw: startGw || 1 }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to create group');
   return data;
 }
 
-export async function apiRenameGroup(id, name, teamsFilter = 'ALL') {
+export async function apiRenameGroup(id, name, teamsFilter = 'ALL', startGw = 1) {
   const res = await fetch(`/api/groups/${id}`, {
     method: 'PUT',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ name, teams_filter: teamsFilter }),
+    body: JSON.stringify({ name, teams_filter: teamsFilter, start_gw: startGw || 1 }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to rename group');

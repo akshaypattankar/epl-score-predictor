@@ -1607,6 +1607,38 @@ body {
   display: block;
 }
 
+.snapshot-avatar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 38px;
+  min-width: 38px;
+}
+.snapshot-avatar-col .rank-medal-badge {
+  margin: 0 auto;
+}
+.snapshot-avatar-col .you-tag-under-avatar {
+  margin: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100%;
+  max-width: 38px;
+  box-sizing: border-box;
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1.5px 2px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+  text-align: center;
+  display: block;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
 .snapshot-info {
   flex: 1 1 auto;
   min-width: 0;
@@ -1635,29 +1667,14 @@ body {
 .snapshot-pts-row {
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
   min-width: 0;
-}
-.snapshot-pts-row .you-tag {
-  margin-left: 3px;
-  padding: 1.5px 5px;
-  font-size: 0.64rem;
   line-height: 1.1;
-  border-radius: 4px;
-  letter-spacing: 0.3px;
-  vertical-align: middle;
-  align-self: center;
-  flex-shrink: 0;
-}
-@container snapshotCard (max-width: 250px) {
-  .snapshot-card .you-tag {
-    display: none !important;
-  }
 }
 .snapshot-pts {
   font-family: var(--font-title);
-  font-size: 1.55rem;
+  font-size: 1.45rem;
   font-weight: 800;
   line-height: 1.1;
   background: linear-gradient(135deg, #ffffff 40%, var(--accent-cyan));
@@ -1674,8 +1691,17 @@ body {
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
+.snapshot-stats-row {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
 .snapshot-meta {
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -2833,6 +2859,73 @@ tr.row-out-of-scope:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── LEADERBOARD STANDINGS & PPM STYLES ── */
+
+.lb-mp-cell {
+  text-align: center;
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lb-ppm-cell {
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lb-ppm-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  color: #38bdf8;
+}
+
+.lb-sorted-column {
+  background: rgba(139, 92, 246, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.15);
+}
+
+.late-joiner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #facc15;
+  letter-spacing: 0.2px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.mgmt-group-start-gw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+}
+
 /* ── MODAL ────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;
@@ -3801,25 +3894,31 @@ tr.row-out-of-scope:hover {
 
 /* ── INTERACTIVE X-AXIS GW & MATCH TICKS ── */
 .chart-gw-tick-group,
-.chart-match-tick-group {
+.chart-match-tick-group,
+.chart-gw-group-level {
   cursor: pointer;
   outline: none;
 }
 
-.chart-gw-tick-bg,
-.chart-match-tick-bg {
+.chart-gw-tick-group text,
+.chart-gw-tick-group line {
   transition: fill 0.2s ease, stroke 0.2s ease;
 }
 
-.chart-gw-tick-group:hover .chart-gw-tick-bg {
-  fill: rgba(168, 85, 247, 0.25);
-  stroke: rgba(168, 85, 247, 0.65);
-  stroke-width: 1px;
+.chart-gw-tick-group:hover text {
+  fill: var(--accent-cyan) !important;
 }
 
-.chart-gw-tick-group:hover .chart-gw-tick-text {
-  fill: #38bdf8 !important;
-  font-weight: 800 !important;
+.chart-gw-tick-group:hover line {
+  stroke: var(--accent-cyan) !important;
+}
+
+.chart-gw-group-level:hover text {
+  fill: var(--text-main) !important;
+}
+
+.chart-match-tick-bg {
+  transition: fill 0.2s ease, stroke 0.2s ease;
 }
 
 .chart-match-tick-group:hover .chart-match-tick-bg {

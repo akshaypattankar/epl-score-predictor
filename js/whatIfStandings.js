@@ -30,6 +30,7 @@ export function calculateLeagueStandings({
   playerId = null,
   mode = 'completed',
   gwLimit = 'all',
+  startGw = 1,
 }) {
   // Initialize standard 20 Premier League teams
   const teamList = Object.keys(teams).length > 0
@@ -67,7 +68,10 @@ export function calculateLeagueStandings({
   let totalFinishedMatches = 0;
 
   const gws = Object.keys(fixtures).map(Number).sort((a, b) => a - b);
-  const activeGws = gwLimit === 'all' ? gws : gws.filter(gw => gw <= Number(gwLimit));
+  let activeGws = gwLimit === 'all' ? gws : gws.filter(gw => gw <= Number(gwLimit));
+  if (startGw && Number(startGw) > 1) {
+    activeGws = activeGws.filter(gw => gw >= Number(startGw));
+  }
 
   activeGws.forEach(gw => {
     const gwFixtures = fixtures[gw] || [];
@@ -387,6 +391,7 @@ export function renderWhatIfView(appState) {
     playerId: selectedPlayer.id,
     mode: whatIfState.mode,
     gwLimit: whatIfState.gwLimit,
+    startGw: (appState.activeGroup && appState.activeGroup.start_gw) ? Number(appState.activeGroup.start_gw) : 1,
   });
 
   // Filter comparison list if user searched for a team
@@ -938,6 +943,7 @@ function exportWhatIfTableToCsv(appState) {
     predictions: appState.predictions,
     playerId: selectedPlayer.id,
     mode: whatIfState.mode,
+    startGw: (appState.activeGroup && appState.activeGroup.start_gw) ? Number(appState.activeGroup.start_gw) : 1,
   });
 
   const headers = ['Simulated_Rank', 'Actual_Rank', 'Rank_Shift', 'Club', 'Played', 'Won', 'Drawn', 'Lost', 'Goals_For', 'Goals_Against', 'Goal_Difference', 'Simulated_Points', 'Actual_Points', 'Points_Diff'];
@@ -994,6 +1000,7 @@ export function renderWhatIfDashboardWidget(containerEl, appState, onOpenWhatIf)
     predictions: appState.predictions,
     playerId: activePlayer.id,
     mode: 'completed',
+    startGw: (appState.activeGroup && appState.activeGroup.start_gw) ? Number(appState.activeGroup.start_gw) : 1,
   });
 
   const top4 = data.simTable.slice(0, 4);

@@ -310,8 +310,8 @@
             <!-- Season Overview Navigation: Expand to Current / Expand All / Collapse All & Drilldown -->
             <div id="chartOverviewNav" class="chart-overview-nav">
               <div class="chart-expand-btn-group">
-                <button type="button" class="chart-expand-toggle-btn" id="chartExpandToCurrentBtn" title="Expand Gameweeks up to current active Gameweek">
-                  ➕ Current GW
+                <button type="button" class="chart-expand-toggle-btn" id="chartExpandToCurrentBtn" title="Expand latest 3 Gameweeks (upcoming and last 2 completed)">
+                  ➕ Latest 3 GWs
                 </button>
                 <button type="button" class="chart-expand-toggle-btn" id="chartExpandAllBtn" title="Expand all 38 Gameweeks across the season">
                   ⚡ Expand All
@@ -344,12 +344,15 @@
 
       <!-- LEADERBOARD -->
       <section class="glass-card" style="margin-top: 24px;">
-        <div class="section-header">
+        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
           <div>
-            <h2>🏆 Leaderboard Table</h2>
-            <p id="leaderboardSubtitle">Scoring tier breakdown and total points for active group</p>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <h2>🏆 Leaderboard Standings</h2>
+              <span class="status-live-badge" id="leaderboardModeBadge" style="display: none;"></span>
+            </div>
+            <p id="leaderboardSubtitle">Scoring tier breakdown, points efficiency, and totals for active group</p>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
             <div id="leaderboardMeta" class="matrix-meta"></div>
           </div>
         </div>
@@ -605,9 +608,15 @@
         </div>
 
         <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
-          <div class="mgmt-action-row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <div class="mgmt-action-row" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
             <input type="text" id="mgmtNewGroupNameInput" class="form-input"
-              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" style="max-width: 320px;" />
+              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" style="max-width: 280px;" />
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label for="mgmtGroupStartGwSelect" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;">🚩 Start:</label>
+              <select id="mgmtGroupStartGwSelect" class="control-dropdown" style="padding: 7px 10px; font-size: 0.82rem; min-width: 130px;" title="Choose the first Gameweek included in this league">
+                <option value="1" selected>GW 1 (Full Season)</option>
+              </select>
+            </div>
             <button class="btn btn-primary" id="mgmtCreateGroupBtn">➕ Create New Group</button>
           </div>
 

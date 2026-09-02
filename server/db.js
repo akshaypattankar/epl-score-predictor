@@ -48,6 +48,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
+    teams_filter TEXT DEFAULT 'ALL',
+    start_gw INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -208,7 +210,7 @@ export function generatePasscode() {
   return code;
 }
 
-// Handle migration for teams_filter column in groups table
+// Handle migration for teams_filter and start_gw columns in groups table
 try {
   const groupColumns = db.prepare(`PRAGMA table_info(groups)`).all();
   const hasTeamsFilter = groupColumns.some(c => c.name === 'teams_filter');
@@ -216,8 +218,13 @@ try {
     console.log('Adding teams_filter column to groups table...');
     db.exec(`ALTER TABLE groups ADD COLUMN teams_filter TEXT DEFAULT 'ALL';`);
   }
+  const hasStartGw = groupColumns.some(c => c.name === 'start_gw');
+  if (!hasStartGw) {
+    console.log('Adding start_gw column to groups table...');
+    db.exec(`ALTER TABLE groups ADD COLUMN start_gw INTEGER DEFAULT 1;`);
+  }
 } catch (e) {
-  console.warn('Teams filter migration check warning:', e.message);
+  console.warn('Groups column migration check warning:', e.message);
 }
 
 // Handle migration for passcode column
