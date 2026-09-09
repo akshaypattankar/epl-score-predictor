@@ -685,6 +685,8 @@ function initAuthModalEvents() {
     state.auth = { role: 'guest', activePlayerId: null, activePlayerName: '', token: null };
     renderAuthHeader();
     await reloadMasterData();
+    if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
+    populateGroupDropdown();
     renderDashboardComponents();
     if (state.activeView === 'management' || state.activeView === 'whatif') {
       state.activeView = 'dashboard';
@@ -955,21 +957,37 @@ async function reloadMasterData() {
     apiFetchGroups(),
     apiFetchMasterPlayers()
   ]);
-  state.groups = groups;
   state.masterPlayers = masterPlayers;
+
+  // Defense-in-depth: if logged in as player, ensure groups list only includes groups the player belongs to
+  if (state.auth.role === 'player' && state.auth.activePlayerId) {
+    const currentMember = masterPlayers.find(p => p.id === state.auth.activePlayerId);
+    if (currentMember && Array.isArray(currentMember.group_ids)) {
+      state.groups = groups.filter(g => currentMember.group_ids.includes(g.id));
+    } else {
+      state.groups = groups;
+    }
+  } else {
+    state.groups = groups;
+  }
 
   if (state.auth.role === 'admin') {
     populateAdminPlayerDropdown();
   }
 
   const savedGroupId = parseInt(localStorage.getItem('epl_active_group_id'), 10);
-  if (savedGroupId && groups.some(g => g.id === savedGroupId)) {
-    state.activeGroup = groups.find(g => g.id === savedGroupId);
-  } else if (!state.activeGroup && groups.length > 0) {
-    state.activeGroup = groups[0];
-  } else if (state.activeGroup) {
-    const existing = groups.find(g => g.id === state.activeGroup.id);
-    state.activeGroup = existing || groups[0] || null;
+  if (savedGroupId && state.groups.some(g => g.id === savedGroupId)) {
+    state.activeGroup = state.groups.find(g => g.id === savedGroupId);
+  } else if (state.groups.length > 0) {
+    state.activeGroup = state.groups[0];
+  } else {
+    state.activeGroup = null;
+  }
+
+  if (state.activeGroup) {
+    localStorage.setItem('epl_active_group_id', state.activeGroup.id);
+  } else {
+    localStorage.removeItem('epl_active_group_id');
   }
 }
 
@@ -1304,6 +1322,13 @@ function initNavigation() {
 function populateGroupDropdown() {
   const select = document.getElementById('groupSelect');
   if (!select) return;
+
+  if (!state.groups || state.groups.length === 0) {
+    select.innerHTML = '<option value="">No Groups Available</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
 
   select.innerHTML = state.groups.map(g => {
     return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>${g.name}</option>`;

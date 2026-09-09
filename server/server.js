@@ -469,16 +469,29 @@ app.get('/api/fpl/fixtures/', async (req, res) => {
 });
 
 // ─── GROUPS ENDPOINTS ───────────────────────────────────────────────────────
-// Get all groups with member counts (Public)
+// Get groups with member counts (Restricted to member groups for players; all groups for admins/guests)
 app.get('/api/groups', (req, res) => {
+  const sess = getSession(req);
   try {
-    const groups = db.prepare(`
-      SELECT g.*, COUNT(gp.player_id) as player_count
-      FROM groups g
-      LEFT JOIN group_players gp ON g.id = gp.group_id
-      GROUP BY g.id
-      ORDER BY g.name ASC
-    `).all();
+    let groups;
+    if (sess && sess.role === 'player' && sess.playerId) {
+      groups = db.prepare(`
+        SELECT g.*, COUNT(gp_all.player_id) as player_count
+        FROM groups g
+        INNER JOIN group_players gp_user ON g.id = gp_user.group_id AND gp_user.player_id = ?
+        LEFT JOIN group_players gp_all ON g.id = gp_all.group_id
+        GROUP BY g.id
+        ORDER BY g.name ASC
+      `).all(sess.playerId);
+    } else {
+      groups = db.prepare(`
+        SELECT g.*, COUNT(gp.player_id) as player_count
+        FROM groups g
+        LEFT JOIN group_players gp ON g.id = gp.group_id
+        GROUP BY g.id
+        ORDER BY g.name ASC
+      `).all();
+    }
     res.json(groups);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -550,9 +563,17 @@ app.delete('/api/groups/:id', requireAdmin, (req, res) => {
   }
 });
 
-// Get players in a specific group (Public)
+// Get players in a specific group (Restricted to group members for players; all groups for admins/guests)
 app.get('/api/groups/:id/players', (req, res) => {
   const groupId = parseInt(req.params.id, 10);
+  const sess = getSession(req);
+  if (sess && sess.role === 'player' && sess.playerId) {
+    const isMember = db.prepare('SELECT 1 FROM group_players WHERE group_id = ? AND player_id = ?').get(groupId, sess.playerId);
+    if (!isMember) {
+      return res.status(403).json({ error: 'You are not authorized to view players for this group' });
+    }
+  }
+
   try {
     const players = db.prepare(`
       SELECT p.id, p.name, p.created_at
@@ -720,6 +741,13 @@ app.delete('/api/players/:id/groups/:groupId', requireAdmin, (req, res) => {
 // Get predictions (If groupId provided, return predictions for all players in that group; otherwise all predictions)
 app.get('/api/predictions', (req, res) => {
   const groupId = req.query.groupId ? parseInt(req.query.groupId, 10) : null;
+  const sess = getSession(req);
+  if (sess && sess.role === 'player' && sess.playerId && groupId) {
+    const isMember = db.prepare('SELECT 1 FROM group_players WHERE group_id = ? AND player_id = ?').get(groupId, sess.playerId);
+    if (!isMember) {
+      return res.status(403).json({ error: 'You are not authorized to view predictions for this group' });
+    }
+  }
 
   try {
     let rows;
@@ -730,6 +758,13 @@ app.get('/api/predictions', (req, res) => {
         INNER JOIN group_players gp ON gp.player_id = p.player_id
         WHERE gp.group_id = ?
       `).all(groupId);
+    } else if (sess && sess.role === 'player' && sess.playerId) {
+      rows = db.prepare(`
+        SELECT DISTINCT p.match_id, p.player_id, p.home_score, p.away_score
+        FROM predictions p
+        INNER JOIN group_players gp_user ON gp_user.player_id = ?
+        INNER JOIN group_players gp_peer ON gp_peer.group_id = gp_user.group_id AND gp_peer.player_id = p.player_id
+      `).all(sess.playerId);
     } else {
       rows = db.prepare(`
         SELECT match_id, player_id, home_score, away_score

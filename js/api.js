@@ -333,7 +333,9 @@ export async function fetchFixtures() {
 
 // ─── GROUPS API ─────────────────────────────────────────────────────────────
 export async function apiFetchGroups() {
-  const res = await fetch('/api/groups');
+  const res = await fetch('/api/groups', {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to fetch groups');
   return res.json();
 }
@@ -433,7 +435,9 @@ export async function apiRemovePlayerFromGroup(playerId, groupId) {
 }
 
 export async function apiFetchGroupPlayers(groupId) {
-  const res = await fetch(`/api/groups/${groupId}/players`);
+  const res = await fetch(`/api/groups/${groupId}/players`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to fetch group players');
   return res.json();
 }
@@ -441,7 +445,9 @@ export async function apiFetchGroupPlayers(groupId) {
 // ─── PREDICTIONS API ────────────────────────────────────────────────────────
 export async function apiFetchPredictions(groupId) {
   const url = groupId ? `/api/predictions?groupId=${groupId}` : '/api/predictions';
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to fetch predictions');
   return res.json();
 }
