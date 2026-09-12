@@ -333,13 +333,13 @@ export function getTimezoneAbbr(tz = state.timezone || 'UTC', d = new Date()) {
     return KNOWN_TZ_MAP[tz];
   }
 
-  // 3. Fallback: extract from #timezoneSelect dropdown option text if available (e.g. "India (IST)" -> "IST")
+  // 3. Fallback: extract from #timezoneSelect dropdown option text if available (e.g. "India (IST, GMT +5.5H)" -> "IST")
   try {
     const select = document.getElementById('timezoneSelect');
     if (select) {
       const opt = select.querySelector(`option[value="${tz}"]`);
       if (opt && opt.textContent) {
-        const m = opt.textContent.match(/\(([^)]+)\)$/);
+        const m = opt.textContent.match(/\(([^,)]+)/);
         if (m && m[1]) return m[1].trim();
       }
     }
@@ -366,16 +366,18 @@ function formatKO(isoStr) {
 let updateClockTick = null;
 function startClock() {
   const el = document.getElementById('utcClock');
-  if (!el) return;
   function tick() {
     const now = new Date();
     const tz = state.timezone || 'UTC';
     try {
       const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz });
       const tzName = getTimezoneAbbr(tz, now);
-      el.textContent = `${timeStr} ${tzName}`.trim();
+      if (el) el.textContent = `${timeStr} ${tzName}`.trim();
     } catch (e) {
-      el.textContent = now.toUTCString().split(' ').slice(4, 5)[0] + ' UTC';
+      if (el) el.textContent = now.toUTCString().split(' ').slice(4, 5)[0] + ' UTC';
+    }
+    if (typeof updateNextGameTick === 'function') {
+      updateNextGameTick();
     }
   }
   updateClockTick = tick;
@@ -465,21 +467,25 @@ function isGWFinishedForGroup(gw, group = state.activeGroup) {
 // Helper: determine auto active GW (advances 48h before next kickoff if current GW in-scope games are finished)
 function getAutoActiveGW(group = state.activeGroup) {
   if (!state.gwNumbers || state.gwNumbers.length === 0) return null;
+  const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
+  const availableGWs = state.gwNumbers.filter(g => Number(g) >= startGw);
+  if (availableGWs.length === 0) return state.gwNumbers[0];
+
   const now = Date.now();
   const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
-  let chosenGW = state.gwNumbers[0];
+  let chosenGW = availableGWs[0];
 
-  for (let i = 0; i < state.gwNumbers.length; i++) {
-    const currentGW = state.gwNumbers[i];
+  for (let i = 0; i < availableGWs.length; i++) {
+    const currentGW = availableGWs[i];
     const isFinished = isGWFinishedForGroup(currentGW, group);
 
     if (!isFinished) {
       return currentGW;
     }
 
-    if (i < state.gwNumbers.length - 1) {
-      const nextGW = state.gwNumbers[i + 1];
+    if (i < availableGWs.length - 1) {
+      const nextGW = availableGWs[i + 1];
       const rawNextFixtures = state.fixtures[nextGW] || [];
       const scopedNextFixtures = filterFixturesByGroup(rawNextFixtures, group);
       const listNext = scopedNextFixtures.length > 0 ? scopedNextFixtures : rawNextFixtures;
@@ -576,8 +582,14 @@ function renderAuthHeader() {
     loginBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-block';
     if (guestBanner) guestBanner.style.display = 'none';
-    if (mgmtBtn) mgmtBtn.style.display = 'inline-flex';
-    if (whatIfBtn) whatIfBtn.style.display = 'inline-flex';
+    if (mgmtBtn) {
+      mgmtBtn.style.display = 'inline-flex';
+      mgmtBtn.classList.remove('is-hidden');
+    }
+    if (whatIfBtn) {
+      whatIfBtn.style.display = 'inline-flex';
+      whatIfBtn.classList.remove('is-hidden');
+    }
     if (groupBox) groupBox.style.display = 'block';
     if (adminPlayerBox) {
       adminPlayerBox.style.display = 'block';
@@ -589,8 +601,14 @@ function renderAuthHeader() {
     loginBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-block';
     if (guestBanner) guestBanner.style.display = 'none';
-    if (mgmtBtn) mgmtBtn.style.display = 'none';
-    if (whatIfBtn) whatIfBtn.style.display = 'none';
+    if (mgmtBtn) {
+      mgmtBtn.style.display = 'none';
+      mgmtBtn.classList.add('is-hidden');
+    }
+    if (whatIfBtn) {
+      whatIfBtn.style.display = 'none';
+      whatIfBtn.classList.add('is-hidden');
+    }
     if (groupBox) groupBox.style.display = 'block';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   } else {
@@ -599,8 +617,14 @@ function renderAuthHeader() {
     loginBtn.style.display = 'inline-block';
     logoutBtn.style.display = 'none';
     if (guestBanner && state.activeView === 'dashboard') guestBanner.style.display = 'flex';
-    if (mgmtBtn) mgmtBtn.style.display = 'none';
-    if (whatIfBtn) whatIfBtn.style.display = 'none';
+    if (mgmtBtn) {
+      mgmtBtn.style.display = 'none';
+      mgmtBtn.classList.add('is-hidden');
+    }
+    if (whatIfBtn) {
+      whatIfBtn.style.display = 'none';
+      whatIfBtn.classList.add('is-hidden');
+    }
     if (groupBox) groupBox.style.display = 'none';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   }
@@ -823,9 +847,47 @@ function initAuthModalEvents() {
 }
 
 // ─── Timezone Selector ────────────────────────────────────────────────────────
+export function getGmtOffsetString(tz, date = new Date()) {
+  if (!tz || tz === 'UTC') return 'GMT +0H';
+  try {
+    const dStr = date.toLocaleString('en-US', { timeZone: tz });
+    const uStr = date.toLocaleString('en-US', { timeZone: 'UTC' });
+    const targetDate = new Date(dStr);
+    const utcDate = new Date(uStr);
+    const diffHours = (targetDate - utcDate) / (1000 * 60 * 60);
+    const sign = diffHours >= 0 ? '+' : '-';
+    const absHours = Math.abs(diffHours);
+    const formattedHours = Number.isInteger(absHours) ? absHours : absHours.toFixed(1);
+    return `GMT ${sign}${formattedHours}H`;
+  } catch (e) {
+    return 'GMT +0H';
+  }
+}
+
+function updateTimezoneOptionsOffsets() {
+  const select = document.getElementById('timezoneSelect');
+  if (!select) return;
+  const now = new Date();
+  Array.from(select.options).forEach(opt => {
+    const tz = opt.value;
+    const offsetStr = getGmtOffsetString(tz, now);
+    if (tz === 'UTC') {
+      opt.textContent = `🌐 UTC (${offsetStr})`;
+    } else if (/\(GMT\s*[+-]?\d+(\.\d+)?H\)/i.test(opt.textContent)) {
+      opt.textContent = opt.textContent.replace(/\(GMT\s*[+-]?\d+(\.\d+)?H\)/i, `(${offsetStr})`);
+    } else if (/\(([^,)]+),\s*GMT\s*[+-]?\d+(\.\d+)?H\)/i.test(opt.textContent)) {
+      opt.textContent = opt.textContent.replace(/,\s*GMT\s*[+-]?\d+(\.\d+)?H/i, `, ${offsetStr}`);
+    } else if (/\(([^)]+)\)$/.test(opt.textContent)) {
+      opt.textContent = opt.textContent.replace(/\(([^)]+)\)$/, `($1, ${offsetStr})`);
+    }
+  });
+}
+
 function initTimezoneSelector() {
   const select = document.getElementById('timezoneSelect');
   if (!select) return;
+
+  updateTimezoneOptionsOffsets();
 
   if (!localStorage.getItem('epl_timezone')) {
     try {
@@ -849,6 +911,7 @@ function initTimezoneSelector() {
     if (state.auth && state.auth.token) {
       await apiSaveTimezone(state.timezone);
     }
+    renderNextGameIndicator();
     renderMatrix();
     renderTeamBreakdown();
   });
@@ -1214,6 +1277,237 @@ function initKickoffAndVisibilityEvents() {
   });
 }
 
+// ─── NEXT GAME COUNTDOWN & INDICATOR ──────────────────────────────────────────
+let currentNextKickoffMs = null;
+let currentNextGameData = null;
+
+export function getNextGameData() {
+  if (!state.fixtures || Object.keys(state.fixtures).length === 0) {
+    return null;
+  }
+
+  const now = Date.now();
+  const selectedTeams = typeof getSelectedTeams === 'function' ? getSelectedTeams() : [];
+  const isTeamFiltered = Array.isArray(selectedTeams) && selectedTeams.length > 0;
+
+  const scopedUpcomingFixtures = [];
+  const allUpcomingFixtures = [];
+  const liveMatches = [];
+
+  for (const [gw, fixtures] of Object.entries(state.fixtures)) {
+    const gwNum = Number(gw);
+    const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+    if (gwNum < startGw) continue;
+
+    for (const f of fixtures) {
+      if (f.finished || f.finished_provisional) continue;
+
+      if (f.started) {
+        liveMatches.push(f);
+      } else if (f.kickoff_time) {
+        const kt = new Date(f.kickoff_time).getTime();
+        if (!isNaN(kt) && kt > now) {
+          const item = { ...f, kickoffMs: kt };
+          allUpcomingFixtures.push(item);
+          const inGroupScope = isFixtureInGroupScope(f);
+          const inTeamScope = !isTeamFiltered || selectedTeams.includes(f.home_name) || selectedTeams.includes(f.away_name);
+          if (inGroupScope && inTeamScope) {
+            scopedUpcomingFixtures.push(item);
+          }
+        }
+      }
+    }
+  }
+
+  const targetUpcoming = scopedUpcomingFixtures.length > 0 ? scopedUpcomingFixtures : allUpcomingFixtures;
+  targetUpcoming.sort((a, b) => a.kickoffMs - b.kickoffMs);
+  allUpcomingFixtures.sort((a, b) => a.kickoffMs - b.kickoffMs);
+
+  if (targetUpcoming.length === 0 && liveMatches.length === 0) {
+    return {
+      allFinished: true,
+      liveMatches: [],
+      nextMatches: [],
+      primaryMatch: null,
+      earliestKickoffMs: null,
+      isFilteredScope: false
+    };
+  }
+
+  const earliestKickoffMs = targetUpcoming.length > 0 ? targetUpcoming[0].kickoffMs : null;
+  const nextMatches = earliestKickoffMs !== null
+    ? targetUpcoming.filter(f => f.kickoffMs === earliestKickoffMs)
+    : [];
+
+  return {
+    allFinished: false,
+    liveMatches,
+    nextMatches,
+    primaryMatch: nextMatches[0] || null,
+    earliestKickoffMs,
+    diffMs: earliestKickoffMs !== null ? Math.max(0, earliestKickoffMs - now) : null,
+    isFilteredScope: scopedUpcomingFixtures.length > 0 && (isTeamFiltered || (state.activeGroup && state.activeGroup.teams_filter && state.activeGroup.teams_filter !== 'ALL'))
+  };
+}
+
+export function formatRemainingTime(diffMs) {
+  if (diffMs === null || isNaN(diffMs)) return '—';
+  if (diffMs <= 0) return 'Kickoff now';
+
+  const totalSec = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  if (days > 0) {
+    return `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+  } else if (hours > 0) {
+    return `${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${pad(seconds)}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+window.selectAndScrollToGameweek = function(gw) {
+  if (!gw) return;
+  const gwNum = Number(gw);
+  state.activeGW = gwNum;
+  localStorage.setItem('epl_active_gw', gwNum);
+  renderGWTabs();
+  renderDashboardComponents();
+  const matrixEl = document.querySelector('.matrix-section');
+  if (matrixEl) {
+    matrixEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+export function renderNextGameIndicator() {
+  const container = document.getElementById('dashboardToolbarMeta');
+  if (!container) return;
+
+  const data = getNextGameData();
+  currentNextGameData = data;
+
+  if (!data) {
+    container.innerHTML = `
+      <div class="next-game-widget is-loading" title="Calculating next match schedule...">
+        <span class="next-game-icon-pulse">⏱️</span>
+        <span class="next-game-status-text">Loading match schedule…</span>
+      </div>
+    `;
+    return;
+  }
+
+  if (data.allFinished) {
+    container.innerHTML = `
+      <div class="next-game-widget is-finished" title="All Premier League matches for this season are completed">
+        <span class="next-game-icon">🏆</span>
+        <span class="next-game-status-text">Season Completed • All matches played</span>
+      </div>
+    `;
+    return;
+  }
+
+  currentNextKickoffMs = data.earliestKickoffMs;
+  const f = data.primaryMatch;
+  const liveCount = data.liveMatches.length;
+
+  let livePillHtml = '';
+  if (liveCount > 0) {
+    const liveFirst = data.liveMatches[0];
+    const liveScore = (liveFirst.actual_home_score !== null && liveFirst.actual_away_score !== null)
+      ? `${liveFirst.actual_home_score}-${liveFirst.actual_away_score}`
+      : 'LIVE';
+    const liveTooltip = data.liveMatches.map(m => `${m.home_name} ${m.actual_home_score ?? 0} - ${m.actual_away_score ?? 0} ${m.away_name} (GW${m.event})`).join('\n');
+    livePillHtml = `
+      <div class="next-game-live-badge" title="${liveTooltip}" onclick="event.stopPropagation(); window.selectAndScrollToGameweek(${liveFirst.event});">
+        <span class="mode-dot live-pulse"></span>
+        <span class="live-tag-text">LIVE</span>
+        <span class="live-match-summary">${liveFirst.home_short || liveFirst.home_name} ${liveScore} ${liveFirst.away_short || liveFirst.away_name}</span>
+      </div>
+    `;
+  }
+
+  if (!f) {
+    container.innerHTML = `
+      <div class="next-game-widget is-live-only" role="button" tabindex="0" onclick="window.selectAndScrollToGameweek(${data.liveMatches[0]?.event})">
+        ${livePillHtml}
+      </div>
+    `;
+    return;
+  }
+
+  const timeRemainingStr = formatRemainingTime(data.diffMs);
+  const koFormatted = formatKO(f.kickoff_time);
+  const moreCount = data.nextMatches.length - 1;
+  const moreTooltip = data.nextMatches.map(m => `${m.home_name} vs ${m.away_name} (GW${m.event})`).join('\n');
+  const scopeTag = data.isFilteredScope ? '<span class="next-game-scope-badge" title="Filtered by active league / team selection">Scoped</span>' : '';
+
+  container.innerHTML = `
+    <div class="next-game-widget ${liveCount > 0 ? 'has-live' : ''}" id="nextGameWidget" role="button" tabindex="0" title="Next Game: ${f.home_name} vs ${f.away_name} (GW ${f.event}) on ${koFormatted}. Click to view GW ${f.event}." onclick="window.selectAndScrollToGameweek(${f.event})" onkeydown="if(event.key==='Enter'||event.key===' ') window.selectAndScrollToGameweek(${f.event})">
+      ${livePillHtml}
+      <div class="next-game-inner">
+        <div class="next-game-row next-game-row-top">
+          <div class="next-game-meta-group">
+            <span class="next-game-tag">
+              <span class="next-game-icon-pulse">⏱️</span>
+              <span class="next-game-tag-text">NEXT GAME</span>
+            </span>
+            <span class="next-game-gw-badge">GW ${f.event}</span>
+            ${scopeTag}
+          </div>
+          <div class="next-game-countdown-wrap">
+            <span class="next-game-countdown" id="nextGameCountdown">in ${timeRemainingStr}</span>
+          </div>
+        </div>
+        <div class="next-game-row next-game-row-bottom">
+          <div class="next-game-matchup-group">
+            <div class="next-game-teams">
+              <span class="next-game-crest-box">${getCrestImg(f.home_code, f.home_name)}</span>
+              <span class="next-game-team-name" title="${f.home_name}">${f.home_short || f.home_name}</span>
+              <span class="next-game-vs-divider">vs</span>
+              <span class="next-game-team-name" title="${f.away_name}">${f.away_short || f.away_name}</span>
+              <span class="next-game-crest-box">${getCrestImg(f.away_code, f.away_name)}</span>
+            </div>
+            ${moreCount > 0 ? `<span class="next-game-more-tag" title="${moreTooltip}">+${moreCount} more</span>` : ''}
+          </div>
+          <div class="next-game-ko-wrap">
+            <span class="next-game-ko-formatted" id="nextGameKoDetail" title="Kickoff in ${state.timezone || 'UTC'}">${koFormatted}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function updateNextGameTick() {
+  if (currentNextKickoffMs !== null) {
+    const diffMs = currentNextKickoffMs - Date.now();
+    if (diffMs <= 0) {
+      renderNextGameIndicator();
+      renderMatrix();
+    } else {
+      const countdownEl = document.getElementById('nextGameCountdown');
+      if (countdownEl) {
+        countdownEl.textContent = `in ${formatRemainingTime(diffMs)}`;
+      }
+      const matrixKoChip = document.getElementById('matrixNextKoChip');
+      if (matrixKoChip) {
+        const nextData = currentNextGameData || getNextGameData();
+        const match = nextData?.primaryMatch;
+        const isThisGW = match && Number(match.event) === Number(state.activeGW);
+        const prefix = isThisGW ? '⏱️ Next Game (This GW)' : (match ? `⏱️ Next Game (GW ${match.event})` : '⏱️ Next Game');
+        matrixKoChip.textContent = `${prefix}: in ${formatRemainingTime(diffMs)}`;
+      }
+    }
+  }
+}
+
 function renderDashboardComponents() {
   checkAutoGWTransition();
   renderMatrix();
@@ -1222,6 +1516,7 @@ function renderDashboardComponents() {
   renderTeamBreakdown();
   renderCumulativeChart();
   renderModeIndicator();
+  renderNextGameIndicator();
   const whatIfContainer = document.getElementById('dashboardWhatIfContainer');
   if (state.auth.role === 'admin') {
     if (whatIfContainer) whatIfContainer.style.display = 'block';
@@ -1680,6 +1975,7 @@ function renderGWTabs() {
   container.innerHTML = '';
 
   const activeNum = Number(state.activeGW);
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
 
   const label = document.getElementById('gwCurrentLabel');
   if (label && state.activeGW) {
@@ -1688,19 +1984,29 @@ function renderGWTabs() {
 
   for (const gw of state.gwNumbers) {
     const isFinished = isGWFinishedForGroup(gw);
+    const isBeforeStartGw = gw < startGw;
     const btn = document.createElement('button');
-    btn.className = `gw-tab${gw === activeNum ? ' active' : ''}${isFinished ? ' completed' : ''}`;
-    btn.innerHTML = isFinished ? `GW ${gw} <span class="gw-tab-check">✓</span>` : `GW ${gw}`;
+    btn.className = `gw-tab${gw === activeNum ? ' active' : ''}${isFinished && !isBeforeStartGw ? ' completed' : ''}${isBeforeStartGw ? ' disabled' : ''}`;
+    btn.innerHTML = (isFinished && !isBeforeStartGw) ? `GW ${gw} <span class="gw-tab-check">✓</span>` : `GW ${gw}`;
     btn.id = `gwTab_${gw}`;
-    if (isFinished) {
+    
+    if (isBeforeStartGw) {
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+      btn.setAttribute('title', `GW ${gw} is not active for this league (League starts in GW ${startGw})`);
+    } else if (isFinished) {
       btn.setAttribute('title', `GW ${gw} (All scoped games finished)`);
     }
-    btn.addEventListener('click', () => {
-      state.activeGW = gw;
-      localStorage.setItem('epl_active_gw', gw);
-      renderGWTabs();
-      renderMatrix();
-    });
+
+    if (!isBeforeStartGw) {
+      btn.addEventListener('click', () => {
+        state.activeGW = gw;
+        localStorage.setItem('epl_active_gw', gw);
+        renderGWTabs();
+        renderMatrix();
+      });
+    }
+
     container.appendChild(btn);
     if (gw === activeNum) {
       setTimeout(() => {
@@ -1713,10 +2019,14 @@ function renderGWTabs() {
 function initGWSkipControls() {
   document.getElementById('gwPrevBtn')?.addEventListener('click', () => {
     if (!state.gwNumbers.length || !state.activeGW) return;
+    const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+    const validGWs = state.gwNumbers.filter(g => Number(g) >= startGw);
+    if (validGWs.length === 0) return;
+
     const activeNum = Number(state.activeGW);
-    const idx = state.gwNumbers.indexOf(activeNum);
+    const idx = validGWs.indexOf(activeNum);
     if (idx > 0) {
-      state.activeGW = state.gwNumbers[idx - 1];
+      state.activeGW = validGWs[idx - 1];
       localStorage.setItem('epl_active_gw', state.activeGW);
       renderGWTabs();
       renderMatrix();
@@ -1725,10 +2035,14 @@ function initGWSkipControls() {
 
   document.getElementById('gwNextBtn')?.addEventListener('click', () => {
     if (!state.gwNumbers.length || !state.activeGW) return;
+    const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+    const validGWs = state.gwNumbers.filter(g => Number(g) >= startGw);
+    if (validGWs.length === 0) return;
+
     const activeNum = Number(state.activeGW);
-    const idx = state.gwNumbers.indexOf(activeNum);
-    if (idx !== -1 && idx < state.gwNumbers.length - 1) {
-      state.activeGW = state.gwNumbers[idx + 1];
+    const idx = validGWs.indexOf(activeNum);
+    if (idx !== -1 && idx < validGWs.length - 1) {
+      state.activeGW = validGWs[idx + 1];
       localStorage.setItem('epl_active_gw', state.activeGW);
       renderGWTabs();
       renderMatrix();
@@ -2235,11 +2549,23 @@ function renderMatrix() {
     ? `<span class="meta-chip" style="color:#ff5572;border-color:rgba(255,85,114,0.4);">⚡ ${live} live</span>`
     : '';
 
+  const nextGameData = typeof getNextGameData === 'function' ? getNextGameData() : null;
+  let matrixNextGameChip = '';
+  if (nextGameData && nextGameData.primaryMatch && nextGameData.diffMs !== null && nextGameData.diffMs > 0) {
+    const match = nextGameData.primaryMatch;
+    const isThisGW = Number(match.event) === Number(state.activeGW);
+    const chipText = isThisGW
+      ? `⏱️ Next Game (This GW): in ${formatRemainingTime(nextGameData.diffMs)}`
+      : `⏱️ Next Game (GW ${match.event}): in ${formatRemainingTime(nextGameData.diffMs)}`;
+    matrixNextGameChip = `<span class="meta-chip next-game-countdown-chip" id="matrixNextKoChip" title="${match.home_name} vs ${match.away_name} • ${formatKO(match.kickoff_time)}" style="color:var(--accent-green);border-color:rgba(0,214,143,0.35);background:rgba(0,214,143,0.08);cursor:pointer;" onclick="window.selectAndScrollToGameweek(${match.event})">${chipText}</span>`;
+  }
+
   document.getElementById('matrixMeta').innerHTML = `
     ${adminChip}
     ${scopeChip}
     ${filterChip}
     ${liveChip}
+    ${matrixNextGameChip}
     <span class="meta-chip">✅ ${completed} completed</span>
     <span class="meta-chip">⏳ ${yetToPlay} yet to play</span>
   `;
@@ -2940,11 +3266,14 @@ export function getCrestUrl(code) {
 
 export function getDefaultChartExpandedGWs(group = state.activeGroup) {
   if (!state.gwNumbers || state.gwNumbers.length === 0) return new Set([1]);
+  const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
+  const activeGWs = state.gwNumbers.filter(g => Number(g) >= startGw);
+  if (activeGWs.length === 0) return new Set([startGw]);
 
   const finishedGWs = [];
   const upcomingGWs = [];
 
-  for (const gw of state.gwNumbers) {
+  for (const gw of activeGWs) {
     if (isGWFinishedForGroup(gw, group)) {
       finishedGWs.push(gw);
     } else {
@@ -2967,7 +3296,7 @@ export function getDefaultChartExpandedGWs(group = state.activeGroup) {
   }
 
   if (expanded.size === 0) {
-    const fallback = state.activeGW ? Number(state.activeGW) : (state.gwNumbers[0] ? Number(state.gwNumbers[0]) : 1);
+    const fallback = (state.activeGW && activeGWs.includes(Number(state.activeGW))) ? Number(state.activeGW) : activeGWs[0];
     expanded.add(fallback);
   }
 
@@ -2977,6 +3306,9 @@ export function getDefaultChartExpandedGWs(group = state.activeGroup) {
 export function toggleChartExpandedGW(gw) {
   if (!isChartExpandable()) return;
   const num = Number(gw);
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+  if (num < startGw) return;
+
   if (!state.chartExpandedGWs) {
     state.chartExpandedGWs = getDefaultChartExpandedGWs();
   }
@@ -3000,7 +3332,8 @@ export function expandAllGWs() {
   if (!state.chartExpandedGWs) {
     state.chartExpandedGWs = new Set();
   }
-  state.gwNumbers.forEach(g => {
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+  state.gwNumbers.filter(g => Number(g) >= startGw).forEach(g => {
     state.chartExpandedGWs.add(g);
   });
   renderCumulativeChart();
@@ -3032,7 +3365,8 @@ export function setChartDrilldown(gw) {
     state.chartDrilldownGW = null;
   } else {
     const num = Number(gw);
-    if (!isNaN(num) && state.gwNumbers.includes(num)) {
+    const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+    if (!isNaN(num) && state.gwNumbers.includes(num) && num >= startGw) {
       state.chartDrilldownGW = num;
     } else {
       state.chartDrilldownGW = null;
@@ -3095,7 +3429,10 @@ function renderCumulativeChart() {
   if (controlsPanel) controlsPanel.style.display = 'flex';
 
   // Check if we are in Isolated Gameweek Drilldown Mode
-  if (state.chartDrilldownGW !== null && state.gwNumbers.includes(Number(state.chartDrilldownGW))) {
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+  const activeGWNumbers = state.gwNumbers.filter(g => Number(g) >= startGw);
+
+  if (state.chartDrilldownGW !== null && activeGWNumbers.includes(Number(state.chartDrilldownGW))) {
     const gw = Number(state.chartDrilldownGW);
 
     if (drilldownBadge) {
@@ -3109,7 +3446,7 @@ function renderCumulativeChart() {
       overviewNav.style.display = 'none';
     }
     if (gwDrillSelect) {
-      gwDrillSelect.innerHTML = state.gwNumbers.map(g => `
+      gwDrillSelect.innerHTML = activeGWNumbers.map(g => `
         <option value="${g}" ${g === gw ? 'selected' : ''}>GW ${g}</option>
       `).join('');
     }
@@ -3137,7 +3474,7 @@ function renderCumulativeChart() {
     if (drilldownModeSelect) {
       drilldownModeSelect.innerHTML = `
         <option value="none" selected>🔍 Drill Down: Off</option>
-        ${state.gwNumbers.map(g => `
+        ${activeGWNumbers.map(g => `
           <option value="${g}">🔍 Drill Down: GW ${g}</option>
         `).join('')}
       `;
@@ -3154,6 +3491,8 @@ function renderAllGameweeksChart() {
   const chartSubtitle = document.getElementById('chartSubtitle');
   const selectedTeams = getSelectedTeams();
   const expandable = isChartExpandable();
+  const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+  const activeGWNumbers = state.gwNumbers.filter(g => Number(g) >= startGw);
 
   if (!expandable) {
     state.chartExpandedGWs = new Set();
@@ -3176,10 +3515,10 @@ function renderAllGameweeksChart() {
     }
   }
 
-  // 1. Construct unified xItems sequence starting from Game 1 / GW 1
+  // 1. Construct unified xItems sequence starting from start_gw
   const xItems = [];
 
-  for (const gw of state.gwNumbers) {
+  for (const gw of activeGWNumbers) {
     if (expandable && state.chartExpandedGWs.has(gw)) {
       const rawGwFixtures = state.fixtures[gw] ?? [];
       const fixtures = filterFixturesByGroupAndTeam(rawGwFixtures);
@@ -6336,9 +6675,10 @@ async function init() {
     state.fixtures = byGW;
     state.teams = teams;
 
+    const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
     const autoGW = getAutoActiveGW();
     const savedGW = parseInt(localStorage.getItem('epl_active_gw'), 10);
-    if (savedGW && gwNumbers.includes(savedGW)) {
+    if (savedGW && gwNumbers.includes(savedGW) && savedGW >= startGw) {
       if (isGWFinishedForGroup(savedGW) && autoGW && autoGW > savedGW) {
         state.activeGW = autoGW;
         localStorage.setItem('epl_active_gw', autoGW);
@@ -6346,7 +6686,7 @@ async function init() {
         state.activeGW = savedGW;
       }
     } else {
-      state.activeGW = autoGW ?? gwNumbers[0];
+      state.activeGW = autoGW ?? gwNumbers.find(g => Number(g) >= startGw) ?? gwNumbers[0];
     }
 
     populateTeamFilter();
