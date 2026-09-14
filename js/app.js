@@ -499,11 +499,15 @@ function filterFixturesByGroup(fixtureList, group = state.activeGroup, gw = null
   const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
   let filtered = fixtureList;
   if (startGw > 1) {
-    filtered = filtered.filter(f => !f.event || Number(f.event) >= startGw);
+    filtered = filtered.filter(f => {
+      const fixtureGw = (f.event !== undefined && f.event !== null && f.event !== '') ? Number(f.event) : (gw !== null && gw !== undefined ? Number(gw) : null);
+      if (fixtureGw !== null) return fixtureGw >= startGw;
+      return true;
+    });
   }
 
   return filtered.filter(f => {
-    const fixtureGw = f.event ? Number(f.event) : (gw ? Number(gw) : null);
+    const fixtureGw = (f.event !== undefined && f.event !== null && f.event !== '') ? Number(f.event) : (gw !== null && gw !== undefined ? Number(gw) : null);
     const groupFilter = getGroupTeamsFilterForGW(group, fixtureGw);
     if (!groupFilter) return true; // 'ALL' scope for this GW
     return isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter);
@@ -1060,7 +1064,7 @@ function calcLeaderboard() {
   });
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
-    const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
+    const fixtures = filterFixturesByGroupAndTeam(rawFixtures, state.activeGroup, Number(gw));
     for (const f of fixtures) {
       const scoreInfo = getMatchScoreInfo(f);
       if (!scoreInfo.hasScore) continue;
@@ -3293,15 +3297,15 @@ function getHeatmapMaxGoal(playerIdFilter = 'ALL') {
   let maxGoal = 5;
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
-    const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
+    const fixtures = filterFixturesByGroupAndTeam(rawFixtures, state.activeGroup, Number(gw));
     for (const f of fixtures) {
       const scoreInfo = getMatchScoreInfo(f);
-      if (scoreInfo.hasScore) {
-        const h = Number(scoreInfo.home);
-        const a = Number(scoreInfo.away);
-        if (!isNaN(h) && h > maxGoal) maxGoal = h;
-        if (!isNaN(a) && a > maxGoal) maxGoal = a;
-      }
+      if (!scoreInfo.hasScore) continue;
+
+      const h = Number(scoreInfo.home);
+      const a = Number(scoreInfo.away);
+      if (!isNaN(h) && h > maxGoal) maxGoal = h;
+      if (!isNaN(a) && a > maxGoal) maxGoal = a;
 
       const targetPlayers = (playerIdFilter === 'ALL' || !playerIdFilter)
         ? state.players
@@ -3384,7 +3388,7 @@ function calcActualScoreDistribution(maxGoal = 5, playerIdFilter = 'ALL') {
     : state.players.filter(p => String(p.id) === String(playerIdFilter));
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
-    const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
+    const fixtures = filterFixturesByGroupAndTeam(rawFixtures, state.activeGroup, Number(gw));
     for (const f of fixtures) {
       const scoreInfo = getMatchScoreInfo(f);
       if (!scoreInfo.hasScore) continue;
@@ -3529,9 +3533,10 @@ function calcPredictedScoreDistribution(playerIdFilter = 'ALL', maxGoal = 5) {
     : state.players.filter(p => String(p.id) === String(playerIdFilter));
 
   for (const [gw, rawFixtures] of Object.entries(state.fixtures)) {
-    const fixtures = filterFixturesByGroupAndTeam(rawFixtures);
+    const fixtures = filterFixturesByGroupAndTeam(rawFixtures, state.activeGroup, Number(gw));
     for (const f of fixtures) {
       const scoreInfo = getMatchScoreInfo(f);
+      if (!scoreInfo.hasScore) continue;
 
       for (const p of targetPlayers) {
         const pred = state.predictions[`${f.id}_${p.id}`];
@@ -3553,7 +3558,7 @@ function calcPredictedScoreDistribution(playerIdFilter = 'ALL', maxGoal = 5) {
         else if (h === a) draws++;
         else awayWins++;
 
-        const evalRes = scoreInfo.hasScore ? evaluatePrediction(Number(scoreInfo.home), Number(scoreInfo.away), h, a) : null;
+        const evalRes = evaluatePrediction(Number(scoreInfo.home), Number(scoreInfo.away), h, a);
         const ptsGained = evalRes && evalRes.total > 0 ? evalRes.total : 0;
 
         if (samples[aIdx][hIdx].length < 15) {
@@ -3576,35 +3581,33 @@ function calcPredictedScoreDistribution(playerIdFilter = 'ALL', maxGoal = 5) {
           });
         }
 
-        // Calculate points earned from this prediction if fixture is finished/ongoing
-        if (scoreInfo.hasScore) {
-          const actH = Number(scoreInfo.home);
-          const actA = Number(scoreInfo.away);
-          const maxPossible = evaluatePrediction(actH, actA, actH, actA)?.total || 6;
+        // Calculate points earned from this prediction
+        const actH = Number(scoreInfo.home);
+        const actA = Number(scoreInfo.away);
+        const maxPossible = evaluatePrediction(actH, actA, actH, actA)?.total || 6;
 
-          if (ptsGained > 0) {
-            pointsMatrix[aIdx][hIdx] += ptsGained;
-            totalPoints += ptsGained;
-            if (h > a) homePoints += ptsGained;
-            else if (h === a) drawPoints += ptsGained;
-            else awayPoints += ptsGained;
-          }
+        if (ptsGained > 0) {
+          pointsMatrix[aIdx][hIdx] += ptsGained;
+          totalPoints += ptsGained;
+          if (h > a) homePoints += ptsGained;
+          else if (h === a) drawPoints += ptsGained;
+          else awayPoints += ptsGained;
+        }
 
-          const missed = Math.max(0, maxPossible - ptsGained);
-          if (missed > 0) {
-            missedPointsMatrix[aIdx][hIdx] += missed;
-            missedCountMatrix[aIdx][hIdx] += (ptsGained < maxPossible ? 1 : 0);
-            totalMissedPoints += missed;
+        const missed = Math.max(0, maxPossible - ptsGained);
+        if (missed > 0) {
+          missedPointsMatrix[aIdx][hIdx] += missed;
+          missedCountMatrix[aIdx][hIdx] += (ptsGained < maxPossible ? 1 : 0);
+          totalMissedPoints += missed;
 
-            if (missedPointsMatrix[aIdx][hIdx] > maxMissedPoints) {
-              maxMissedPoints = missedPointsMatrix[aIdx][hIdx];
-              topMissedScore = {
-                h: hIdx,
-                a: aIdx,
-                points: maxMissedPoints,
-                missCount: missedCountMatrix[aIdx][hIdx]
-              };
-            }
+          if (missedPointsMatrix[aIdx][hIdx] > maxMissedPoints) {
+            maxMissedPoints = missedPointsMatrix[aIdx][hIdx];
+            topMissedScore = {
+              h: hIdx,
+              a: aIdx,
+              points: maxMissedPoints,
+              missCount: missedCountMatrix[aIdx][hIdx]
+            };
           }
         }
 
