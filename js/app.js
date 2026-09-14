@@ -1417,26 +1417,37 @@ export function renderNextGameIndicator() {
   const f = data.primaryMatch;
   const liveCount = data.liveMatches.length;
 
-  let livePillHtml = '';
+  let liveHtml = '';
   if (liveCount > 0) {
     const liveFirst = data.liveMatches[0];
     const liveScore = (liveFirst.actual_home_score !== null && liveFirst.actual_away_score !== null)
-      ? `${liveFirst.actual_home_score}-${liveFirst.actual_away_score}`
+      ? `${liveFirst.actual_home_score} - ${liveFirst.actual_away_score}`
       : 'LIVE';
     const liveTooltip = data.liveMatches.map(m => `${m.home_name} ${m.actual_home_score ?? 0} - ${m.actual_away_score ?? 0} ${m.away_name} (GW${m.event})`).join('\n');
-    livePillHtml = `
-      <div class="next-game-live-badge" title="${liveTooltip}" onclick="event.stopPropagation(); window.selectAndScrollToGameweek(${liveFirst.event});">
-        <span class="mode-dot live-pulse"></span>
-        <span class="live-tag-text">LIVE</span>
-        <span class="live-match-summary">${liveFirst.home_short || liveFirst.home_name} ${liveScore} ${liveFirst.away_short || liveFirst.away_name}</span>
+    const moreLiveTag = liveCount > 1 ? `<span class="live-more-badge">+${liveCount - 1}</span>` : '';
+    liveHtml = `
+      <div class="live-indicator-widget" role="button" tabindex="0" title="${liveTooltip} • Click to view GW ${liveFirst.event}" onclick="window.selectAndScrollToGameweek(${liveFirst.event})" onkeydown="if(event.key==='Enter'||event.key===' ') window.selectAndScrollToGameweek(${liveFirst.event})">
+        <div class="live-badge-tag">
+          <span class="live-pulse-dot"></span>
+          <span class="live-tag-text">LIVE</span>
+          <span class="live-gw-text">GW${liveFirst.event}</span>
+        </div>
+        <div class="live-match-teams">
+          <span class="live-crest-box">${getCrestImg(liveFirst.home_code, liveFirst.home_name)}</span>
+          <span class="live-team-name" title="${liveFirst.home_name}">${liveFirst.home_short || liveFirst.home_name}</span>
+          <span class="live-score-pill">${liveScore}</span>
+          <span class="live-team-name" title="${liveFirst.away_name}">${liveFirst.away_short || liveFirst.away_name}</span>
+          <span class="live-crest-box">${getCrestImg(liveFirst.away_code, liveFirst.away_name)}</span>
+        </div>
+        ${moreLiveTag}
       </div>
     `;
   }
 
   if (!f) {
-    container.innerHTML = `
-      <div class="next-game-widget is-live-only" role="button" tabindex="0" onclick="window.selectAndScrollToGameweek(${data.liveMatches[0]?.event})">
-        ${livePillHtml}
+    container.innerHTML = liveHtml || `
+      <div class="next-game-widget is-finished">
+        <span class="next-game-status-text">Season Completed • All matches played</span>
       </div>
     `;
     return;
@@ -1449,8 +1460,8 @@ export function renderNextGameIndicator() {
   const scopeTag = data.isFilteredScope ? '<span class="next-game-scope-badge" title="Filtered by active league / team selection">Scoped</span>' : '';
 
   container.innerHTML = `
-    <div class="next-game-widget ${liveCount > 0 ? 'has-live' : ''}" id="nextGameWidget" role="button" tabindex="0" title="Next Game: ${f.home_name} vs ${f.away_name} (GW ${f.event}) on ${koFormatted}. Click to view GW ${f.event}." onclick="window.selectAndScrollToGameweek(${f.event})" onkeydown="if(event.key==='Enter'||event.key===' ') window.selectAndScrollToGameweek(${f.event})">
-      ${livePillHtml}
+    ${liveHtml}
+    <div class="next-game-widget" id="nextGameWidget" role="button" tabindex="0" title="Next Game: ${f.home_name} vs ${f.away_name} (GW ${f.event}) on ${koFormatted}. Click to view GW ${f.event}." onclick="window.selectAndScrollToGameweek(${f.event})" onkeydown="if(event.key==='Enter'||event.key===' ') window.selectAndScrollToGameweek(${f.event})">
       <div class="next-game-inner">
         <div class="next-game-row next-game-row-top">
           <div class="next-game-meta-group">
@@ -1490,19 +1501,10 @@ export function updateNextGameTick() {
     const diffMs = currentNextKickoffMs - Date.now();
     if (diffMs <= 0) {
       renderNextGameIndicator();
-      renderMatrix();
     } else {
       const countdownEl = document.getElementById('nextGameCountdown');
       if (countdownEl) {
         countdownEl.textContent = `in ${formatRemainingTime(diffMs)}`;
-      }
-      const matrixKoChip = document.getElementById('matrixNextKoChip');
-      if (matrixKoChip) {
-        const nextData = currentNextGameData || getNextGameData();
-        const match = nextData?.primaryMatch;
-        const isThisGW = match && Number(match.event) === Number(state.activeGW);
-        const prefix = isThisGW ? '⏱️ Next Game (This GW)' : (match ? `⏱️ Next Game (GW ${match.event})` : '⏱️ Next Game');
-        matrixKoChip.textContent = `${prefix}: in ${formatRemainingTime(diffMs)}`;
       }
     }
   }
@@ -2549,23 +2551,11 @@ function renderMatrix() {
     ? `<span class="meta-chip" style="color:#ff5572;border-color:rgba(255,85,114,0.4);">⚡ ${live} live</span>`
     : '';
 
-  const nextGameData = typeof getNextGameData === 'function' ? getNextGameData() : null;
-  let matrixNextGameChip = '';
-  if (nextGameData && nextGameData.primaryMatch && nextGameData.diffMs !== null && nextGameData.diffMs > 0) {
-    const match = nextGameData.primaryMatch;
-    const isThisGW = Number(match.event) === Number(state.activeGW);
-    const chipText = isThisGW
-      ? `⏱️ Next Game (This GW): in ${formatRemainingTime(nextGameData.diffMs)}`
-      : `⏱️ Next Game (GW ${match.event}): in ${formatRemainingTime(nextGameData.diffMs)}`;
-    matrixNextGameChip = `<span class="meta-chip next-game-countdown-chip" id="matrixNextKoChip" title="${match.home_name} vs ${match.away_name} • ${formatKO(match.kickoff_time)}" style="color:var(--accent-green);border-color:rgba(0,214,143,0.35);background:rgba(0,214,143,0.08);cursor:pointer;" onclick="window.selectAndScrollToGameweek(${match.event})">${chipText}</span>`;
-  }
-
   document.getElementById('matrixMeta').innerHTML = `
     ${adminChip}
     ${scopeChip}
     ${filterChip}
     ${liveChip}
-    ${matrixNextGameChip}
     <span class="meta-chip">✅ ${completed} completed</span>
     <span class="meta-chip">⏳ ${yetToPlay} yet to play</span>
   `;
@@ -4449,12 +4439,12 @@ function renderGameweekMatchesChart(gw) {
 
   const numItems = xItems.length;
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-  const padLeft = isMobile ? 65 : 75;
-  const padRight = isMobile ? 65 : 75;
-  const padTop = isMobile ? 30 : 28;
-  const padBottom = isMobile ? 120 : 112;
-  const svgWidth = Math.max(1000, numItems * (isMobile ? 100 : 115) + padLeft + padRight);
-  const svgHeight = isMobile ? 470 : 420;
+  const padLeft = isMobile ? 42 : 52;
+  const padRight = isMobile ? 32 : 42;
+  const padTop = isMobile ? 24 : 22;
+  const padBottom = isMobile ? 48 : 42;
+  const svgWidth = isMobile ? 650 : 880;
+  const svgHeight = isMobile ? 360 : 340;
 
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
@@ -4483,25 +4473,22 @@ function renderGameweekMatchesChart(gw) {
     const y = getY(val);
     gridLinesSvg += `
       <line x1="${padLeft}" y1="${y}" x2="${svgWidth - padRight}" y2="${y}" stroke="${i === 0 ? 'var(--border-active)' : 'var(--border-glass)'}" stroke-dasharray="${i === 0 ? 'none' : '3,3'}" />
-      <text class="chart-axis-tick" x="${padLeft - 10}" y="${y + 4}" fill="var(--text-dim)" font-size="11" font-weight="600" text-anchor="end" font-family="var(--font-main)">${val}</text>
+      <text class="chart-axis-tick" x="${padLeft - 8}" y="${y + 4}" fill="var(--text-dim)" font-size="11" font-weight="600" text-anchor="end" font-family="var(--font-main)">${val}</text>
     `;
   }
 
   const yAxisLineSvg = `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
-  const yLabelX = 20;
+  const yLabelX = 18;
   const yLabelY = padTop + (chartH / 2);
   const yAxisLabelSvg = `
     <text class="chart-axis-label" x="${yLabelX}" y="${yLabelY}" transform="rotate(-90, ${yLabelX}, ${yLabelY})" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.12em" text-anchor="middle" font-family="var(--font-title)">CUMULATIVE POINTS</text>
   `;
 
-  // 2. X-Axis Baseline & Rich Detailed Match Cards
+  // 2. X-Axis Baseline & Simplified Compact Match Labels
   const xAxisLineSvg = `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${svgWidth - padRight}" y2="${padTop + chartH}" stroke="var(--border-active)" stroke-width="1.5" />`;
 
   const yBase = padTop + chartH;
-  const colSpacing = numItems > 1 ? chartW / (numItems - 1) : chartW;
-  const cardW = Math.min(84, Math.max(68, colSpacing - 12));
-  const cardH = 70;
 
   let xLabelsSvg = '';
   xItems.forEach((it, i) => {
@@ -4512,68 +4499,29 @@ function renderGameweekMatchesChart(gw) {
     const awayShort = f.away_short || getClubDetails(f.away_name)?.short || f.away_name.slice(0, 3).toUpperCase();
     const homeCrestUrl = getCrestUrl(f.home_code);
     const awayCrestUrl = getCrestUrl(f.away_code);
-    const scoreInfo = getMatchScoreInfo(f);
     const isLive = it.isLive;
 
-    const cardX = x - (cardW / 2);
-    const cardY = yBase + 6;
-
-    let dateStr = '';
-    let timeStr = '';
-    if (f.kickoff_time) {
-      const d = new Date(f.kickoff_time);
-      const tz = state.timezone || 'UTC';
-      try {
-        dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz });
-        timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-      } catch (e) {
-        dateStr = '';
-        timeStr = '';
-      }
-    }
-
-    const dateDisplay = dateStr ? (timeStr ? `${dateStr} · ${timeStr}` : dateStr) : `Match ${it.matchIdx + 1}`;
-    const liveIndicatorSvg = isLive ? `<text x="${x}" y="${cardY + 54}" fill="#f87171" font-size="7" font-weight="800" text-anchor="middle" font-family="var(--font-title)">🔴 LIVE</text>` : '';
+    const crestSize = isMobile ? 13 : 15;
+    const crestY = yBase + 6;
+    const textY = crestY + crestSize + (isMobile ? 12 : 14);
 
     xLabelsSvg += `
-      <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name} · Click to inspect match details">
-        <!-- Detailed Match Card Background (Frameless / No Outline) -->
-        <rect class="chart-match-tick-bg" x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="6" fill="${isLive ? 'rgba(239, 68, 68, 0.1)' : (isPlayed ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.4)')}" />
-        
-        <!-- Date & Kickoff Time Header -->
-        <text x="${x}" y="${cardY + 14}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">${dateDisplay}</text>
+      <g class="chart-match-tick-group" data-item-idx="${i}" data-match-idx="${it.matchIdx}" role="button" tabindex="0" style="cursor: pointer;" title="${f.home_name} vs ${f.away_name}${isLive ? ' (LIVE)' : ''} • Click to inspect details">
+        <!-- Tick Mark on Baseline -->
+        <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 4}" stroke="var(--border-active)" stroke-width="1.2" opacity="0.8" />
 
-        <!-- Crests & Matchup Center -->
-        <image href="${homeCrestUrl}" x="${cardX + 7}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
-        <text x="${x}" y="${cardY + 35}" fill="${scoreInfo.hasScore ? 'var(--accent-cyan)' : 'var(--text-dim)'}" font-size="${scoreInfo.hasScore ? '10' : '8.5'}" font-weight="800" text-anchor="middle" font-family="var(--font-title)">${scoreInfo.hasScore ? `${scoreInfo.home} - ${scoreInfo.away}` : 'vs'}</text>
-        <image href="${awayCrestUrl}" x="${cardX + cardW - 25}" y="${cardY + 22}" width="18" height="18" preserveAspectRatio="xMidYMid meet" />
+        <!-- Crests & 'v' Separator -->
+        <image href="${homeCrestUrl}" x="${x - crestSize - 4}" y="${crestY}" width="${crestSize}" height="${crestSize}" preserveAspectRatio="xMidYMid meet" />
+        <text x="${x}" y="${crestY + crestSize - 2}" fill="var(--text-dim)" font-size="${isMobile ? '8' : '9'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">v</text>
+        <image href="${awayCrestUrl}" x="${x + 4}" y="${crestY}" width="${crestSize}" height="${crestSize}" preserveAspectRatio="xMidYMid meet" />
 
-        <!-- Team Short Codes -->
-        <text x="${cardX + 16}" y="${cardY + 54}" fill="var(--text-main)" font-size="8.5" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${homeShort}</text>
-        ${liveIndicatorSvg}
-        <text x="${cardX + cardW - 16}" y="${cardY + 54}" fill="var(--text-main)" font-size="8.5" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${awayShort}</text>
+        <!-- Team Short Code Matchup: MCI v ARS (with clean live dot if live) -->
+        <text x="${x}" y="${textY}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-muted)'}" font-size="${isMobile ? '8.5' : '9.5'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${isLive ? '<tspan fill="#ef4444" font-size="9">🔴 </tspan>' : ''}${homeShort} v ${awayShort}</text>
       </g>
     `;
   });
 
-  // Level 2: Spanning GW # bracket
-  let gwGroupsSvg = '';
-  if (xItems.length > 0) {
-    const colWidth = numItems > 1 ? chartW / (numItems - 1) : chartW;
-    const cardW = Math.min(84, Math.max(68, colWidth - 12));
-    const cardH = 70;
-    const xLeft = getX(0) - (cardW / 2);
-    const xRight = getX(xItems.length - 1) + (cardW / 2);
-    const yGroup = yBase + cardH + 10;
-    const midX = (xLeft + xRight) / 2;
-
-    gwGroupsSvg += `
-      <g class="chart-gw-group-level" data-gw="${gw}">
-        <path d="M ${xLeft},${yGroup} L ${xLeft},${yGroup + 4} L ${xRight},${yGroup + 4} L ${xRight},${yGroup}" fill="none" stroke="var(--border-active)" stroke-width="1.2" opacity="0.65" />
-        <text class="chart-axis-tick" x="${midX}" y="${yGroup + 16}" fill="var(--text-muted)" font-size="9.5" font-weight="600" text-anchor="middle" font-family="var(--font-main)">GW ${gw} · ${sortedMatches.length} Matches</text>
-      </g>
-    `;
-  }
+  const gwGroupsSvg = '';
 
   let linesSvg = '';
   let markersSvg = '';
@@ -4886,14 +4834,13 @@ function renderGameweekMatchesChart(gw) {
   });
 
   wrapper.innerHTML = `
-    <div class="chart-scroll-container" style="position: relative; display: inline-block; min-width: ${svgWidth}px; width: ${svgWidth}px;">
-      <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="none" style="width:${svgWidth}px; min-width:${svgWidth}px; height:${svgHeight}px; display:block;">
+    <div class="chart-scroll-container chart-drilldown-mode" style="position: relative; width: 100%; max-width: 100%; overflow: hidden;">
+      <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto; display: block;">
         <!-- Grid & Axes -->
         ${gridLinesSvg}
         ${yAxisLineSvg}
         ${yAxisLabelSvg}
         ${xAxisLineSvg}
-        ${gwGroupsSvg}
         ${xLabelsSvg}
         ${crosshairsSvg}
         <!-- Lines / Ribbons -->
