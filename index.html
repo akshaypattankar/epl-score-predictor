@@ -579,16 +579,16 @@
     <div id="managementView" style="display: none;">
 
       <!-- Section Header -->
-      <div class="mgmt-page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div>
-          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main);">
+      <div class="mgmt-page-header">
+        <div class="mgmt-title-group">
+          <h2 class="mgmt-title">
             ⚙️ League & Player Directory
           </h2>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">
+          <p class="mgmt-subtitle">
             Manage all participants in your master directory and toggle their league group memberships with one click.
           </p>
         </div>
-        <div>
+        <div class="mgmt-header-actions">
           <button type="button" class="btn btn-secondary btn-back-dashboard" id="mgmtBackToDashboardBtn" title="Return to Match Predictions Dashboard">
             📊 ← Back to Dashboard
           </button>
@@ -596,23 +596,23 @@
       </div>
 
       <!-- SCORING RULES CONFIGURATION SECTION -->
-      <section class="glass-card" style="margin-bottom: 24px;">
-        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+      <section class="glass-card mgmt-section">
+        <div class="section-header mgmt-section-header">
           <div>
             <h3>⚡ Scoring Rules & Tiers Configuration</h3>
             <p>Customize tier names, point values, icons, and bonus parameters across the app</p>
           </div>
-          <button class="btn btn-primary" id="mgmtOpenScoringRulesBtn" style="padding: 10px 18px;">
+          <button class="btn btn-primary mgmt-edit-rules-btn" id="mgmtOpenScoringRulesBtn">
             ✏️ Edit Scoring Rules & Tiers
           </button>
         </div>
-        <div id="mgmtScoringRulesSummaryGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px;">
+        <div id="mgmtScoringRulesSummaryGrid" class="mgmt-scoring-rules-grid">
           <!-- Dynamically populated summary chips of active rules by JS -->
         </div>
       </section>
 
       <!-- GROUPS HUB SECTION -->
-      <section class="glass-card" style="margin-bottom: 24px;">
+      <section class="glass-card mgmt-section">
         <div class="section-header">
           <div>
             <h3>🏆 League Groups</h3>
@@ -620,30 +620,26 @@
           </div>
         </div>
 
-        <div style="margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
-          <div class="mgmt-action-row" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-            <input type="text" id="mgmtNewGroupNameInput" class="form-input"
-              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" style="max-width: 280px;" />
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <label for="mgmtGroupStartGwSelect" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;">🚩 Start:</label>
-              <select id="mgmtGroupStartGwSelect" class="control-dropdown" style="padding: 7px 10px; font-size: 0.82rem; min-width: 130px;" title="Choose the first Gameweek included in this league">
+        <div class="mgmt-group-create-container">
+          <div class="mgmt-action-row mgmt-create-group-row">
+            <input type="text" id="mgmtNewGroupNameInput" class="form-input mgmt-group-name-input-field"
+              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" />
+            <div class="mgmt-start-gw-wrapper">
+              <label for="mgmtGroupStartGwSelect" class="mgmt-start-gw-label">🚩 Start:</label>
+              <select id="mgmtGroupStartGwSelect" class="control-dropdown mgmt-start-gw-dropdown" title="Choose the first Gameweek included in this league">
                 <option value="1" selected>GW 1 (Full Season)</option>
               </select>
             </div>
-            <button class="btn btn-primary" id="mgmtCreateGroupBtn">➕ Create New Group</button>
+            <button class="btn btn-primary mgmt-create-group-btn" id="mgmtCreateGroupBtn">➕ Create New Group</button>
           </div>
 
-          <div
-            style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); padding: 14px; border-radius: var(--radius-sm);">
-            <label
-              style="font-weight: 600; font-size: 0.88rem; color: var(--text-main); display: block; margin-bottom: 6px;">
+          <div class="mgmt-scope-picker-box">
+            <label class="mgmt-scope-picker-label">
               ⚽ Group Team Scope:
             </label>
-            <div style="display: flex; gap: 16px; align-items: center; font-size: 0.85rem; margin-bottom: 8px;">
-              <label style="cursor: pointer;"><input type="radio" name="mgmtTeamMode" value="ALL" checked> All Premier
-                League Teams (Default)</label>
-              <label style="cursor: pointer;"><input type="radio" name="mgmtTeamMode" value="CUSTOM"> Select Specific
-                Teams Only</label>
+            <div class="mgmt-scope-radio-group">
+              <label class="form-radio-label"><input type="radio" name="mgmtTeamMode" value="ALL" checked> All Premier League Teams (Default)</label>
+              <label class="form-radio-label"><input type="radio" name="mgmtTeamMode" value="CUSTOM"> Select Specific Teams Only</label>
             </div>
             <div id="mgmtTeamChipGrid" class="team-filter-grid" style="display: none;">
               <!-- Rendered dynamically by JS -->
@@ -657,7 +653,7 @@
       </section>
 
       <!-- MASTER PLAYERS DIRECTORY SECTION -->
-      <section class="glass-card">
+      <section class="glass-card mgmt-section">
         <div class="section-header">
           <div>
             <h3>👤 Master Player Directory</h3>
@@ -666,30 +662,30 @@
         </div>
 
         <!-- Add Player Bar -->
-        <div class="mgmt-action-row"
-          style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-          <input type="text" id="mgmtNewPlayerNameInput" class="form-input"
-            placeholder="Add new person (e.g., Sarah, Michael)" style="max-width: 320px;" />
-          <button class="btn btn-primary" id="mgmtCreatePlayerBtn">👤 Add to Directory</button>
+        <div class="mgmt-player-add-bar">
+          <div class="mgmt-player-input-wrap">
+            <input type="text" id="mgmtNewPlayerNameInput" class="form-input mgmt-player-name-field"
+              placeholder="Add new person (e.g., Sarah, Michael)" />
+            <button class="btn btn-primary mgmt-add-player-btn" id="mgmtCreatePlayerBtn">👤 Add to Directory</button>
+          </div>
 
-          <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 0.85rem; color: var(--text-muted);">Search:</span>
-            <input type="text" id="mgmtSearchPlayerInput" class="form-input" placeholder="Filter names..."
-              style="max-width: 200px; padding: 6px 10px; font-size: 0.85rem;" />
+          <div class="mgmt-player-search-wrap">
+            <span class="mgmt-search-label">Search:</span>
+            <input type="text" id="mgmtSearchPlayerInput" class="form-input mgmt-search-input-field" placeholder="Filter names..." />
           </div>
         </div>
 
         <!-- Master Players Table -->
-        <div class="table-responsive">
+        <div class="table-responsive mgmt-table-wrap">
           <table class="data-table mgmt-players-table" id="mgmtPlayersTable">
             <thead>
               <tr>
-                <th style="width: 180px;">Player Name</th>
-                <th>League Group Memberships <span
+                <th style="min-width: 140px;">Player Name</th>
+                <th style="min-width: 220px;">League Group Memberships <span
                     style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Click chip to add/remove)</span>
                 </th>
                 <th style="width: 160px; text-align: center;">6-Char Passcode</th>
-                <th style="width: 120px; text-align: center;">Actions</th>
+                <th style="width: 100px; text-align: center;">Actions</th>
               </tr>
             </thead>
             <tbody id="mgmtPlayersBody">
@@ -700,17 +696,17 @@
       </section>
 
       <!-- PLAYER LAST SEEN & ACTIVITY TRACKER SECTION -->
-      <section class="glass-card" style="margin-top: 24px;">
-        <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+      <section class="glass-card mgmt-section" style="margin-top: 24px;">
+        <div class="section-header mgmt-activity-header">
           <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <h3>🕒 Player Last Seen & Activity Tracker</h3>
               <span class="status-live-badge" id="mgmtActivityCountBadge">0 Players</span>
             </div>
             <p>Real-time access timestamps, last login dates, and prediction engagement for all players</p>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <button class="btn btn-secondary" id="mgmtRefreshActivityBtn" style="padding: 8px 14px; font-size: 0.85rem;">
+          <div class="mgmt-activity-actions">
+            <button class="btn btn-secondary mgmt-refresh-btn" id="mgmtRefreshActivityBtn">
               🔄 Refresh Timestamps
             </button>
           </div>
@@ -970,6 +966,127 @@
             💾 Save Scoring Rules
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── GROUP TEAM SCOPE & OPTION A EFFECTIVE GW MODAL ──────────────── -->
+  <div class="modal-overlay" id="groupScopeModal" style="display: none;">
+    <div class="modal-card glass-card group-scope-modal-card" style="max-width: 720px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
+      <div class="modal-header" style="padding-bottom: 14px; border-bottom: 1px solid var(--border-glass);">
+        <div>
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 800;">
+            <span style="font-size: 1.5rem;">🎯</span> <span id="groupScopeModalTitle">Edit Group Team Scope</span>
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;" id="groupScopeModalSubtitle">
+            Configure participating clubs and define gameweek effectiveness (Option A).
+          </p>
+        </div>
+        <button class="modal-close-btn" id="closeGroupScopeModalBtn" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body group-scope-modal-body" style="overflow-y: auto; padding: 16px 2px; display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0;">
+        
+        <!-- Current Scope Breakdown Card -->
+        <div class="group-scope-info-box" style="background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.25); border-radius: 10px; padding: 14px 16px;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+            📜 Current League Scope Timeline
+          </div>
+          <div id="groupScopeTimelineDisplay" style="font-size: 0.9rem; color: var(--text-main);">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Scope Mode Selector -->
+        <div>
+          <label class="form-label" style="font-weight: 700; margin-bottom: 8px; display: block;">
+            🏆 Participating Club Scope:
+          </label>
+          <div class="scope-mode-options" style="display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
+            <label class="form-radio-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="modalScopeMode" value="ALL" checked class="form-radio" id="modalScopeModeAll" />
+              <span>⚽ <strong>All 20 Teams</strong> (Full Premier League)</span>
+            </label>
+            <label class="form-radio-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="radio" name="modalScopeMode" value="CUSTOM" class="form-radio" id="modalScopeModeCustom" />
+              <span>🎯 <strong>Custom Team Scope</strong> (Select Clubs)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Custom Team Selection Container -->
+        <div id="modalCustomTeamsContainer" style="display: none; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-glass); border-radius: 10px; padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">
+              Selected: <strong id="modalSelectedTeamsCount" style="color: var(--accent-cyan);">0</strong> / 20 Clubs
+            </span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary" id="modalScopeBig6Btn" style="padding: 4px 10px; font-size: 0.78rem;">
+                ⚡ Big 6 Preset
+              </button>
+              <button type="button" class="btn btn-secondary" id="modalScopeSelectAllBtn" style="padding: 4px 10px; font-size: 0.78rem;">
+                Select All
+              </button>
+              <button type="button" class="btn btn-secondary" id="modalScopeClearAllBtn" style="padding: 4px 10px; font-size: 0.78rem;">
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <!-- Team Checkbox Grid -->
+          <div class="mgmt-team-chips-grid" id="modalScopeTeamGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 220px; overflow-y: auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Option A: Effective Gameweek Split Configuration -->
+        <div class="effective-gw-config-card" style="background: rgba(30, 41, 59, 0.5); border: 1px solid var(--border-glass); border-radius: 10px; padding: 14px 16px;">
+          <label class="form-label" style="font-weight: 700; margin-bottom: 10px; display: block;">
+            ⏱️ Gameweek Effectiveness (Option A vs Retroactive):
+          </label>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Option A Radio -->
+            <label class="effective-gw-radio-card" style="display: flex; gap: 10px; cursor: pointer; align-items: flex-start; padding: 10px; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3);">
+              <input type="radio" name="modalScopeApplyMode" value="effective" checked class="form-radio" style="margin-top: 3px;" id="modalApplyModeEffective" />
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <strong style="color: var(--text-main); font-size: 0.95rem;">⭐ Option A: Apply from Gameweek</strong>
+                  <select id="modalEffectiveGwSelect" class="control-dropdown" style="padding: 2px 8px; font-size: 0.85rem; font-weight: 700; color: var(--accent-cyan);">
+                    <!-- Populated dynamically -->
+                  </select>
+                  <strong style="color: var(--text-main); font-size: 0.95rem;">onwards (Recommended)</strong>
+                </div>
+                <div style="color: var(--text-muted); font-size: 0.82rem; margin-top: 4px; line-height: 1.4;">
+                  Preserves past gameweeks' historical standings and scores exactly as played. Players will only predict the new scope for future games starting from this Gameweek.
+                </div>
+              </div>
+            </label>
+
+            <!-- Retroactive Radio -->
+            <label class="effective-gw-radio-card" style="display: flex; gap: 10px; cursor: pointer; align-items: flex-start; padding: 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);">
+              <input type="radio" name="modalScopeApplyMode" value="retroactive" class="form-radio" style="margin-top: 3px;" id="modalApplyModeRetroactive" />
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <strong style="color: var(--text-main); font-size: 0.95rem;">Apply Retroactively Across Entire Season (GW 1–38)</strong>
+                </div>
+                <div style="color: #f87171; font-size: 0.82rem; margin-top: 4px; line-height: 1.4;">
+                  ⚠️ Overwrites past gameweeks. Past matches that were previously out-of-scope will count as 0 pts (missed) for players who did not predict them.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div id="modalScopeErrorBanner" class="auth-error-banner" style="display: none;"></div>
+
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border-glass); margin-top: 6px;">
+        <button type="button" class="btn btn-secondary" id="cancelGroupScopeModalBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveGroupScopeModalBtn" style="padding: 10px 22px; font-weight: 700;">
+          💾 Apply Scope Changes
+        </button>
       </div>
     </div>
   </div>

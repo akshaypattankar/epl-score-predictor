@@ -385,15 +385,105 @@ function startClock() {
   setInterval(tick, 1000);
 }
 
-// Helper: parse group team filter into an array or null (for 'ALL')
-function getGroupTeamsFilter(group) {
+// Helper: parse group team filter for a specific gameweek (Option A Effective GW support)
+export function getGroupTeamsFilterForGW(group, gw = null) {
   if (!group || !group.teams_filter || group.teams_filter === 'ALL') return null;
+
+  let parsed;
   try {
-    const parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+    parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
   } catch (e) {
     return null;
   }
+
+  // Segmented scope format: array of { from_gw, to_gw, teams }
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].from_gw !== undefined) {
+    if (gw !== null && gw !== undefined) {
+      const gwNum = Number(gw);
+      const segment = parsed.find(s => gwNum >= Number(s.from_gw) && (s.to_gw == null || gwNum <= Number(s.to_gw)));
+      if (!segment) return null;
+      if (segment.teams === 'ALL' || !segment.teams) return null;
+      return Array.isArray(segment.teams) && segment.teams.length > 0 ? segment.teams : null;
+    }
+
+    // Default to segment matching state.activeGW or the last segment
+    const targetGw = state.activeGW ? Number(state.activeGW) : (group.start_gw ? Number(group.start_gw) : 1);
+    const segment = parsed.find(s => targetGw >= Number(s.from_gw) && (s.to_gw == null || targetGw <= Number(s.to_gw))) || parsed[parsed.length - 1];
+    if (!segment) return null;
+    if (segment.teams === 'ALL' || !segment.teams) return null;
+    return Array.isArray(segment.teams) && segment.teams.length > 0 ? segment.teams : null;
+  }
+
+  // Flat array format (legacy): applies to all gameweeks
+  return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+}
+
+// Helper: parse group team filter into an array or null (for 'ALL')
+function getGroupTeamsFilter(group) {
+  return getGroupTeamsFilterForGW(group, state.activeGW);
+}
+
+// Helper: normalize group scope into array of segments [{ from_gw, to_gw, teams }]
+export function getGroupScopeSegments(group) {
+  const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
+  if (!group || !group.teams_filter || group.teams_filter === 'ALL') {
+    return [{ from_gw: startGw, to_gw: 38, teams: 'ALL' }];
+  }
+
+  let parsed;
+  try {
+    parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
+  } catch (e) {
+    return [{ from_gw: startGw, to_gw: 38, teams: 'ALL' }];
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].from_gw !== undefined) {
+    return parsed;
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return [{ from_gw: startGw, to_gw: 38, teams: parsed }];
+  }
+
+  return [{ from_gw: startGw, to_gw: 38, teams: 'ALL' }];
+}
+
+// Helper: generate friendly human-readable summary of a group's scope configuration
+export function getGroupScopeSummary(group) {
+  if (!group || !group.teams_filter || group.teams_filter === 'ALL') {
+    return '⚽ Scope: All Teams';
+  }
+
+  let parsed;
+  try {
+    parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
+  } catch (e) {
+    return '⚽ Scope: All Teams';
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].from_gw !== undefined) {
+    if (parsed.length === 1) {
+      const s = parsed[0];
+      const tLabel = (s.teams === 'ALL' || !s.teams) ? 'All Teams' : `${s.teams.length} Teams`;
+      return `🎯 Scope: ${tLabel}`;
+    }
+    const parts = parsed.map((s, idx) => {
+      const gwLabel = (s.to_gw && s.to_gw < 38)
+        ? `GW ${s.from_gw}–${s.to_gw}`
+        : (idx === 0 ? `Full Season` : `GW ${s.from_gw}+`);
+      const tLabel = (s.teams === 'ALL' || !s.teams)
+        ? 'All Teams'
+        : `${s.teams.length} Teams`;
+      return `${gwLabel} (${tLabel})`;
+    });
+    return `🎯 Scope: ${parts.join(' ➔ ')}`;
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return `🎯 Scope: ${parsed.length} Teams (${parsed.slice(0, 3).join(', ')}${parsed.length > 3 ? '...' : ''})`;
+  }
+
+  return '⚽ Scope: All Teams';
 }
 
 // Helper: check if team matches any team in list (handles aliases like Man Utd vs Man United)
@@ -403,22 +493,26 @@ function isTeamInList(teamName, list) {
   return list.some(item => normalizeTeamName(item) === targetNorm);
 }
 
-// Helper: filter fixtures according to active group's teams_filter and start_gw
-function filterFixturesByGroup(fixtureList, group = state.activeGroup) {
+// Helper: filter fixtures according to active group's teams_filter and start_gw (Option A Gameweek-aware)
+function filterFixturesByGroup(fixtureList, group = state.activeGroup, gw = null) {
   if (!fixtureList || !Array.isArray(fixtureList)) return [];
   const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
   let filtered = fixtureList;
   if (startGw > 1) {
     filtered = filtered.filter(f => !f.event || Number(f.event) >= startGw);
   }
-  const groupFilter = getGroupTeamsFilter(group);
-  if (!groupFilter) return filtered;
-  return filtered.filter(f => isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter));
+
+  return filtered.filter(f => {
+    const fixtureGw = f.event ? Number(f.event) : (gw ? Number(gw) : null);
+    const groupFilter = getGroupTeamsFilterForGW(group, fixtureGw);
+    if (!groupFilter) return true; // 'ALL' scope for this GW
+    return isTeamInList(f.home_name, groupFilter) || isTeamInList(f.away_name, groupFilter);
+  });
 }
 
 // Helper: filter fixtures according to active group's teams_filter AND active team filter (selectedTeams)
-function filterFixturesByGroupAndTeam(fixtureList) {
-  let fixtures = filterFixturesByGroup(fixtureList);
+function filterFixturesByGroupAndTeam(fixtureList, group = state.activeGroup, gw = null) {
+  let fixtures = filterFixturesByGroup(fixtureList, group, gw);
   const selectedTeams = getSelectedTeams();
   if (selectedTeams.length > 0) {
     fixtures = fixtures.filter(f => selectedTeams.includes(f.home_name) || selectedTeams.includes(f.away_name));
@@ -426,30 +520,32 @@ function filterFixturesByGroupAndTeam(fixtureList) {
   return fixtures;
 }
 
-// Helper: check if a team is within active group's scope
-function isTeamInGroupScope(teamName, group = state.activeGroup) {
+// Helper: check if a team is within active group's scope for a specific gameweek
+function isTeamInGroupScope(teamName, group = state.activeGroup, gw = state.activeGW) {
   if (!teamName || teamName === 'ALL') return true;
-  const groupFilter = getGroupTeamsFilter(group);
+  const groupFilter = getGroupTeamsFilterForGW(group, gw);
   if (!groupFilter) return true; // 'ALL' scope: all teams are in scope
   return isTeamInList(teamName, groupFilter);
 }
 
-// Helper: get the count of teams in scope for a group
-export function getGroupInScopeTeamsCount(group = state.activeGroup) {
-  const groupFilter = getGroupTeamsFilter(group);
+// Helper: get the count of teams in scope for a group in a specific gameweek
+export function getGroupInScopeTeamsCount(group = state.activeGroup, gw = state.activeGW) {
+  const groupFilter = getGroupTeamsFilterForGW(group, gw);
   if (!groupFilter) return 20; // 'ALL' scope: all 20 Premier League clubs are in scope
   return groupFilter.length;
 }
 
 // Helper: check if chart x-axis expansion into matches is enabled (requires > 1 team in group scope)
-export function isChartExpandable(group = state.activeGroup) {
-  return getGroupInScopeTeamsCount(group) > 1;
+export function isChartExpandable(group = state.activeGroup, gw = state.activeGW) {
+  return getGroupInScopeTeamsCount(group, gw) > 1;
 }
 
 // Helper: check if a fixture is within active group's scope
 function isFixtureInGroupScope(fixture, group = state.activeGroup) {
   if (!fixture) return true;
-  const groupFilter = getGroupTeamsFilter(group);
+  const startGw = (group && group.start_gw) ? Number(group.start_gw) : 1;
+  if (fixture.event && Number(fixture.event) < startGw) return false;
+  const groupFilter = getGroupTeamsFilterForGW(group, fixture.event || state.activeGW);
   if (!groupFilter) return true; // 'ALL' scope: all fixtures are in scope
   return isTeamInList(fixture.home_name, groupFilter) || isTeamInList(fixture.away_name, groupFilter);
 }
@@ -459,7 +555,7 @@ function isGWFinishedForGroup(gw, group = state.activeGroup) {
   const gwNum = Number(gw);
   if (!state.fixtures || !state.fixtures[gwNum]) return false;
   const rawGwFixtures = state.fixtures[gwNum] || [];
-  const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group);
+  const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group, gwNum);
   if (scopedFixtures.length === 0) return false;
   return scopedFixtures.every(f => isMatchFinished(f));
 }
@@ -487,7 +583,7 @@ function getAutoActiveGW(group = state.activeGroup) {
     if (i < availableGWs.length - 1) {
       const nextGW = availableGWs[i + 1];
       const rawNextFixtures = state.fixtures[nextGW] || [];
-      const scopedNextFixtures = filterFixturesByGroup(rawNextFixtures, group);
+      const scopedNextFixtures = filterFixturesByGroup(rawNextFixtures, group, nextGW);
       const listNext = scopedNextFixtures.length > 0 ? scopedNextFixtures : rawNextFixtures;
 
       let earliestNextKickoff = null;
@@ -6022,8 +6118,7 @@ function renderGroupsGrid() {
 
   grid.innerHTML = state.groups.map(g => {
     const groupPlayers = state.masterPlayers.filter(p => p.group_ids.includes(g.id));
-    const filter = getGroupTeamsFilter(g);
-    const scopeLabel = filter ? `🎯 Scope: ${filter.length} Teams (${filter.slice(0, 3).join(', ')}${filter.length > 3 ? '...' : ''})` : '⚽ Scope: All Teams';
+    const scopeLabel = getGroupScopeSummary(g);
     const startGw = g.start_gw ? Number(g.start_gw) : 1;
     const startGwLabel = startGw > 1 ? `🚩 Starts: GW ${startGw}` : '🚩 Full Season (GW 1)';
 
@@ -6031,10 +6126,18 @@ function renderGroupsGrid() {
       <div class="mgmt-group-card">
         <div class="mgmt-group-header">
           <input type="text" class="form-input mgmt-group-name-input" data-id="${g.id}" value="${g.name}" style="font-weight:700; font-family:var(--font-title); font-size:1.05rem;" />
-          <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group">🗑️</button>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button class="btn-icon edit-group-scope-btn" data-id="${g.id}" title="Edit Team Scope (Option A)">⚙️</button>
+            <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group">🗑️</button>
+          </div>
         </div>
-        <div style="font-size:0.8rem; color:var(--accent-purple); font-weight:600; margin: 4px 0;">
-          ${scopeLabel}
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0;">
+          <span style="font-size:0.8rem; color:var(--accent-purple); font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${scopeLabel}">
+            ${scopeLabel}
+          </span>
+          <button type="button" class="btn btn-secondary edit-group-scope-btn" data-id="${g.id}" style="padding: 2px 8px; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;">
+            🎯 Edit Scope
+          </button>
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin: 4px 0; font-size:0.82rem;">
           <span style="color:var(--text-muted); font-weight:600;">Start GW:</span>
@@ -6067,6 +6170,13 @@ function renderGroupsGrid() {
       } catch (err) {
         alert(err.message);
       }
+    });
+  });
+
+  grid.querySelectorAll('.edit-group-scope-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gId = parseInt(btn.dataset.id, 10);
+      openGroupScopeModal(gId);
     });
   });
 
@@ -6110,6 +6220,260 @@ function renderGroupsGrid() {
   });
 }
 
+// ─── OPTION A GROUP SCOPE MODAL CONTROLLER ─────────────────────────────────
+export function buildUpdatedScopeSegments(existingGroup, newSelection, effectiveGw, applyMode) {
+  const startGw = (existingGroup && existingGroup.start_gw) ? Number(existingGroup.start_gw) : 1;
+  const effectiveGwNum = Math.max(startGw, Math.min(38, parseInt(effectiveGw, 10) || startGw));
+
+  // If retroactive across all gameweeks, or if effective GW is the starting gameweek
+  if (applyMode === 'retroactive' || effectiveGwNum <= startGw) {
+    return newSelection; // 'ALL' or array of strings
+  }
+
+  const existingSegments = getGroupScopeSegments(existingGroup);
+  const updatedSegments = [];
+
+  for (const seg of existingSegments) {
+    const sFrom = Number(seg.from_gw);
+    const sTo = seg.to_gw != null ? Number(seg.to_gw) : 38;
+
+    if (sTo < effectiveGwNum) {
+      // Entire segment is strictly before effective GW: preserve as is
+      updatedSegments.push({ from_gw: sFrom, to_gw: sTo, teams: seg.teams });
+    } else if (sFrom < effectiveGwNum) {
+      // Segment spans across effective GW: truncate it
+      updatedSegments.push({
+        from_gw: sFrom,
+        to_gw: effectiveGwNum - 1,
+        teams: seg.teams
+      });
+    }
+  }
+
+  // Append the new segment from effectiveGwNum to 38
+  updatedSegments.push({
+    from_gw: effectiveGwNum,
+    to_gw: 38,
+    teams: newSelection
+  });
+
+  return updatedSegments;
+}
+
+let currentEditingScopeGroupId = null;
+
+export function openGroupScopeModal(groupId) {
+  const gId = Number(groupId);
+  const group = state.groups.find(g => g.id === gId);
+  if (!group) return;
+
+  currentEditingScopeGroupId = gId;
+
+  const modal = document.getElementById('groupScopeModal');
+  const titleEl = document.getElementById('groupScopeModalTitle');
+  const subtitleEl = document.getElementById('groupScopeModalSubtitle');
+  const timelineEl = document.getElementById('groupScopeTimelineDisplay');
+  const customContainer = document.getElementById('modalCustomTeamsContainer');
+  const teamGrid = document.getElementById('modalScopeTeamGrid');
+  const effectiveGwSelect = document.getElementById('modalEffectiveGwSelect');
+  const errorBanner = document.getElementById('modalScopeErrorBanner');
+
+  if (errorBanner) errorBanner.style.display = 'none';
+
+  if (titleEl) titleEl.textContent = `Edit Scope: ${group.name}`;
+  if (subtitleEl) subtitleEl.textContent = `Configure participating Premier League clubs & gameweek phases for Group #${group.id}.`;
+
+  // 1. Render current timeline
+  const segments = getGroupScopeSegments(group);
+  const currentGw = state.activeGW ? Number(state.activeGW) : (group.start_gw ? Number(group.start_gw) : 1);
+  if (timelineEl) {
+    timelineEl.innerHTML = `
+      <div class="scope-timeline-list">
+        ${segments.map((s, idx) => {
+          const isCurrent = currentGw >= Number(s.from_gw) && (s.to_gw == null || currentGw <= Number(s.to_gw));
+          const isPast = s.to_gw != null && currentGw > Number(s.to_gw);
+          const rangeStr = (s.to_gw && s.to_gw < 38) ? `GW ${s.from_gw}–${s.to_gw}` : (idx === 0 && (!s.to_gw || s.to_gw >= 38) ? `Full Season (GW ${s.from_gw}–38)` : `GW ${s.from_gw}–38`);
+          const teamsList = (s.teams === 'ALL' || !s.teams)
+            ? '⚽ All 20 Premier League Clubs'
+            : (Array.isArray(s.teams) ? `🎯 ${s.teams.length} Clubs: ${s.teams.join(', ')}` : s.teams);
+          const badgeClass = isCurrent ? 'current' : (isPast ? 'past' : '');
+          const badgeLabel = isCurrent ? 'Active Now' : (isPast ? 'Historical' : 'Upcoming Phase');
+          return `
+            <div class="scope-timeline-item">
+              <div>
+                <strong style="color: var(--accent-cyan);">${rangeStr}</strong>: ${teamsList}
+              </div>
+              <span class="scope-timeline-badge ${badgeClass}">${badgeLabel}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // 2. Populate Effective GW Select options
+  const startGw = group.start_gw ? Number(group.start_gw) : 1;
+  const suggestedGw = Math.max(startGw, currentGw);
+  if (effectiveGwSelect) {
+    effectiveGwSelect.innerHTML = Array.from({ length: 39 - startGw }, (_, i) => startGw + i).map(gw => {
+      const isAuto = gw === suggestedGw;
+      return `<option value="${gw}" ${isAuto ? 'selected' : ''}>GW ${gw}${isAuto ? ' (Current/Next)' : ''}</option>`;
+    }).join('');
+  }
+
+  // 3. Render 20 teams into modal team grid
+  const allTeamNames = Object.values(state.teams || {}).map(t => t.name).sort();
+  const currentFilterForGw = getGroupTeamsFilterForGW(group, suggestedGw);
+
+  if (teamGrid) {
+    if (allTeamNames.length === 0) {
+      teamGrid.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; padding:8px;">Loading club data...</div>`;
+    } else {
+      teamGrid.innerHTML = allTeamNames.map(teamName => {
+        const teamObj = Object.values(state.teams).find(t => t.name === teamName);
+        const crestUrl = teamObj?.code ? getCrestUrl(teamObj.code) : '';
+        const isChecked = !currentFilterForGw || isTeamInList(teamName, currentFilterForGw);
+        return `
+          <label class="mgmt-team-chip" style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass);">
+            <input type="checkbox" value="${teamName}" class="modal-scope-team-cb" ${isChecked ? 'checked' : ''} style="cursor: pointer;" />
+            ${crestUrl ? `<img src="${crestUrl}" width="18" height="18" alt="${teamName}" style="flex-shrink:0;" />` : ''}
+            <span style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${teamName}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  }
+
+  // 4. Set Initial Mode Radio
+  const isAll = !currentFilterForGw;
+  const radioAll = document.getElementById('modalScopeModeAll');
+  const radioCustom = document.getElementById('modalScopeModeCustom');
+  if (radioAll) radioAll.checked = isAll;
+  if (radioCustom) radioCustom.checked = !isAll;
+  if (customContainer) customContainer.style.display = isAll ? 'none' : 'block';
+
+  // 5. Update count
+  updateModalScopeSelectedCount();
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function updateModalScopeSelectedCount() {
+  const countEl = document.getElementById('modalSelectedTeamsCount');
+  const checked = document.querySelectorAll('.modal-scope-team-cb:checked');
+  if (countEl) countEl.textContent = checked.length;
+}
+
+export function initGroupScopeModalEvents() {
+  const modal = document.getElementById('groupScopeModal');
+  const closeBtn = document.getElementById('closeGroupScopeModalBtn');
+  const cancelBtn = document.getElementById('cancelGroupScopeModalBtn');
+  const saveBtn = document.getElementById('saveGroupScopeModalBtn');
+  const customContainer = document.getElementById('modalCustomTeamsContainer');
+  const modeRadios = document.getElementsByName('modalScopeMode');
+
+  const hideModal = () => {
+    if (modal) modal.style.display = 'none';
+    currentEditingScopeGroupId = null;
+  };
+
+  closeBtn?.addEventListener('click', hideModal);
+  cancelBtn?.addEventListener('click', hideModal);
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) hideModal();
+  });
+
+  modeRadios.forEach(r => {
+    r.addEventListener('change', (e) => {
+      if (customContainer) {
+        customContainer.style.display = e.target.value === 'CUSTOM' ? 'block' : 'none';
+      }
+    });
+  });
+
+  document.getElementById('modalScopeTeamGrid')?.addEventListener('change', () => {
+    updateModalScopeSelectedCount();
+  });
+
+  document.getElementById('modalScopeSelectAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.modal-scope-team-cb').forEach(cb => { cb.checked = true; });
+    updateModalScopeSelectedCount();
+  });
+
+  document.getElementById('modalScopeClearAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.modal-scope-team-cb').forEach(cb => { cb.checked = false; });
+    updateModalScopeSelectedCount();
+  });
+
+  document.getElementById('modalScopeBig6Btn')?.addEventListener('click', () => {
+    const big6 = ['Arsenal', 'Chelsea', 'Liverpool', 'Man City', 'Man Utd', 'Spurs'];
+    document.querySelectorAll('.modal-scope-team-cb').forEach(cb => {
+      cb.checked = isTeamInList(cb.value, big6);
+    });
+    updateModalScopeSelectedCount();
+  });
+
+  saveBtn?.addEventListener('click', async () => {
+    if (!currentEditingScopeGroupId) return;
+    const group = state.groups.find(g => g.id === currentEditingScopeGroupId);
+    if (!group) return;
+
+    const errorBanner = document.getElementById('modalScopeErrorBanner');
+    if (errorBanner) errorBanner.style.display = 'none';
+
+    const mode = Array.from(modeRadios).find(r => r.checked)?.value || 'ALL';
+    let newSelection = 'ALL';
+
+    if (mode === 'CUSTOM') {
+      const selected = Array.from(document.querySelectorAll('.modal-scope-team-cb:checked')).map(cb => cb.value);
+      if (selected.length === 0) {
+        if (errorBanner) {
+          errorBanner.textContent = 'Please select at least one club for custom scope, or choose All 20 Teams!';
+          errorBanner.style.display = 'block';
+        } else {
+          alert('Please select at least one club for custom scope, or choose All 20 Teams!');
+        }
+        return;
+      }
+      newSelection = selected;
+    }
+
+    const applyMode = Array.from(document.getElementsByName('modalScopeApplyMode')).find(r => r.checked)?.value || 'effective';
+    const effectiveGw = parseInt(document.getElementById('modalEffectiveGwSelect')?.value, 10) || 1;
+
+    try {
+      saveBtn.disabled = true;
+      saveBtn.textContent = '💾 Saving Scope…';
+
+      const updatedFilterVal = buildUpdatedScopeSegments(group, newSelection, effectiveGw, applyMode);
+      await apiRenameGroup(group.id, group.name, updatedFilterVal, group.start_gw || 1);
+
+      group.teams_filter = (typeof updatedFilterVal === 'object') ? JSON.stringify(updatedFilterVal) : updatedFilterVal;
+
+      if (state.activeGroup && state.activeGroup.id === group.id) {
+        state.activeGroup.teams_filter = group.teams_filter;
+        renderDashboardComponents();
+      }
+
+      await reloadMasterData();
+      populateGroupDropdown();
+      renderGroupsGrid();
+      showToast(`Group "${group.name}" scope updated successfully!`);
+      hideModal();
+    } catch (err) {
+      if (errorBanner) {
+        errorBanner.textContent = err.message || 'Failed to update scope';
+        errorBanner.style.display = 'block';
+      } else {
+        alert(err.message);
+      }
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 Apply Scope Changes';
+    }
+  });
+}
+
 function renderMasterPlayersTable() {
   const tbody = document.getElementById('mgmtPlayersBody');
   if (!tbody) return;
@@ -6146,19 +6510,22 @@ function renderMasterPlayersTable() {
       : `<span style="color:var(--text-dim); font-size:0.8rem;">🔒 Hidden</span>`;
 
     return `
-      <tr>
-        <td>
+      <tr class="mgmt-player-row">
+        <td class="mgmt-player-cell-name">
+          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">👤 Player Name</div>
           <input type="text" class="form-input mgmt-player-name-input" data-id="${p.id}" value="${p.name}" style="font-weight:600;" />
         </td>
-        <td>
+        <td class="mgmt-player-cell-groups">
+          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🏆 League Memberships</div>
           <div class="group-tag-pill-container">
             ${groupPills}
           </div>
         </td>
-        <td style="text-align: center;">
+        <td class="mgmt-player-cell-passcode" style="text-align: center;">
+          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🔑 Passcode</div>
           ${passcodeDisplay}
         </td>
-        <td style="text-align: center;">
+        <td class="mgmt-player-cell-actions" style="text-align: center;">
           <button class="btn-icon delete-master-player-btn" data-id="${p.id}" title="Remove Person from Directory">🗑️ Delete</button>
         </td>
       </tr>
@@ -6579,6 +6946,7 @@ async function init() {
   initLeaderboardControls();
   initGWSkipControls();
   initManagementEvents();
+  initGroupScopeModalEvents();
   initChartControls();
   initRulesEditorModal({
     onRulesUpdated: () => {

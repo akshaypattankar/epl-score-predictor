@@ -3404,21 +3404,168 @@ tr.row-out-of-scope:hover {
 
 
 /* ── LEAGUE & PLAYER MANAGEMENT PAGE STYLES ── */
-.mgmt-page-header { margin-bottom: 24px; }
+.mgmt-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.mgmt-title {
+  font-family: var(--font-title);
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+.mgmt-subtitle {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.mgmt-section {
+  margin-bottom: 24px;
+}
+.mgmt-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mgmt-scoring-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mgmt-group-create-container {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mgmt-create-group-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.mgmt-group-name-input-field {
+  flex: 1;
+  min-width: 220px;
+  max-width: 320px;
+}
+.mgmt-start-gw-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mgmt-start-gw-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mgmt-start-gw-dropdown {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  min-width: 120px;
+}
+
+.mgmt-scope-picker-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+  padding: 14px;
+  border-radius: var(--radius-sm);
+}
+.mgmt-scope-picker-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 6px;
+}
+.mgmt-scope-radio-group {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
 .mgmt-groups-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .mgmt-group-card {
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
-  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   transition: all 0.2s ease;
+  min-width: 0;
 }
 .mgmt-group-card:hover { border-color: var(--border-active); }
-.mgmt-group-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mgmt-group-name { font-family: var(--font-title); font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
+.mgmt-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.mgmt-group-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.mgmt-player-add-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.mgmt-player-input-wrap {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-width: 240px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mgmt-player-name-field {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+.mgmt-player-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mgmt-search-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.mgmt-search-input-field {
+  max-width: 200px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
 
 .group-tag-pill-container { display: flex; flex-wrap: wrap; gap: 6px; }
 .group-tag-pill {
@@ -5624,8 +5771,12 @@ tr.row-out-of-scope:hover {
   .scoring-rules-grid,
   .bonus-cards-container,
   .mgmt-groups-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .mgmt-scoring-rules-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
   .team-filter-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -5637,20 +5788,194 @@ tr.row-out-of-scope:hover {
     gap: 6px;
   }
 
-  /* Management View Action Rows */
-  .mgmt-action-row {
+  /* Management View Header & Rows */
+  .mgmt-page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .mgmt-title {
+    font-size: 1.35rem !important;
+  }
+  .mgmt-header-actions {
+    width: 100% !important;
+  }
+  .mgmt-header-actions .btn-back-dashboard {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px !important;
+    font-size: 0.88rem !important;
+  }
+  .mgmt-section {
+    padding: 14px 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .mgmt-section-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .mgmt-edit-rules-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .mgmt-create-group-row {
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 8px !important;
     width: 100% !important;
   }
-  .mgmt-action-row .form-input {
+  .mgmt-group-name-input-field {
     max-width: 100% !important;
     width: 100% !important;
   }
-  .mgmt-action-row .btn {
+  .mgmt-start-gw-wrapper {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+  .mgmt-start-gw-dropdown {
+    flex: 1 !important;
+  }
+  .mgmt-create-group-btn {
     width: 100% !important;
     justify-content: center !important;
+  }
+  .mgmt-scope-radio-group {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  /* Management Player Directory Bar */
+  .mgmt-player-add-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .mgmt-player-input-wrap {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .mgmt-player-name-field {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .mgmt-add-player-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .mgmt-player-search-wrap {
+    width: 100% !important;
+  }
+  .mgmt-search-input-field {
+    flex: 1 !important;
+    max-width: 100% !important;
+  }
+
+  /* Management Master Players Table Mobile Card Mode */
+  .mgmt-players-table thead {
+    display: none !important;
+  }
+  .mgmt-players-table,
+  .mgmt-players-table tbody,
+  .mgmt-players-table tr,
+  .mgmt-players-table td {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .mgmt-players-table tr {
+    background: rgba(255, 255, 255, 0.025) !important;
+    border: 1px solid var(--border-glass) !important;
+    border-radius: var(--radius-sm) !important;
+    padding: 12px 14px !important;
+    margin-bottom: 12px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .mgmt-players-table td {
+    padding: 0 !important;
+    border: none !important;
+    text-align: left !important;
+  }
+  .mgmt-players-table td:nth-child(1) .mgmt-player-name-input {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    width: 100% !important;
+  }
+  .mgmt-players-table td:nth-child(3) {
+    display: flex !important;
+    justify-content: flex-start !important;
+  }
+  .mgmt-players-table td:nth-child(4) {
+    display: flex !important;
+    justify-content: flex-end !important;
+  }
+  .mgmt-players-table td:nth-child(4) .delete-master-player-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid rgba(239, 68, 68, 0.25) !important;
+    color: #f87171 !important;
+    padding: 8px !important;
+    border-radius: 6px !important;
+  }
+
+  /* Management Activity Tracker Mobile */
+  .mgmt-activity-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .mgmt-activity-actions {
+    width: 100% !important;
+  }
+  .mgmt-refresh-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .activity-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .activity-stat-card {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+  }
+  .activity-stat-card .stat-val {
+    font-size: 1.15rem !important;
+  }
+  .activity-stat-card .stat-lbl {
+    font-size: 0.72rem !important;
+  }
+
+  /* Group Scope Modal Mobile */
+  .group-scope-modal-card {
+    max-width: 95vw !important;
+    width: 95vw !important;
+    padding: 16px 14px !important;
+    max-height: 92vh !important;
+  }
+  .group-scope-modal-card .modal-header h3 {
+    font-size: 1.15rem !important;
+  }
+  .group-scope-modal-card .mgmt-team-chips-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+  .group-scope-modal-card .modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .group-scope-modal-card .modal-footer .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px !important;
   }
 
   /* Dashboard Footer & Mode Indicator */
@@ -8941,4 +9266,68 @@ tr.row-out-of-scope:hover {
   transform: translateY(-2px);
   border-color: var(--accent-purple);
 }
+
+/* ── Group Scope & Option A Effective GW Styles ────────────────────────── */
+.group-scope-modal-card {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(124, 58, 237, 0.15);
+}
+
+.scope-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.scope-timeline-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.84rem;
+}
+
+.scope-timeline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.scope-timeline-badge.current {
+  background: rgba(0, 214, 143, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 214, 143, 0.3);
+}
+
+.scope-timeline-badge.past {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.effective-gw-radio-card {
+  transition: all 0.2s ease;
+}
+
+.effective-gw-radio-card:hover {
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.mgmt-scope-edit-badge {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mgmt-scope-edit-badge:hover {
+  filter: brightness(1.2);
+  transform: scale(1.02);
+}
+
 
