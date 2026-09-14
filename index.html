@@ -369,6 +369,94 @@
         </div>
       </section>
 
+      <!-- SCORE DISTRIBUTION HEATMAPS (ACTUAL VS PREDICTED) -->
+      <section class="glass-card heatmap-section-card" id="scoreHeatmapSection" style="margin-top: 24px;">
+        <div class="section-header heatmap-section-header">
+          <div>
+            <div class="heatmap-title-row">
+              <h2>🔥 Score Distribution Heatmaps</h2>
+              <span class="heatmap-badge" id="heatmapScopeBadge">All Matches</span>
+            </div>
+          </div>
+          <div class="heatmap-controls-row">
+            <!-- Mobile Toggle Switch (Visible on screens <= 768px) -->
+            <div class="heatmap-mobile-toggle-group" id="heatmapMobileToggleGroup">
+              <button type="button" class="heatmap-toggle-btn active" data-target="actual" id="heatmapToggleActualBtn" title="View Actual Results Heatmap">
+                ⚽ Actual Results
+              </button>
+              <button type="button" class="heatmap-toggle-btn" data-target="predicted" id="heatmapTogglePredictedBtn" title="View Predicted Results Heatmap">
+                🎯 Predicted
+              </button>
+            </div>
+            <!-- Measure Selector -->
+            <div class="heatmap-player-filter-wrapper" id="heatmapMeasureFilterWrapper">
+              <label for="heatmapMeasureSelect" class="heatmap-filter-label">Measure:</label>
+              <select id="heatmapMeasureSelect" class="form-select heatmap-select" aria-label="Select metric for heatmaps">
+                <option value="count">🔢 Game Count</option>
+                <option value="count_pct">📊 Game Share %</option>
+                <option value="points">🏆 Points Earned</option>
+                <option value="points_pct">📈 Points Share %</option>
+              </select>
+            </div>
+            <!-- Player Filter for Predictions -->
+            <div class="heatmap-player-filter-wrapper" id="heatmapPlayerFilterWrapper">
+              <label for="heatmapPlayerSelect" class="heatmap-filter-label">Player:</label>
+              <select id="heatmapPlayerSelect" class="form-select heatmap-select" aria-label="Select player for predictions and points">
+                <option value="ALL">👥 All Players (Aggregate)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Heatmaps Display Grid -->
+        <div class="heatmaps-grid-container" id="heatmapsGridContainer">
+          <!-- Card 1: Actual Results Heatmap -->
+          <div class="heatmap-card" id="heatmapActualCard">
+            <div class="heatmap-card-header">
+              <div class="heatmap-card-title">
+                <span class="heatmap-card-icon">⚽</span>
+                <div>
+                  <h3>Actual Results Heatmap</h3>
+                  <span class="heatmap-card-sub" id="actualHeatmapSummary">0 matches recorded</span>
+                </div>
+              </div>
+              <div class="heatmap-legend-strip" id="actualHeatmapLegend">
+                <span class="legend-label">Low</span>
+                <div class="legend-bar actual-legend-bar"></div>
+                <span class="legend-label">High</span>
+              </div>
+            </div>
+            <div class="heatmap-matrix-wrapper" id="actualHeatmapMatrix">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Card 2: Predicted Results Heatmap -->
+          <div class="heatmap-card" id="heatmapPredictedCard">
+            <div class="heatmap-card-header">
+              <div class="heatmap-card-title">
+                <span class="heatmap-card-icon">🎯</span>
+                <div>
+                  <h3>Predicted Results Heatmap</h3>
+                  <span class="heatmap-card-sub" id="predictedHeatmapSummary">0 predictions made</span>
+                </div>
+              </div>
+              <div class="heatmap-legend-strip" id="predictedHeatmapLegend">
+                <span class="legend-label">Low</span>
+                <div class="legend-bar predicted-legend-bar"></div>
+                <span class="legend-label">High</span>
+              </div>
+            </div>
+            <div class="heatmap-matrix-wrapper" id="predictedHeatmapMatrix">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Hover Tooltip for Heatmap Cells -->
+        <div class="heatmap-cell-tooltip" id="heatmapCellTooltip" style="display: none;"></div>
+      </section>
+
       <!-- WHAT-IF LEAGUE STANDINGS DASHBOARD SNAPSHOT WIDGET -->
       <div id="dashboardWhatIfContainer"></div>
 
