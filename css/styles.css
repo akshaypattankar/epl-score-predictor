@@ -3567,6 +3567,31 @@ tr.row-out-of-scope:hover {
   font-size: 0.85rem;
 }
 
+.mgmt-players-table {
+  width: 100%;
+  min-width: 0 !important;
+  table-layout: auto;
+}
+.mgmt-players-table th,
+.mgmt-players-table td {
+  box-sizing: border-box;
+}
+.mgmt-player-cell-name {
+  min-width: 120px;
+}
+.mgmt-player-cell-name .mgmt-player-name-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.mgmt-player-cell-groups {
+  min-width: 0;
+}
+.mgmt-table-wrap {
+  overflow-x: hidden !important;
+  max-width: 100%;
+}
+
 .group-tag-pill-container { display: flex; flex-wrap: wrap; gap: 6px; }
 .group-tag-pill {
   display: inline-flex; align-items: center; gap: 5px;
@@ -5875,7 +5900,6 @@ tr.row-out-of-scope:hover {
     max-width: 100% !important;
   }
 
-  /* Management Master Players Table Mobile Card Mode */
   .mgmt-players-table thead {
     display: none !important;
   }
@@ -5891,16 +5915,20 @@ tr.row-out-of-scope:hover {
     background: rgba(255, 255, 255, 0.025) !important;
     border: 1px solid var(--border-glass) !important;
     border-radius: var(--radius-sm) !important;
-    padding: 12px 14px !important;
+    padding: 14px 12px !important;
     margin-bottom: 12px !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 12px !important;
   }
   .mgmt-players-table td {
     padding: 0 !important;
     border: none !important;
     text-align: left !important;
+    width: 100% !important;
+  }
+  .mgmt-players-table .mobile-only-label {
+    display: block !important;
   }
   .mgmt-players-table td:nth-child(1) .mgmt-player-name-input {
     font-size: 1rem !important;
@@ -5909,11 +5937,12 @@ tr.row-out-of-scope:hover {
   }
   .mgmt-players-table td:nth-child(3) {
     display: flex !important;
-    justify-content: flex-start !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
   .mgmt-players-table td:nth-child(4) {
     display: flex !important;
-    justify-content: flex-end !important;
+    justify-content: stretch !important;
   }
   .mgmt-players-table td:nth-child(4) .delete-master-player-btn {
     width: 100% !important;
