@@ -3896,17 +3896,17 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
   let topVal = '—';
   let topSub = `0 ${itemLabel}`;
 
-  let kpiHwLabel = '🏠 Home Wins';
+  const kpiHwLabel = 'Home Win';
   let kpiHwVal = `${hwCountPct}%`;
   let kpiHwSub = `${homeWins} of ${countTotal} ${itemLabel}`;
   let kpiHwBar = hwCountPct;
 
-  let kpiDrLabel = '🤝 Draws';
+  const kpiDrLabel = 'Drawn';
   let kpiDrVal = `${drCountPct}%`;
   let kpiDrSub = `${draws} of ${countTotal} ${itemLabel}`;
   let kpiDrBar = drCountPct;
 
-  let kpiAwLabel = '✈️ Away Wins';
+  const kpiAwLabel = 'Away Win';
   let kpiAwVal = `${awCountPct}%`;
   let kpiAwSub = `${awayWins} of ${countTotal} ${itemLabel}`;
   let kpiAwBar = awCountPct;
@@ -3917,17 +3917,14 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
     const ptsShare = pointsTotal > 0 ? ((maxPoints / pointsTotal) * 100).toFixed(1) : '0.0';
     topSub = maxPoints > 0 ? `+${maxPoints} pts (${ptsShare}% of total)` : '0 pts';
 
-    kpiHwLabel = '🏠 Home Win Pts';
     kpiHwVal = `${hwPtsPct}%`;
     kpiHwSub = `${homePoints || 0} of ${pointsTotal} pts`;
     kpiHwBar = hwPtsPct;
 
-    kpiDrLabel = '🤝 Draw Pts';
     kpiDrVal = `${drPtsPct}%`;
     kpiDrSub = `${drawPoints || 0} of ${pointsTotal} pts`;
     kpiDrBar = drPtsPct;
 
-    kpiAwLabel = '✈️ Away Win Pts';
     kpiAwVal = `${awPtsPct}%`;
     kpiAwSub = `${awayPoints || 0} of ${pointsTotal} pts`;
     kpiAwBar = awPtsPct;
@@ -3937,17 +3934,14 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
     topVal = maxPoints > 0 ? `${topPointsScore.h} - ${topPointsScore.a}` : '—';
     topSub = maxPoints > 0 ? `${topPtsPct}% (+${maxPoints} pts)` : '0.0%';
 
-    kpiHwLabel = '🏠 Home Win Pts %';
     kpiHwVal = `${hwPtsPct}%`;
     kpiHwSub = `${homePoints || 0} of ${pointsTotal} pts`;
     kpiHwBar = hwPtsPct;
 
-    kpiDrLabel = '🤝 Draw Pts %';
     kpiDrVal = `${drPtsPct}%`;
     kpiDrSub = `${drawPoints || 0} of ${pointsTotal} pts`;
     kpiDrBar = drPtsPct;
 
-    kpiAwLabel = '✈️ Away Win Pts %';
     kpiAwVal = `${awPtsPct}%`;
     kpiAwSub = `${awayPoints || 0} of ${pointsTotal} pts`;
     kpiAwBar = awPtsPct;
@@ -3995,14 +3989,14 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
       <div class="heatmap-outcome-section">
         <div class="heatmap-outcome-header">
           <span>Outcome Breakdown</span>
-          <span class="heatmap-outcome-legend">🏠 Home + 🤝 Draw + ✈️ Away = 100%</span>
+          <span class="heatmap-outcome-legend">🏠 Home + 🤝 Drawn + ✈️ Away = 100%</span>
         </div>
 
         <!-- Stacked 100% Distribution Bar -->
         <div class="heatmap-stacked-bar">
-          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="${kpiHwLabel}: ${kpiHwVal} (${kpiHwSub})"></div>
-          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="${kpiDrLabel}: ${kpiDrVal} (${kpiDrSub})"></div>
-          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="${kpiAwLabel}: ${kpiAwVal} (${kpiAwSub})"></div>
+          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="🏠 ${kpiHwLabel}: ${kpiHwVal} (${kpiHwSub})"></div>
+          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="🤝 ${kpiDrLabel}: ${kpiDrVal} (${kpiDrSub})"></div>
+          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="✈️ ${kpiAwLabel}: ${kpiAwVal} (${kpiAwSub})"></div>
         </div>
 
         <!-- 3 Proportional Outcome Cards -->
@@ -4060,7 +4054,7 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
     const cellSamples = samples[a]?.[h] || [];
 
     const outcomeClass = h > a ? 'outcome-home' : h < a ? 'outcome-away' : 'outcome-draw';
-    const outcomeLabel = h > a ? '🏠 Home Win' : h < a ? '✈️ Away Win' : '🤝 Draw';
+    const outcomeLabel = h > a ? '🏠 Home Win' : h < a ? '✈️ Away Win' : '🤝 Drawn';
 
     let samplesSectionHtml = '';
     if (cellSamples.length > 0) {
