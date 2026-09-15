@@ -525,91 +525,93 @@
         <!-- Dynamically rendered from active SCORING_BONUSES in JS -->
       </div>
 
-      <!-- INTERACTIVE SCORE SIMULATOR -->
-      <section class="glass-card score-simulator-section" style="margin-top: 24px;">
-        <div class="section-header" style="margin-bottom: 16px;">
+      <!-- INTERACTIVE SCORE SIMULATOR HEATMAP -->
+      <section class="glass-card score-simulator-section" id="scoreSimulatorSection" style="margin-top: 24px;">
+        <div class="section-header heatmap-section-header" style="margin-bottom: 20px;">
           <div>
-            <h3 style="font-family: var(--font-title); font-size: 1.3rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
-              <span>🎮</span> Interactive Score Simulator
-            </h3>
-            <p style="color: var(--text-muted); font-size: 0.84rem;">
-              Test any actual vs. predicted match scoreline to see live tier evaluation and additive bonus points.
+            <div class="heatmap-title-row">
+              <h3 style="font-family: var(--font-title); font-size: 1.35rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                <span>🎮</span> Interactive Score Simulator Heatmap
+              </h3>
+              <span class="heatmap-badge" id="simPerspectiveBadge">Reference Score: 3–1</span>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.86rem; margin-top: 4px;">
+              Enter any match scoreline to view a live 2D points heatmap. Single-click any cell to inspect; double-click a cell to set it as the reference scoreline.
             </p>
           </div>
         </div>
 
-        <div class="score-simulator-grid">
-          <!-- Inputs Card -->
-          <div class="sim-card sim-inputs-card">
-            <div class="sim-scores-row">
-              <!-- Actual Score Box -->
-              <div class="sim-score-box">
-                <span class="sim-box-label">⚽ Actual Match Score</span>
-                <div class="sim-steppers-pair">
-                  <div class="sim-input-team">
-                    <label>Home</label>
-                    <div class="sim-stepper">
-                      <button type="button" class="sim-step-btn" data-target="simActHome" data-delta="-1">−</button>
-                      <input type="number" id="simActHome" class="sim-num-input" value="3" min="0" max="20" />
-                      <button type="button" class="sim-step-btn" data-target="simActHome" data-delta="1">+</button>
-                    </div>
-                  </div>
-                  <span class="sim-vs-divider">–</span>
-                  <div class="sim-input-team">
-                    <label>Away</label>
-                    <div class="sim-stepper">
-                      <button type="button" class="sim-step-btn" data-target="simActAway" data-delta="-1">−</button>
-                      <input type="number" id="simActAway" class="sim-num-input" value="1" min="0" max="20" />
-                      <button type="button" class="sim-step-btn" data-target="simActAway" data-delta="1">+</button>
-                    </div>
-                  </div>
+        <!-- Reference Scoreline Input Card -->
+        <div class="sim-input-panel">
+          <div class="sim-score-input-card">
+            <div class="sim-score-input-header">
+              <div class="sim-score-input-title">
+                <span class="sim-input-icon">⚽</span>
+                <div>
+                  <span class="sim-box-label">Reference Match Scoreline</span>
+                  <span class="sim-sub-hint">Evaluating all predicted scorelines against this result</span>
                 </div>
               </div>
-
-              <!-- Predicted Score Box -->
-              <div class="sim-score-box">
-                <span class="sim-box-label">🎯 Predicted Score</span>
-                <div class="sim-steppers-pair">
-                  <div class="sim-input-team">
-                    <label>Home</label>
-                    <div class="sim-stepper">
-                      <button type="button" class="sim-step-btn" data-target="simPredHome" data-delta="-1">−</button>
-                      <input type="number" id="simPredHome" class="sim-num-input" value="3" min="0" max="20" />
-                      <button type="button" class="sim-step-btn" data-target="simPredHome" data-delta="1">+</button>
-                    </div>
-                  </div>
-                  <span class="sim-vs-divider">–</span>
-                  <div class="sim-input-team">
-                    <label>Away</label>
-                    <div class="sim-stepper">
-                      <button type="button" class="sim-step-btn" data-target="simPredAway" data-delta="-1">−</button>
-                      <input type="number" id="simPredAway" class="sim-num-input" value="1" min="0" max="20" />
-                      <button type="button" class="sim-step-btn" data-target="simPredAway" data-delta="1">+</button>
-                    </div>
-                  </div>
-                </div>
+              <div class="sim-symmetry-note" title="Predictions against actual X–Y earn identical points in either direction">
+                <span>🔄 Symmetric Scoring</span>
               </div>
             </div>
 
-            <!-- Quick Presets -->
-            <div class="sim-presets-bar">
-              <span class="sim-presets-label">⚡ Presets:</span>
-              <div class="sim-presets-chips">
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="3" data-pred-a="1">Bullseye (3–1 vs 3–1)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="2" data-act-a="2" data-pred-h="2" data-pred-a="2">Draw + High Score (2–2 vs 2–2)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="1" data-act-a="1" data-pred-h="1" data-pred-a="1">Exact Draw (1–1 vs 1–1)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="2" data-pred-a="0">Same Margin (3–1 vs 2–0)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="3" data-pred-a="0">One Team (3–1 vs 3–0)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="4" data-pred-a="0">Outcome Only (3–1 vs 4–0)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="1" data-pred-a="1">Consolation (3–1 vs 1–1)</button>
-                <button type="button" class="sim-preset-btn" data-act-h="3" data-act-a="1" data-pred-h="0" data-pred-a="2">Miss (3–1 vs 0–2)</button>
+            <div class="sim-steppers-center">
+              <div class="sim-input-team">
+                <label for="simRefHome">Home Goals</label>
+                <div class="sim-stepper">
+                  <button type="button" class="sim-step-btn" data-target="simRefHome" data-delta="-1" aria-label="Decrease Home Score">−</button>
+                  <input type="number" id="simRefHome" class="sim-num-input" value="3" min="0" max="10" />
+                  <button type="button" class="sim-step-btn" data-target="simRefHome" data-delta="1" aria-label="Increase Home Score">+</button>
+                </div>
+              </div>
+              <span class="sim-vs-divider">–</span>
+              <div class="sim-input-team">
+                <label for="simRefAway">Away Goals</label>
+                <div class="sim-stepper">
+                  <button type="button" class="sim-step-btn" data-target="simRefAway" data-delta="-1" aria-label="Decrease Away Score">−</button>
+                  <input type="number" id="simRefAway" class="sim-num-input" value="1" min="0" max="10" />
+                  <button type="button" class="sim-step-btn" data-target="simRefAway" data-delta="1" aria-label="Increase Away Score">+</button>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Live Result Card -->
-          <div class="sim-card sim-results-card" id="simResultContainer">
-            <!-- Rendered dynamically by updateScoreSimulator() -->
+        <!-- Simulator Layout: Heatmap Grid + Inspector Panel -->
+        <div class="sim-heatmap-layout">
+          <!-- Main Heatmap Card -->
+          <div class="heatmap-card sim-heatmap-card" id="simHeatmapCard">
+            <div class="heatmap-card-header">
+              <div class="heatmap-card-title">
+                <span class="heatmap-card-icon">🎯</span>
+                <div>
+                  <h3 id="simHeatmapHeading">Points Heatmap Grid</h3>
+                  <span class="heatmap-card-sub" id="simHeatmapSummary">Showing points for all predictions against 3–1</span>
+                </div>
+              </div>
+              <div class="heatmap-legend-strip" id="simHeatmapLegend">
+                <span class="legend-label">0 pts</span>
+                <div class="legend-bar sim-legend-bar"></div>
+                <span class="legend-label" id="simLegendMaxLabel">8 pts</span>
+              </div>
+            </div>
+
+            <!-- Heatmap Matrix Table Wrapper -->
+            <div class="heatmap-matrix-wrapper sim-matrix-wrapper" id="simHeatmapMatrix">
+              <!-- Rendered dynamically by updateScoreSimulator() -->
+            </div>
+
+            <!-- Summary KPI Panel below Heatmap Grid -->
+            <div class="heatmap-summary-panel sim-summary-panel" id="simSummaryPanel">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Inspector / Detail Panel -->
+          <div class="sim-inspector-card" id="simInspectorCard">
+            <!-- Rendered dynamically by updateScoreSimulator() / inspectCell() -->
           </div>
         </div>
       </section>

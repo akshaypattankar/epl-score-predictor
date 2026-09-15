@@ -1217,12 +1217,8 @@ body {
   background: #ffffff;
   border-color: #e2e8f0;
 }
-[data-theme="light"] .sim-card {
+[data-theme="light"] .sim-score-input-card {
   background: #f8fafc;
-  border-color: #e2e8f0;
-}
-[data-theme="light"] .sim-score-box {
-  background: #ffffff;
   border-color: #e2e8f0;
 }
 [data-theme="light"] .sim-stepper {
@@ -1240,32 +1236,87 @@ body {
 [data-theme="light"] .sim-num-input {
   color: #0284c7;
 }
-[data-theme="light"] .sim-preset-btn {
+[data-theme="light"] .sim-set-ref-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0284c7;
+}
+[data-theme="light"] .sim-set-ref-btn:hover {
+  background: #e2e8f0;
+  border-color: #0284c7;
+  color: #0369a1;
+}
+[data-theme="light"] .sim-inspector-card {
   background: #ffffff;
   border-color: #cbd5e1;
-  color: #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
-[data-theme="light"] .sim-preset-btn:hover {
-  background: #f1f5f9;
+[data-theme="light"] .sim-inspector-score {
   color: #0f172a;
-  border-color: #94a3b8;
 }
-[data-theme="light"] .sim-preset-btn.active {
-  background: rgba(2, 132, 199, 0.15);
-  color: #0284c7;
-  border-color: #0284c7;
-  box-shadow: none;
-}
-[data-theme="light"] .sim-results-card {
-  background: radial-gradient(circle at top left, rgba(5, 150, 105, 0.06), transparent 70%), #f8fafc;
-  border-color: rgba(5, 150, 105, 0.35);
+[data-theme="light"] .sim-matchup-pill {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
 }
 [data-theme="light"] .sim-pts-number {
   color: #0f172a;
 }
 [data-theme="light"] .sim-formula-bar {
-  background: #ffffff;
+  background: #f8fafc;
   border-color: #e2e8f0;
+}
+[data-theme="light"] .sim-heatmap-cell {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .sim-heatmap-cell.is-ref-exact {
+  outline-color: #0284c7 !important;
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.55), inset 0 0 8px rgba(2, 132, 199, 0.25) !important;
+}
+[data-theme="light"] .sim-heatmap-cell.is-pinned {
+  border-color: #0f172a !important;
+  box-shadow: 0 0 12px rgba(15, 23, 42, 0.4), inset 0 0 4px rgba(15, 23, 42, 0.15) !important;
+}
+[data-theme="light"] .sim-heatmap-cell.has-bonus {
+  border-color: #d97706 !important;
+  box-shadow: 0 0 10px rgba(217, 119, 6, 0.35), inset 0 0 4px rgba(245, 158, 11, 0.15) !important;
+}
+[data-theme="light"] .sim-heatmap-cell.has-bonus .sim-cell-pts-val {
+  color: #b45309 !important;
+  text-shadow: none;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-1 {
+  background: rgba(245, 158, 11, 0.45) !important;
+  border-color: #d97706 !important;
+  color: #78350f !important;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-2 {
+  background: rgba(14, 165, 233, 0.4) !important;
+  border-color: #0284c7 !important;
+  color: #0c4a6e !important;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-3 {
+  background: rgba(16, 185, 129, 0.4) !important;
+  border-color: #059669 !important;
+  color: #064e3b !important;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-4 {
+  background: rgba(139, 92, 246, 0.38) !important;
+  border-color: #7c3aed !important;
+  color: #4c1d95 !important;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-5 {
+  background: rgba(148, 163, 184, 0.4) !important;
+  border-color: #64748b !important;
+  color: #1e293b !important;
+}
+[data-theme="light"] .sim-heatmap-cell.tier-6 {
+  background: rgba(244, 63, 94, 0.35) !important;
+  border-color: #e11d48 !important;
+  color: #881337 !important;
+}
+[data-theme="light"] .sim-heatmap-cell .sim-cell-pts-val {
+  color: inherit !important;
+  text-shadow: none !important;
 }
 
 /* What-If Simulator in Light Mode */
@@ -9968,88 +10019,112 @@ tr.row-out-of-scope:hover {
   margin-top: 12px;
 }
 
-/* ── SCORE SIMULATOR WIDGET ─────────────────────── */
+/* ── SCORE SIMULATOR HEATMAP WIDGET ─────────────────────── */
 .score-simulator-section {
   border: 1px solid rgba(124, 58, 237, 0.3);
   background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.08), transparent 70%), var(--bg-glass);
 }
 
-.score-simulator-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.sim-input-panel {
+  width: 100%;
+  margin-bottom: 20px;
 }
 
-@media (max-width: 840px) {
-  .score-simulator-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.sim-card {
-  background: rgba(0, 0, 0, 0.25);
+.sim-score-input-card {
+  background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
-  padding: 16px;
-}
-
-.sim-scores-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
-@media (max-width: 580px) {
-  .sim-scores-row {
-    grid-template-columns: 1fr;
-  }
+.sim-score-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 10px;
 }
 
-.sim-score-box {
+.sim-score-input-title {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  padding: 12px;
+  align-items: center;
+  gap: 10px;
+}
+
+.sim-input-icon {
+  font-size: 1.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sim-box-label {
-  font-size: 0.76rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.3px;
+  color: var(--text-main);
+  letter-spacing: 0.4px;
+  display: block;
 }
 
-.sim-steppers-pair {
+.sim-sub-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sim-symmetry-note {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 3px 10px;
+  border-radius: 20px;
+  cursor: help;
+}
+
+.sim-steppers-center {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 20px;
+  padding: 4px 0;
 }
 
 .sim-input-team {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .sim-input-team label {
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.74rem;
+  font-weight: 700;
   color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .sim-stepper {
   display: inline-flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-glass);
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid var(--border-glass);
+  border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .sim-step-btn {
@@ -10057,27 +10132,28 @@ tr.row-out-of-scope:hover {
   border: none;
   color: var(--text-main);
   font-weight: 800;
-  font-size: 1.1rem;
-  width: 28px;
-  height: 32px;
+  font-size: 1.25rem;
+  width: 36px;
+  height: 40px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
 .sim-step-btn:hover {
-  background: rgba(124, 58, 237, 0.35);
+  background: rgba(124, 58, 237, 0.45);
   color: #fff;
 }
 
 .sim-num-input {
-  width: 38px;
-  height: 32px;
+  width: 48px;
+  height: 40px;
   text-align: center;
-  font-size: 1.1rem;
-  font-weight: 800;
+  font-family: var(--font-title);
+  font-size: 1.35rem;
+  font-weight: 900;
   color: var(--accent-cyan);
   border: none;
   background: transparent;
@@ -10085,85 +10161,281 @@ tr.row-out-of-scope:hover {
 }
 
 .sim-vs-divider {
-  font-size: 1.2rem;
-  font-weight: 800;
+  font-size: 1.5rem;
+  font-weight: 900;
   color: var(--text-dim);
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
-.sim-presets-bar {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.sim-presets-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  display: block;
-  margin-bottom: 6px;
-}
-
-.sim-presets-chips {
+.sim-set-ref-btn {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.sim-preset-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-glass);
-  color: var(--text-muted);
-  font-size: 0.74rem;
-  font-weight: 600;
-  padding: 4px 9px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.sim-preset-btn:hover {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: rgba(124, 58, 237, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.4);
   color: var(--text-main);
-  border-color: rgba(167, 139, 250, 0.4);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  margin: 4px 0;
 }
 
-.sim-preset-btn.active {
+.sim-set-ref-btn:hover {
   background: rgba(124, 58, 237, 0.35);
-  color: #ffffff;
   border-color: var(--accent-purple);
-  box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.3);
 }
 
-/* Simulator Results Card */
-.sim-results-card {
+.sim-updated-pulse {
+  animation: sim-pulse 0.6s ease-out;
+}
+
+@keyframes sim-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.6); }
+  70% { box-shadow: 0 0 0 12px rgba(56, 189, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+}
+
+/* Simulator Heatmap Layout: Grid + Inspector */
+.sim-heatmap-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .sim-heatmap-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-heatmap-card {
+  width: 100%;
+}
+
+.sim-legend-bar {
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.7) 0%, rgba(99, 102, 241, 0.4) 25%, rgba(14, 165, 233, 0.65) 50%, rgba(16, 185, 129, 0.8) 75%, #f59e0b 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.col-ref-match,
+.row-ref-match {
+  color: var(--accent-cyan) !important;
+  font-weight: 900 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+/* Simulator Heatmap Cells - Bright, rich backgrounds for instant visual clarity */
+.sim-heatmap-cell {
+  position: relative;
+  min-height: 46px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  background: radial-gradient(circle at top left, rgba(0, 255, 135, 0.05), transparent 70%), rgba(0, 0, 0, 0.3);
-  border-color: rgba(0, 255, 135, 0.2);
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, outline 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
 
-.sim-result-header {
+.sim-heatmap-cell:hover {
+  transform: scale(1.12);
+  z-index: 12;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.8);
+}
+
+/* Tier-specific dynamic styling with bright, rich backgrounds */
+.sim-heatmap-cell.tier-1 {
+  background: rgba(245, 158, 11, 0.65) !important;
+  border-color: #fbbf24 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.25), 0 0 10px rgba(245, 158, 11, 0.3);
+}
+.sim-heatmap-cell.tier-2 {
+  background: rgba(14, 165, 233, 0.58) !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.2);
+}
+.sim-heatmap-cell.tier-3 {
+  background: rgba(16, 185, 129, 0.58) !important;
+  border-color: #34d399 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.2);
+}
+.sim-heatmap-cell.tier-4 {
+  background: rgba(139, 92, 246, 0.54) !important;
+  border-color: #a78bfa !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.2);
+}
+.sim-heatmap-cell.tier-5 {
+  background: rgba(100, 116, 139, 0.5) !important;
+  border-color: #94a3b8 !important;
+  color: #ffffff !important;
+}
+.sim-heatmap-cell.tier-6 {
+  background: rgba(225, 29, 72, 0.44) !important;
+  border-color: #f43f5e !important;
+  color: #ffffff !important;
+}
+.sim-heatmap-cell.tier-7 {
+  background: rgba(37, 99, 235, 0.58) !important;
+  border-color: #60a5fa !important;
+  color: #ffffff !important;
+}
+.sim-heatmap-cell.tier-8 {
+  background: rgba(234, 88, 12, 0.58) !important;
+  border-color: #fb923c !important;
+  color: #ffffff !important;
+}
+.sim-heatmap-cell.tier-9 {
+  background: rgba(192, 38, 211, 0.58) !important;
+  border-color: #e879f9 !important;
+  color: #ffffff !important;
+}
+.sim-heatmap-cell.tier-10 {
+  background: rgba(13, 148, 136, 0.58) !important;
+  border-color: #2dd4bf !important;
+  color: #ffffff !important;
+}
+
+/* Tier Icon in Cell */
+.sim-cell-tier-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  font-size: 14px;
+}
+.sim-cell-tier-icon .rule-icon-emoji-char {
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+.sim-cell-tier-icon .rule-icon-asset {
+  width: 14px !important;
+  height: 14px !important;
+  object-fit: contain;
+}
+
+/* Points Value in Cell */
+.sim-cell-pts-val {
+  font-family: var(--font-title);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Gold Accent for Additive Bonuses */
+.sim-heatmap-cell.has-bonus {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.65), inset 0 0 8px rgba(251, 191, 36, 0.3) !important;
+}
+.sim-heatmap-cell.has-bonus .sim-cell-pts-val {
+  color: #fef08a !important;
+  font-weight: 900;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+}
+
+/* Tiny Bonus Pip Icon in top-left */
+.sim-cell-bonus-pip {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 0.65rem;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 6;
+  filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.9));
+}
+.sim-cell-bonus-pip .rule-icon-emoji-char {
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+.sim-cell-bonus-pip .rule-icon-asset {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+/* Clean, Prominent Selected / Entered Reference Prediction Highlight */
+.sim-heatmap-cell.is-ref-exact {
+  outline: 3px solid var(--accent-cyan, #38bdf8) !important;
+  outline-offset: 1.5px !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.85), inset 0 0 8px rgba(56, 189, 248, 0.45) !important;
+  z-index: 8 !important;
+}
+
+/* Inspected / Pinned Cell */
+.sim-heatmap-cell.is-pinned {
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.85), inset 0 0 4px rgba(255, 255, 255, 0.4) !important;
+  z-index: 11 !important;
+}
+
+.sim-heatmap-cell.is-pinned.is-ref-exact {
+  outline: 3px solid var(--accent-cyan, #38bdf8) !important;
+  outline-offset: 2.5px !important;
+}
+
+/* Simulator Inspector Card */
+.sim-inspector-card {
+  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.08), transparent 70%), rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  position: sticky;
+  top: 80px;
+}
+
+.sim-inspector-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
 }
 
-.sim-result-tag {
-  font-size: 0.72rem;
+.sim-inspector-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sim-inspector-tag {
+  font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
-  color: var(--accent-green);
+  color: var(--accent-cyan);
   letter-spacing: 0.5px;
-  background: rgba(0, 255, 135, 0.1);
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 255, 135, 0.25);
+}
+
+.sim-inspector-score {
+  font-family: var(--font-title);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.1;
 }
 
 .sim-total-pts-badge {
@@ -10175,6 +10447,12 @@ tr.row-out-of-scope:hover {
   padding: 4px 14px;
   border-radius: 20px;
   box-shadow: 0 0 14px rgba(0, 255, 135, 0.2);
+}
+
+.sim-total-pts-badge.pts-badge-gold {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
 }
 
 .sim-pts-number {
@@ -10191,10 +10469,46 @@ tr.row-out-of-scope:hover {
   text-transform: uppercase;
 }
 
-.sim-result-body {
+.sim-total-pts-badge.pts-badge-gold .sim-pts-label {
+  color: #fbbf24;
+}
+
+.sim-inspector-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.sim-matchup-pill {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 0.84rem;
+}
+
+.sim-matchup-item {
+  color: var(--text-main);
+}
+
+.sim-matchup-vs {
+  color: var(--text-dim);
+  font-weight: 800;
+  font-size: 0.78rem;
+}
+
+.sim-matchup-star {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  padding: 1px 7px;
+  border-radius: 4px;
 }
 
 .sim-breakdown-row {
@@ -10220,6 +10534,13 @@ tr.row-out-of-scope:hover {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-muted);
+}
+
+.sim-reason-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 2px 0 0 0;
+  line-height: 1.35;
 }
 
 .sim-bonuses-group {
@@ -10255,7 +10576,7 @@ tr.row-out-of-scope:hover {
 }
 
 .sim-formula-bar {
-  margin-top: 10px;
+  margin-top: 4px;
   padding: 8px 12px;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 6px;
@@ -10271,6 +10592,24 @@ tr.row-out-of-scope:hover {
 .sim-formula-bonus { color: #fbbf24; font-weight: 700; }
 .sim-formula-equals { color: var(--text-dim); font-weight: 800; }
 .sim-formula-total { color: var(--accent-green); font-size: 0.95rem; font-weight: 800; }
+
+.sim-inspector-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.sim-exact-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 
 
 /* ═════════════════════════════════════════════════════════════════════════════ */

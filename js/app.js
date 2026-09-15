@@ -6670,7 +6670,6 @@ function renderScoringViewSummary() {
   }
 
   // Render Simulator and Scenarios Matrix
-  renderSimulatorPresets();
   updateScoreSimulator();
   renderComprehensiveScenariosMatrix();
 }
@@ -6782,166 +6781,384 @@ function renderComprehensiveScenariosMatrix() {
 }
 
 /**
- * Dynamically render the Score Simulator preset buttons based on active rules.
+ * Interactive Score Simulator Heatmap State
  */
-function renderSimulatorPresets() {
-  const container = document.querySelector('.sim-presets-chips');
-  if (!container) return;
-
-  const presets = [
-    { label: '🎯 Bullseye (3–1 vs 3–1)', actH: 3, actA: 1, predH: 3, predA: 1 }
-  ];
-
-  // Dynamically generate lowest score threshold presets for all active bonus rules!
-  SCORING_BONUSES.forEach(b => {
-    const presetInfo = generateLowestScenarioPreset({
-      rule_type: 'bonus',
-      min_goals_enabled: b.minGoalsEnabled,
-      min_goals: b.minGoals,
-      min_goals_mode: b.minGoalsMode,
-      goal_diff_enabled: b.goalDiffEnabled,
-      goal_diff: b.goalDiff
-    });
-    const match = presetInfo.exampleStr.match(/Actual\s+(\d+)–(\d+)/i);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const a = parseInt(match[2], 10);
-      presets.push({
-        label: `${renderIconElement(b.icon, b.icon_type, 16)} ${b.name} (${h}–${a})`,
-        actH: h,
-        actA: a,
-        predH: h,
-        predA: a
-      });
-    }
-  });
-
-  // Standard test scenario presets
-  presets.push(
-    { label: '✨ Exact Draw (1–1)', actH: 1, actA: 1, predH: 1, predA: 1 },
-    { label: '📊 Same Margin (3–1 vs 2–0)', actH: 3, actA: 1, predH: 2, predA: 0 },
-    { label: '❌ Outcome Only (3–1 vs 4–0)', actH: 3, actA: 1, predH: 4, predA: 0 },
-    { label: '🛋️ Miss (3–1 vs 0–2)', actH: 3, actA: 1, predH: 0, predA: 2 }
-  );
-
-  container.innerHTML = presets.map(p => `
-    <button type="button" class="sim-preset-btn" data-act-h="${p.actH}" data-act-a="${p.actA}" data-pred-h="${p.predH}" data-pred-a="${p.predA}">
-      ${p.label}
-    </button>
-  `).join('');
-
-  // Attach click handlers
-  container.querySelectorAll('.sim-preset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const actH = document.getElementById('simActHome');
-      const actA = document.getElementById('simActAway');
-      const predH = document.getElementById('simPredHome');
-      const predA = document.getElementById('simPredAway');
-
-      if (actH) actH.value = btn.dataset.actH;
-      if (actA) actA.value = btn.dataset.actA;
-      if (predH) predH.value = btn.dataset.predH;
-      if (predA) predA.value = btn.dataset.predA;
-
-      container.querySelectorAll('.sim-preset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      updateScoreSimulator();
-    });
-  });
-}
+let simState = {
+  refHome: 3,
+  refAway: 1,
+  maxGoal: 5,
+  pinnedCell: { h: 3, a: 1 },
+  previewCell: null
+};
 
 /**
  * Score Simulator State and Event Handling
  */
 function initScoreSimulator() {
-  // Steppers
-  document.querySelectorAll('.sim-step-btn').forEach(btn => {
+  // Steppers for Home & Away Reference Score
+  document.querySelectorAll('.sim-score-input-card .sim-step-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.dataset.target;
       const delta = parseInt(btn.dataset.delta, 10) || 0;
       const input = document.getElementById(targetId);
       if (!input) return;
       const current = parseInt(input.value, 10) || 0;
-      input.value = Math.max(0, Math.min(20, current + delta));
+      input.value = Math.max(0, Math.min(10, current + delta));
+
+      if (targetId === 'simRefHome') simState.refHome = parseInt(input.value, 10);
+      if (targetId === 'simRefAway') simState.refAway = parseInt(input.value, 10);
+
+      // Default pinned cell to current exact match
+      simState.pinnedCell = { h: simState.refHome, a: simState.refAway };
+      simState.previewCell = null;
+
       updateScoreSimulator();
     });
   });
 
-  // Number input change
-  ['simActHome', 'simActAway', 'simPredHome', 'simPredAway'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', updateScoreSimulator);
+  // Direct Number Input Changes
+  ['simRefHome', 'simRefAway'].forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('input', () => {
+        let val = parseInt(input.value, 10);
+        if (isNaN(val) || val < 0) val = 0;
+        if (val > 10) val = 10;
+        if (id === 'simRefHome') simState.refHome = val;
+        if (id === 'simRefAway') simState.refAway = val;
+
+        simState.pinnedCell = { h: simState.refHome, a: simState.refAway };
+        simState.previewCell = null;
+
+        updateScoreSimulator();
+      });
+    }
   });
 
-  renderSimulatorPresets();
+  // Dismiss tooltip when clicking outside any heatmap cell
+  document.addEventListener('click', (e) => {
+    const tooltip = document.getElementById('simCellTooltip');
+    if (tooltip && tooltip.style.display !== 'none') {
+      if (!e.target.closest('.sim-heatmap-cell') && !e.target.closest('#simCellTooltip')) {
+        tooltip.style.display = 'none';
+      }
+    }
+  });
+
   updateScoreSimulator();
 }
 
 /**
- * Update the simulator result card dynamically.
+ * Set a scoreline as the current reference score
+ */
+function setSimulatorReferenceScore(h, a) {
+  simState.refHome = h;
+  simState.refAway = a;
+  simState.pinnedCell = { h, a };
+  simState.previewCell = null;
+
+  const refHomeEl = document.getElementById('simRefHome');
+  const refAwayEl = document.getElementById('simRefAway');
+  if (refHomeEl) refHomeEl.value = h;
+  if (refAwayEl) refAwayEl.value = a;
+
+  const tooltip = document.getElementById('simCellTooltip');
+  if (tooltip) tooltip.style.display = 'none';
+
+  updateScoreSimulator();
+
+  const inputCard = document.querySelector('.sim-score-input-card');
+  if (inputCard) {
+    inputCard.classList.remove('sim-updated-pulse');
+    void inputCard.offsetWidth;
+    inputCard.classList.add('sim-updated-pulse');
+  }
+}
+
+/**
+ * Update the simulator heatmap grid and inspector dynamically.
  */
 function updateScoreSimulator() {
-  const container = document.getElementById('simResultContainer');
+  const matrixContainer = document.getElementById('simHeatmapMatrix');
+  if (!matrixContainer) return;
+
+  const refHomeEl = document.getElementById('simRefHome');
+  const refAwayEl = document.getElementById('simRefAway');
+  if (refHomeEl) simState.refHome = Math.max(0, Math.min(10, parseInt(refHomeEl.value, 10) || 0));
+  if (refAwayEl) simState.refAway = Math.max(0, Math.min(10, parseInt(refAwayEl.value, 10) || 0));
+
+  // Default grid size is 5 (6x6 matrix), auto-expanding if reference goals exceed 5
+  simState.maxGoal = Math.max(5, simState.refHome, simState.refAway);
+
+  const maxGoal = simState.maxGoal;
+  const gridSize = maxGoal + 1;
+  const refH = simState.refHome;
+  const refA = simState.refAway;
+
+  // Update header badges and captions
+  const badgeEl = document.getElementById('simPerspectiveBadge');
+  if (badgeEl) badgeEl.textContent = `Reference Score: ${refH}–${refA}`;
+
+  const summaryEl = document.getElementById('simHeatmapSummary');
+  if (summaryEl) summaryEl.textContent = `Showing points earned across all predictions if match ends ${refH}–${refA}`;
+
+  // Ensure pinnedCell is valid
+  if (!simState.pinnedCell || simState.pinnedCell.h === undefined) {
+    simState.pinnedCell = { h: refH, a: refA };
+  }
+
+  // Precompute points matrix and summary stats
+  const pointsGrid = [];
+  let maxPoints = 0;
+  let totalPoints = 0;
+  let pointsEarningCount = 0;
+  const totalScorelines = gridSize * gridSize;
+
+  let hwCount = 0, hwPoints = 0;
+  let drCount = 0, drPoints = 0;
+  let awCount = 0, awPoints = 0;
+
+  for (let a = 0; a <= maxGoal; a++) {
+    pointsGrid[a] = [];
+    for (let h = 0; h <= maxGoal; h++) {
+      const res = evaluatePrediction(refH, refA, h, a);
+      pointsGrid[a][h] = res;
+
+      if (res.total > maxPoints) maxPoints = res.total;
+      totalPoints += res.total;
+      if (res.total > 0) pointsEarningCount += 1;
+
+      if (h > a) {
+        hwCount++;
+        hwPoints += res.total;
+      } else if (h === a) {
+        drCount++;
+        drPoints += res.total;
+      } else {
+        awCount++;
+        awPoints += res.total;
+      }
+    }
+  }
+
+  // Update Legend Bar label and dynamic tier gradient
+  const legendMaxLabel = document.getElementById('simLegendMaxLabel');
+  if (legendMaxLabel) legendMaxLabel.textContent = `${maxPoints} pts`;
+
+  const legendBar = document.querySelector('.sim-legend-bar');
+  if (legendBar && Array.isArray(SCORING_TIERS) && SCORING_TIERS.length > 0) {
+    const sortedTiers = [...SCORING_TIERS].sort((a, b) => a.pts - b.pts);
+    const stops = sortedTiers.map((t, idx) => {
+      const pct = Math.round((idx / sortedTiers.length) * 85);
+      return `var(--tier-${t.tier}-color, rgba(255,255,255,0.2)) ${pct}%`;
+    });
+    stops.push('var(--bonus-text, #f59e0b) 100%');
+    legendBar.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+  }
+
+  // Build Heatmap Matrix Table
+  let gridHtml = `
+    <div class="heatmap-axis-top-label">
+      <span>Home Goals (X-axis →) • Points Awarded</span>
+    </div>
+    <div class="heatmap-grid-with-axis">
+      <div class="heatmap-axis-y-label-wrap">
+        <span class="heatmap-axis-left-label">Away Goals (Y-axis ↑)</span>
+      </div>
+      <div class="heatmap-matrix-table sim-matrix-table" style="grid-template-columns: 24px repeat(${gridSize}, 1fr); grid-template-rows: 24px repeat(${gridSize}, 1fr);" role="grid" aria-label="Score Simulator Heatmap Matrix">
+        <div class="heatmap-corner-cell"></div>
+  `;
+
+  // Column Headers (Home Goals 0 to maxGoal)
+  for (let h = 0; h <= maxGoal; h++) {
+    gridHtml += `<div class="heatmap-col-header ${h === refH ? 'col-ref-match' : ''}">${h}</div>`;
+  }
+
+  const activeInspectCell = simState.previewCell || simState.pinnedCell;
+
+  // Rows (Away Goals 0 to maxGoal)
+  for (let a = 0; a <= maxGoal; a++) {
+    gridHtml += `<div class="heatmap-row-header ${a === refA ? 'row-ref-match' : ''}">${a}</div>`;
+    for (let h = 0; h <= maxGoal; h++) {
+      const res = pointsGrid[a][h];
+      const isDraw = h === a;
+      const isExact = (h === refH && a === refA);
+      const isPinned = (h === activeInspectCell.h && a === activeInspectCell.a);
+      const tierObj = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[SCORING_TIERS.length - 1] || { tier: res.tier || 6, icon: '⚽', icon_type: 'emoji', name: `Tier ${res.tier}`, pts: 0 };
+      const hasBonus = Boolean((res.total > res.base) || (res.activeBonuses && res.activeBonuses.length > 0));
+
+      const cellText = `${res.total}p`;
+      const bonusBadgeHtml = hasBonus ? `<span class="sim-cell-bonus-pip" title="${(res.activeBonuses && res.activeBonuses.length > 0) ? res.activeBonuses.map(b => `${b.name} (+${b.pts}p)`).join(', ') : 'Bonus points applied'}">${renderIconElement(res.activeBonuses?.[0]?.icon || '✨', res.activeBonuses?.[0]?.icon_type || 'emoji', 10)}</span>` : '';
+      const tierIconHtml = `<span class="sim-cell-tier-icon" title="${tierObj.name} (${res.base}p)">${renderIconElement(tierObj.icon, tierObj.icon_type, 14)}</span>`;
+
+      gridHtml += `
+        <div class="heatmap-cell sim-heatmap-cell tier-${tierObj.tier} ${isDraw ? 'is-draw' : ''} ${isExact ? 'is-ref-exact' : ''} ${hasBonus ? 'has-bonus' : ''} ${isPinned ? 'is-pinned' : ''}"
+             data-h="${h}"
+             data-a="${a}"
+             data-pts="${res.total}"
+             data-tier="${tierObj.tier}"
+             data-has-bonus="${hasBonus ? '1' : '0'}"
+             tabindex="0"
+             role="gridcell"
+             aria-label="Score ${h}-${a}: ${res.total} points (${tierObj.name})">
+          ${bonusBadgeHtml}
+          ${tierIconHtml}
+          <span class="heatmap-cell-val sim-cell-pts-val">${cellText}</span>
+        </div>
+      `;
+    }
+  }
+
+  gridHtml += `
+      </div>
+    </div>
+  `;
+
+  matrixContainer.innerHTML = gridHtml;
+
+  // Render Summary KPI Cards Panel below Heatmap
+  const summaryPanel = document.getElementById('simSummaryPanel');
+  if (summaryPanel) {
+    const avgPts = (totalPoints / totalScorelines).toFixed(2);
+    const coveragePct = ((pointsEarningCount / totalScorelines) * 100).toFixed(1);
+    const [hwPct, drPct, awPct] = getThreeWayPercentages(hwPoints, drPoints, awPoints);
+
+    summaryPanel.innerHTML = `
+      <div class="heatmap-highlight-grid">
+        <div class="heatmap-top-highlight-card card-top-earner">
+          <div class="heatmap-highlight-top">
+            <span class="heatmap-highlight-badge badge-earner">⭐ MAX ACHIEVABLE</span>
+            <span class="heatmap-highlight-score badge-score-earner">${maxPoints} pts</span>
+          </div>
+          <div class="heatmap-highlight-desc">Exact score match (${refH}–${refA})</div>
+        </div>
+
+        <div class="heatmap-top-highlight-card card-most-missed">
+          <div class="heatmap-highlight-top">
+            <span class="heatmap-highlight-badge badge-missed">🎯 POINTS REACH</span>
+            <span class="heatmap-highlight-score badge-score-missed">${coveragePct}%</span>
+          </div>
+          <div class="heatmap-highlight-desc">${pointsEarningCount} of ${totalScorelines} scorelines earn points (avg ${avgPts}p)</div>
+        </div>
+      </div>
+
+      <!-- Outcome Points Distribution -->
+      <div class="heatmap-outcome-section">
+        <div class="heatmap-outcome-header">
+          <span>Points Share by Outcome</span>
+          <span class="heatmap-outcome-legend">Total Points Pool: ${totalPoints} pts</span>
+        </div>
+
+        <div class="heatmap-stacked-bar">
+          <div class="heatmap-stacked-seg seg-home" style="width: ${hwPct}%;" title="🏠 Home Wins: ${hwPoints} pts (${hwPct}%)"></div>
+          <div class="heatmap-stacked-seg seg-draw" style="width: ${drPct}%;" title="🤝 Draws: ${drPoints} pts (${drPct}%)"></div>
+          <div class="heatmap-stacked-seg seg-away" style="width: ${awPct}%;" title="✈️ Away Wins: ${awPoints} pts (${awPct}%)"></div>
+        </div>
+
+        <div class="heatmap-outcome-cards">
+          <div class="heatmap-outcome-card card-home">
+            <div class="heatmap-outcome-card-top">
+              <span>🏠 Home Win Preds</span>
+            </div>
+            <div class="heatmap-outcome-val">${hwPoints} pts</div>
+            <div class="heatmap-outcome-sub">${hwPct}% of points pool (${hwCount} cells)</div>
+          </div>
+
+          <div class="heatmap-outcome-card card-draw">
+            <div class="heatmap-outcome-card-top">
+              <span>🤝 Draw Preds</span>
+            </div>
+            <div class="heatmap-outcome-val">${drPoints} pts</div>
+            <div class="heatmap-outcome-sub">${drPct}% of points pool (${drCount} cells)</div>
+          </div>
+
+          <div class="heatmap-outcome-card card-away">
+            <div class="heatmap-outcome-card-top">
+              <span>✈️ Away Win Preds</span>
+            </div>
+            <div class="heatmap-outcome-val">${awPoints} pts</div>
+            <div class="heatmap-outcome-sub">${awPct}% of points pool (${awCount} cells)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Render the Selected Cell Inspector Card
+  renderSimulatorInspector(activeInspectCell.h, activeInspectCell.a, refH, refA);
+
+  // Attach interactive events to matrix cells
+  attachSimulatorCellEvents(matrixContainer, refH, refA);
+}
+
+/**
+ * Render the Selected Cell Inspector Card
+ */
+function renderSimulatorInspector(inspH, inspA, refH, refA) {
+  const container = document.getElementById('simInspectorCard');
   if (!container) return;
 
-  const actH = parseInt(document.getElementById('simActHome')?.value, 10) || 0;
-  const actA = parseInt(document.getElementById('simActAway')?.value, 10) || 0;
-  const predH = parseInt(document.getElementById('simPredHome')?.value, 10) || 0;
-  const predA = parseInt(document.getElementById('simPredAway')?.value, 10) || 0;
+  const res = evaluatePrediction(refH, refA, inspH, inspA);
+  const tierObj = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[SCORING_TIERS.length - 1] || { tier: res.tier || 6, icon: '⚽', icon_type: 'emoji', name: `Tier ${res.tier}`, pts: 0 };
 
-  const res = evaluatePrediction(actH, actA, predH, predA);
-  const tierObj = SCORING_TIERS.find(t => t.tier === res.tier) || SCORING_TIERS[SCORING_TIERS.length - 1];
-
-  const bonusesList = [];
-  if (res.highScoringBonus > 0) {
-    const bDef = SCORING_BONUSES.find(b => b.id === 'highScoring') || {};
-    bonusesList.push({
-      icon: bDef.icon || '🔥',
-      icon_type: bDef.icon_type || 'emoji',
-      name: bDef.name || 'High-Scoring Thriller',
-      pts: res.highScoringBonus
-    });
-  }
-  if (res.drawBonus > 0) {
-    const bDef = SCORING_BONUSES.find(b => b.id === 'drawBonus') || {};
-    bonusesList.push({
-      icon: bDef.icon || '✨',
-      icon_type: bDef.icon_type || 'emoji',
-      name: bDef.name || 'Exact Draw Premium',
-      pts: res.drawBonus
-    });
-  }
+  const bonusesList = (res.activeBonuses && Array.isArray(res.activeBonuses)) ? res.activeBonuses : [];
 
   const bonusChipsHtml = bonusesList.length > 0
     ? bonusesList.map(b => `
-        <span class="sim-bonus-pill">
+        <span class="sim-bonus-pill" style="border-color: var(--bonus-border); color: var(--bonus-text);">
           ${renderIconElement(b.icon, b.icon_type, 16)}
           <span>${b.name}</span>
           <strong class="sim-bonus-add">+${b.pts}</strong>
         </span>
       `).join('')
-    : '<span class="sim-no-bonus">No additive bonuses triggered</span>';
+    : '<span class="sim-no-bonus">None triggered for this scoreline</span>';
+
+  // Contextual explanation from tier definition (or fallback)
+  const reasonText = tierObj.desc || tierObj.shortDesc || `Matched ${tierObj.name}.`;
+
+  const isExactRef = (inspH === refH && inspA === refA);
+  const isPinned = (simState.pinnedCell.h === inspH && simState.pinnedCell.a === inspA);
+  const hasBonus = res.total > res.base;
 
   container.innerHTML = `
-    <div class="sim-result-header">
-      <span class="sim-result-tag">Live Evaluation</span>
-      <div class="sim-total-pts-badge">
+    <div class="sim-inspector-header">
+      <div class="sim-inspector-title-wrap">
+        <span class="sim-inspector-tag">${isPinned ? '📌 Selected Scoreline' : '👁️ Hover Preview'}</span>
+        <h4 class="sim-inspector-score">${inspH} – ${inspA}</h4>
+      </div>
+      <div class="sim-total-pts-badge ${hasBonus ? 'pts-badge-gold has-bonus-border' : `tier-${tierObj.tier}`}">
         <span class="sim-pts-number">${res.total}</span>
         <span class="sim-pts-label">${res.total === 1 ? 'Point' : 'Points'}</span>
       </div>
     </div>
 
-    <div class="sim-result-body">
+    <div class="sim-inspector-body">
+      <!-- Matchup Comparison Pill -->
+      <div class="sim-matchup-pill">
+        <span class="sim-matchup-item">Actual: <strong>${refH}–${refA}</strong></span>
+        <span class="sim-matchup-vs">vs</span>
+        <span class="sim-matchup-item">Prediction: <strong>${inspH}–${inspA}</strong></span>
+        ${isExactRef ? '<span class="sim-matchup-star">🎯 Entered Reference Prediction</span>' : ''}
+      </div>
+
+      <!-- Action Button: Set as Reference Score -->
+      ${!isExactRef ? `
+        <button type="button" class="btn btn-secondary sim-set-ref-btn" id="simSetRefBtn">
+          <span>⚽</span> Set ${inspH}–${inspA} as Reference Score
+        </button>
+      ` : ''}
+
       <!-- Base Tier Met -->
       <div class="sim-breakdown-row">
         <span class="sim-breakdown-label">Base Rule Met:</span>
         <div class="sim-rule-badge-wrap">
-          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.9rem; padding:5px 12px;">
+          <span class="pts-badge tier-${tierObj.tier}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.9rem; padding:5px 12px;">
             ${renderIconElement(tierObj.icon, tierObj.icon_type, 20)}
             <span>${tierObj.name}</span>
           </span>
           <span class="sim-base-pts-tag">${res.base} ${res.base === 1 ? 'pt' : 'pts'}</span>
         </div>
+        <p class="sim-reason-desc">${reasonText}</p>
       </div>
 
       <!-- Additive Bonuses -->
@@ -6952,15 +7169,77 @@ function updateScoreSimulator() {
         </div>
       </div>
 
-      <!-- Summary Formula -->
-      <div class="sim-formula-bar">
+      <!-- Calculation Formula -->
+      <div class="sim-formula-bar ${hasBonus ? 'has-bonus-glow' : ''}">
         <span class="sim-formula-item">${res.base} base</span>
         ${bonusesList.map(b => `<span class="sim-formula-plus">+</span><span class="sim-formula-bonus">+${b.pts}</span>`).join('')}
         <span class="sim-formula-equals">=</span>
         <strong class="sim-formula-total">${res.total} ${res.total === 1 ? 'Pt' : 'Pts'}</strong>
       </div>
     </div>
+
+    <div class="sim-inspector-footer">
+      <span>💡 Single-click cell to inspect | Double-click to set as reference</span>
+    </div>
   `;
+
+  // Wire up the button to set reference score
+  const setRefBtn = container.querySelector('#simSetRefBtn');
+  if (setRefBtn) {
+    setRefBtn.addEventListener('click', () => {
+      setSimulatorReferenceScore(inspH, inspA);
+    });
+  }
+}
+
+/**
+ * Attach single-click, double-click, and hover listeners to simulator heatmap cells
+ */
+function attachSimulatorCellEvents(container, refH, refA) {
+  container.querySelectorAll('.sim-heatmap-cell').forEach(cell => {
+    const h = parseInt(cell.dataset.h, 10);
+    const a = parseInt(cell.dataset.a, 10);
+
+    // Hover: preview cell in inspector card cleanly without floating tooltip
+    cell.addEventListener('mouseenter', () => {
+      simState.previewCell = { h, a };
+      renderSimulatorInspector(h, a, refH, refA);
+    });
+
+    cell.addEventListener('mouseleave', () => {
+      simState.previewCell = null;
+      renderSimulatorInspector(simState.pinnedCell.h, simState.pinnedCell.a, refH, refA);
+    });
+
+    // Single Click: pin this cell for detailed inspection in inspector card
+    cell.addEventListener('click', (e) => {
+      simState.pinnedCell = { h, a };
+      container.querySelectorAll('.sim-heatmap-cell').forEach(c => c.classList.remove('is-pinned'));
+      cell.classList.add('is-pinned');
+      renderSimulatorInspector(h, a, refH, refA);
+    });
+
+    // Double Click: make this cell the new reference scoreline!
+    cell.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      setSimulatorReferenceScore(h, a);
+    });
+
+    // Keyboard navigation (Enter to select, Shift+Enter to set as reference)
+    cell.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          setSimulatorReferenceScore(h, a);
+        } else {
+          simState.pinnedCell = { h, a };
+          container.querySelectorAll('.sim-heatmap-cell').forEach(c => c.classList.remove('is-pinned'));
+          cell.classList.add('is-pinned');
+          renderSimulatorInspector(h, a, refH, refA);
+        }
+      }
+    });
+  });
 }
 
 /**
