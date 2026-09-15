@@ -121,6 +121,12 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (rule_type, id)
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Handle migration for new scoring_rules condition columns
@@ -812,6 +818,40 @@ export function scheduleNightlyBackup() {
   };
 
   scheduleNext();
+}
+
+export function getAppSetting(key, defaultValue = null) {
+  try {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+    return row ? row.value : defaultValue;
+  } catch (err) {
+    return defaultValue;
+  }
+}
+
+export function setAppSetting(key, value) {
+  db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(key, String(value));
+}
+
+export function deleteAppSetting(key) {
+  db.prepare('DELETE FROM app_settings WHERE key = ?').run(key);
+}
+
+export function getAllAppSettings() {
+  try {
+    const rows = db.prepare('SELECT key, value FROM app_settings').all();
+    const map = {};
+    rows.forEach(r => { map[r.key] = r.value; });
+    return map;
+  } catch (err) {
+    return {};
+  }
 }
 
 export default db;

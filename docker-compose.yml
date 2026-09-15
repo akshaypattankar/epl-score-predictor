@@ -40,6 +40,11 @@ services:
       - DATA_DIR=/app/data
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - TZ=${TZ:-Asia/Kolkata}
+      - PAS_WEIGHT_MATCH=${PAS_WEIGHT_MATCH:-0.50}
+      - PAS_WEIGHT_RANK=${PAS_WEIGHT_RANK:-0.35}
+      - PAS_WEIGHT_POINTS=${PAS_WEIGHT_POINTS:-0.15}
+      - PAS_WEIGHT_RHO=${PAS_WEIGHT_RHO:-0.60}
+      - PAS_WEIGHT_MARS=${PAS_WEIGHT_MARS:-0.40}
     depends_on:
       - ts-epl
     healthcheck:

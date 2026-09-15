@@ -44,7 +44,7 @@
             <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" />
             <span class="nav-tab-text">DASHBOARD</span>
           </button>
-          <button class="nav-tab" id="navWhatIfBtn" style="display: none;" title="What-If Standings Simulator">
+          <button class="nav-tab" id="navWhatIfBtn" title="What-If Standings Simulator">
             <span class="nav-tab-icon" style="font-size: 1.05rem; line-height: 1; display: inline-block;">🔮</span>
             <span class="nav-tab-text">WHAT-IF</span>
           </button>
@@ -684,55 +684,20 @@
         </div>
       </div>
 
-      <!-- SCORING RULES CONFIGURATION SECTION -->
-      <section class="glass-card mgmt-section">
-        <div class="section-header mgmt-section-header">
-          <div>
-            <h3>⚡ Scoring Rules & Tiers Configuration</h3>
-            <p>Customize tier names, point values, icons, and bonus parameters across the app</p>
-          </div>
-          <button class="btn btn-primary mgmt-edit-rules-btn" id="mgmtOpenScoringRulesBtn">
-            ✏️ Edit Scoring Rules & Tiers
-          </button>
-        </div>
-        <div id="mgmtScoringRulesSummaryGrid" class="mgmt-scoring-rules-grid">
-          <!-- Dynamically populated summary chips of active rules by JS -->
-        </div>
-      </section>
-
       <!-- GROUPS HUB SECTION -->
       <section class="glass-card mgmt-section">
-        <div class="section-header">
+        <div class="section-header mgmt-section-header-row">
           <div>
-            <h3>🏆 League Groups</h3>
-            <p>Create and manage mini-leagues</p>
+            <div class="mgmt-section-title-wrap">
+              <h3>🏆 League Groups</h3>
+              <span class="status-live-badge" id="mgmtGroupCountBadge">0 Groups</span>
+            </div>
+            <p>Create and organize mini-leagues with custom start gameweeks and club scopes</p>
           </div>
-        </div>
-
-        <div class="mgmt-group-create-container">
-          <div class="mgmt-action-row mgmt-create-group-row">
-            <input type="text" id="mgmtNewGroupNameInput" class="form-input mgmt-group-name-input-field"
-              placeholder="New Group Name (e.g., Big 6 Derby, Office League)" />
-            <div class="mgmt-start-gw-wrapper">
-              <label for="mgmtGroupStartGwSelect" class="mgmt-start-gw-label">🚩 Start:</label>
-              <select id="mgmtGroupStartGwSelect" class="control-dropdown mgmt-start-gw-dropdown" title="Choose the first Gameweek included in this league">
-                <option value="1" selected>GW 1 (Full Season)</option>
-              </select>
-            </div>
-            <button class="btn btn-primary mgmt-create-group-btn" id="mgmtCreateGroupBtn">➕ Create New Group</button>
-          </div>
-
-          <div class="mgmt-scope-picker-box">
-            <label class="mgmt-scope-picker-label">
-              ⚽ Group Team Scope:
-            </label>
-            <div class="mgmt-scope-radio-group">
-              <label class="form-radio-label"><input type="radio" name="mgmtTeamMode" value="ALL" checked> All Premier League Teams (Default)</label>
-              <label class="form-radio-label"><input type="radio" name="mgmtTeamMode" value="CUSTOM"> Select Specific Teams Only</label>
-            </div>
-            <div id="mgmtTeamChipGrid" class="team-filter-grid" style="display: none;">
-              <!-- Rendered dynamically by JS -->
-            </div>
+          <div class="mgmt-section-actions">
+            <button type="button" class="btn btn-primary mgmt-header-action-btn" id="mgmtOpenCreateGroupModalBtn">
+              <span>➕</span> New League Group
+            </button>
           </div>
         </div>
 
@@ -743,24 +708,22 @@
 
       <!-- MASTER PLAYERS DIRECTORY SECTION -->
       <section class="glass-card mgmt-section">
-        <div class="section-header">
+        <div class="section-header mgmt-section-header-row">
           <div>
-            <h3>👤 Master Player Directory</h3>
+            <div class="mgmt-section-title-wrap">
+              <h3>👤 Master Player Directory</h3>
+              <span class="status-live-badge" id="mgmtPlayerCountBadge">0 Players</span>
+            </div>
             <p>Add people once, then assign or unassign them from any league group</p>
           </div>
-        </div>
-
-        <!-- Add Player Bar -->
-        <div class="mgmt-player-add-bar">
-          <div class="mgmt-player-input-wrap">
-            <input type="text" id="mgmtNewPlayerNameInput" class="form-input mgmt-player-name-field"
-              placeholder="Add new person (e.g., Sarah, Michael)" />
-            <button class="btn btn-primary mgmt-add-player-btn" id="mgmtCreatePlayerBtn">👤 Add to Directory</button>
-          </div>
-
-          <div class="mgmt-player-search-wrap">
-            <span class="mgmt-search-label">Search:</span>
-            <input type="text" id="mgmtSearchPlayerInput" class="form-input mgmt-search-input-field" placeholder="Filter names..." />
+          <div class="mgmt-section-actions mgmt-player-actions-row">
+            <div class="mgmt-search-box-wrap">
+              <span class="mgmt-search-box-icon">🔍</span>
+              <input type="text" id="mgmtSearchPlayerInput" class="form-input mgmt-search-box-input" placeholder="Search players..." />
+            </div>
+            <button type="button" class="btn btn-primary mgmt-header-action-btn" id="mgmtOpenCreatePlayerModalBtn">
+              <span>👤</span> Add New Player
+            </button>
           </div>
         </div>
 
@@ -868,6 +831,139 @@
               <!-- Populated dynamically by JS -->
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- PREDICTION ACCURACY SCORE (PAS) WEIGHTAGES SECTION -->
+      <section class="glass-card mgmt-section" id="mgmtPasSettingsSection" style="margin-top: 24px;">
+        <div class="section-header mgmt-section-header-row">
+          <div>
+            <div class="mgmt-section-title-wrap">
+              <h3>🔮 Prediction Accuracy Score (PAS) Weightages</h3>
+              <span class="status-live-badge" id="mgmtPasSourceBadge">Default (50/35/15)</span>
+            </div>
+            <p>Define the relative weightages for evaluating player prediction accuracy. Applied immediately to the "What If" simulator and player ranking engine.</p>
+          </div>
+          <div class="mgmt-section-actions">
+            <button type="button" class="btn btn-secondary" id="mgmtResetPasWeightsBtn" title="Reset to Environment variables or System Defaults">
+              ↺ Reset to Defaults
+            </button>
+            <button type="button" class="btn btn-primary mgmt-header-action-btn" id="mgmtSavePasWeightsBtn">
+              💾 Save Weightages
+            </button>
+          </div>
+        </div>
+
+        <!-- PAS Settings Content Card -->
+        <div class="mgmt-pas-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 18px 20px;">
+          <!-- Live Preview Bar and Formula Summary -->
+          <div style="margin-bottom: 18px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.06);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                <span>📊</span> Formula Distribution:
+                <code id="mgmtPasFormulaPreview" style="color: var(--accent-cyan); background: rgba(56,189,248,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem;">50% Match + 35% Rank + 15% Pts</code>
+              </span>
+              <span id="mgmtPasTotalBadge" style="font-size: 0.82rem; font-weight: 800; color: #34d399; font-family: var(--font-mono);">
+                Total: 100%
+              </span>
+            </div>
+            <!-- Proportional Bar -->
+            <div style="height: 10px; width: 100%; border-radius: 5px; overflow: hidden; display: flex; background: rgba(255,255,255,0.08);">
+              <div id="mgmtPasBarMatch" style="width: 50%; background: #38bdf8; transition: width 0.2s ease;" title="Match Score Precision"></div>
+              <div id="mgmtPasBarRank" style="width: 35%; background: #a78bfa; transition: width 0.2s ease;" title="Table Rank Proximity"></div>
+              <div id="mgmtPasBarPts" style="width: 15%; background: #34d399; transition: width 0.2s ease;" title="Points Calibration"></div>
+            </div>
+            <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); flex-wrap: wrap;">
+              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #38bdf8;"></span> Match Precision (<span id="mgmtPasLegendMatch">50%</span>)</span>
+              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #a78bfa;"></span> Rank Proximity (<span id="mgmtPasLegendRank">35%</span>)</span>
+              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #34d399;"></span> Points Calibration (<span id="mgmtPasLegendPts">15%</span>)</span>
+            </div>
+          </div>
+
+          <!-- Sliders Grid for the 3 Core Pillars -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px;">
+            <!-- Pillar 1: Match Score Precision -->
+            <div class="mgmt-pas-slider-box" style="background: rgba(56, 189, 248, 0.04); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="mgmtPasMatchInput" style="font-weight: 700; font-size: 0.85rem; color: #38bdf8;">🎯 Match Score Precision</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <input type="number" id="mgmtPasMatchInput" min="0" max="100" step="1" value="50" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #38bdf8;" class="form-input" />
+                  <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8;">%</span>
+                </div>
+              </div>
+              <input type="range" id="mgmtPasMatchRange" min="0" max="100" step="1" value="50" style="width: 100%; accent-color: #38bdf8; cursor: pointer;" />
+              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+                Rewards exact scores (100 pts), correct outcomes with goal diff (85 pts), and correct outcomes (70 pts).
+              </p>
+            </div>
+
+            <!-- Pillar 2: Table Rank Proximity -->
+            <div class="mgmt-pas-slider-box" style="background: rgba(167, 139, 250, 0.04); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: var(--radius-sm); padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="mgmtPasRankInput" style="font-weight: 700; font-size: 0.85rem; color: #a78bfa;">📐 Table Rank Proximity</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <input type="number" id="mgmtPasRankInput" min="0" max="100" step="1" value="35" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #a78bfa;" class="form-input" />
+                  <span style="font-size: 0.8rem; font-weight: 700; color: #a78bfa;">%</span>
+                </div>
+              </div>
+              <input type="range" id="mgmtPasRankRange" min="0" max="100" step="1" value="35" style="width: 100%; accent-color: #a78bfa; cursor: pointer;" />
+              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+                Spearman rank correlation and Mean Absolute Rank Shift (MARS) across all 20 Premier League positions.
+              </p>
+            </div>
+
+            <!-- Pillar 3: Points Calibration -->
+            <div class="mgmt-pas-slider-box" style="background: rgba(52, 211, 153, 0.04); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: var(--radius-sm); padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="mgmtPasPtsInput" style="font-weight: 700; font-size: 0.85rem; color: #34d399;">⚖️ Points Calibration</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <input type="number" id="mgmtPasPtsInput" min="0" max="100" step="1" value="15" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #34d399;" class="form-input" />
+                  <span style="font-size: 0.8rem; font-weight: 700; color: #34d399;">%</span>
+                </div>
+              </div>
+              <input type="range" id="mgmtPasPtsRange" min="0" max="100" step="1" value="15" style="width: 100%; accent-color: #34d399; cursor: pointer;" />
+              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+                Mean Absolute Points Error (MAPE) measuring total distance between predicted club points and actual club points.
+              </p>
+            </div>
+          </div>
+
+          <!-- Advanced Sub-Weights (Spearman rho vs MARS) -->
+          <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;">
+            <details style="cursor: pointer;">
+              <summary style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); outline: none; user-select: none;">
+                ⚙️ Advanced: Table Rank Sub-Weightages (Spearman ρ vs MARS)
+              </summary>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.18); border-radius: var(--radius-sm);">
+                <div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="mgmtPasRhoInput" style="font-size: 0.8rem; font-weight: 700; color: #c084fc;">Spearman Rank Correlation (ρ)</label>
+                    <div style="display: flex; align-items: center; gap: 2px;">
+                      <input type="number" id="mgmtPasRhoInput" min="0" max="100" step="1" value="60" style="width: 55px; text-align: right; padding: 2px 4px; font-size: 0.8rem;" class="form-input" />
+                      <span style="font-size: 0.75rem;">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="mgmtPasRhoRange" min="0" max="100" step="1" value="60" style="width: 100%; accent-color: #c084fc; cursor: pointer;" />
+                  <span style="font-size: 0.7rem; color: var(--text-dim);">Measures relative order accuracy across the entire table</span>
+                </div>
+
+                <div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="mgmtPasMarsInput" style="font-size: 0.8rem; font-weight: 700; color: #fb7185;">Mean Absolute Rank Shift (MARS)</label>
+                    <div style="display: flex; align-items: center; gap: 2px;">
+                      <input type="number" id="mgmtPasMarsInput" min="0" max="100" step="1" value="40" style="width: 55px; text-align: right; padding: 2px 4px; font-size: 0.8rem;" class="form-input" />
+                      <span style="font-size: 0.75rem;">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="mgmtPasMarsRange" min="0" max="100" step="1" value="40" style="width: 100%; accent-color: #fb7185; cursor: pointer;" />
+                  <span style="font-size: 0.7rem; color: var(--text-dim);">Penalizes large spot displacement per club</span>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Status Banner for Feedback -->
+          <div id="mgmtPasStatusMessage" style="display: none; margin-top: 14px; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 600;"></div>
         </div>
       </section>
 
@@ -1176,6 +1272,181 @@
         <button type="button" class="btn btn-primary" id="saveGroupScopeModalBtn" style="padding: 10px 22px; font-weight: 700;">
           💾 Apply Scope Changes
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CREATE LEAGUE GROUP MODAL ────────────────────────────────────── -->
+  <div class="modal-overlay" id="createGroupModal" style="display: none;">
+    <div class="modal-card glass-card mgmt-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-icon">🏆</div>
+          <div>
+            <h3 class="modal-title">Create League Group</h3>
+            <p class="modal-subtitle">Set up a new mini-league, starting gameweek, and club scope</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeCreateGroupModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+      <form id="createGroupForm" class="modal-body mgmt-modal-body" onsubmit="return false;">
+        <div class="form-group">
+          <label for="newGroupNameInput" class="form-label">
+            <span>🏷️</span> Group Name
+          </label>
+          <input type="text" id="newGroupNameInput" class="form-input" placeholder="e.g. Office Derby, Weekend Warriors" required autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label for="newGroupStartGwSelect" class="form-label">
+            <span>🚩</span> Starting Gameweek
+          </label>
+          <select id="newGroupStartGwSelect" class="control-dropdown mgmt-modal-select" title="Choose the first Gameweek included in this league">
+            <option value="1" selected>GW 1 (Full Season)</option>
+          </select>
+          <span class="form-hint">Matches before this gameweek will not count towards this league's standings</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>⚽</span> Participating Club Scope
+          </label>
+          <div class="scope-mode-options">
+            <label class="form-radio-label">
+              <input type="radio" name="modalNewGroupTeamMode" value="ALL" checked class="form-radio" id="modalNewGroupModeAll" />
+              <span>All 20 Premier League Teams (Default)</span>
+            </label>
+            <label class="form-radio-label">
+              <input type="radio" name="modalNewGroupTeamMode" value="CUSTOM" class="form-radio" id="modalNewGroupModeCustom" />
+              <span>Select Specific Clubs Only</span>
+            </label>
+          </div>
+
+          <!-- Custom Club Selector in Modal -->
+          <div id="modalNewGroupCustomTeamsBox" style="display: none;" class="mgmt-modal-custom-box">
+            <div class="mgmt-modal-box-header">
+              <span class="mgmt-modal-box-count">Selected: <strong id="modalNewGroupTeamsCount">0</strong> / 20 Clubs</span>
+              <div class="mgmt-modal-preset-actions">
+                <button type="button" class="btn btn-secondary btn-xs" id="modalNewGroupBig6Btn">⚡ Big 6</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="modalNewGroupSelectAllBtn">Select All</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="modalNewGroupClearAllBtn">Clear</button>
+              </div>
+            </div>
+            <div class="mgmt-team-chips-grid" id="modalNewGroupTeamGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 8px; max-height: 180px; overflow-y: auto;">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <div id="createGroupErrorBanner" class="auth-error-banner" style="display: none;"></div>
+
+        <div class="modal-footer mgmt-modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelCreateGroupModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitCreateGroupModalBtn">
+            <span>➕</span> Create Group
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── ADD NEW PLAYER MODAL ─────────────────────────────────────────── -->
+  <div class="modal-overlay" id="createPlayerModal" style="display: none;">
+    <div class="modal-card glass-card mgmt-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-icon">👤</div>
+          <div>
+            <h3 class="modal-title" id="createPlayerModalTitle">Add New Player</h3>
+            <p class="modal-subtitle" id="createPlayerModalSubtitle">Register a participant in the master directory</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeCreatePlayerModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+
+      <!-- Step 1: Input Form -->
+      <form id="createPlayerForm" class="modal-body mgmt-modal-body" onsubmit="return false;">
+        <div class="form-group">
+          <label for="newPlayerNameInput" class="form-label">
+            <span>👤</span> Player Name
+          </label>
+          <input type="text" id="newPlayerNameInput" class="form-input" placeholder="e.g. Alice Cooper, Marcus R." required autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>🏆</span> Assign to League Groups
+          </label>
+          <div id="newPlayerGroupCheckboxes" class="mgmt-group-checkbox-list">
+            <!-- Rendered dynamically with existing groups -->
+          </div>
+          <span class="form-hint">You can also adjust group memberships at any time in the directory table</span>
+        </div>
+
+        <div id="createPlayerErrorBanner" class="auth-error-banner" style="display: none;"></div>
+
+        <div class="modal-footer mgmt-modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelCreatePlayerModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submitCreatePlayerModalBtn">
+            <span>👤</span> Add to Directory
+          </button>
+        </div>
+      </form>
+
+      <!-- Step 2: Passcode Success Reveal View -->
+      <div id="createPlayerSuccessView" class="modal-body mgmt-modal-body" style="display: none;">
+        <div class="passcode-success-card">
+          <div class="passcode-success-icon">🎉</div>
+          <h4 class="passcode-success-name" id="createdPlayerNameDisplay">Player Added!</h4>
+          <p class="passcode-success-desc">A unique 6-character prediction passcode has been generated:</p>
+
+          <div class="passcode-display-box">
+            <div class="passcode-code-text" id="createdPlayerPasscodeDisplay">------</div>
+            <button type="button" class="btn btn-secondary copy-passcode-action-btn" id="copyCreatedPasscodeBtn">
+              <span>📋</span> Copy Passcode
+            </button>
+          </div>
+
+          <div class="passcode-info-note">
+            <span>ℹ️</span> Provide this passcode to the player. They will enter it under <strong>Player Sign-In</strong> to unlock prediction editing.
+          </div>
+        </div>
+
+        <div class="modal-footer mgmt-modal-footer" style="margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" id="addAnotherPlayerBtn">➕ Add Another Player</button>
+          <button type="button" class="btn btn-primary" id="finishCreatePlayerBtn">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PASSCODE DISPLAY MODAL (FOR RESET PASSCODE) ──────────────────── -->
+  <div class="modal-overlay" id="passcodeDisplayModal" style="display: none;">
+    <div class="modal-card glass-card mgmt-modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-icon">🔑</div>
+          <div>
+            <h3 class="modal-title">Passcode Generated</h3>
+            <p class="modal-subtitle" id="passcodeModalSubtitle">Passcode updated successfully</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closePasscodeDisplayModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body mgmt-modal-body">
+        <div class="passcode-success-card">
+          <h4 class="passcode-success-name" id="passcodeModalPlayerName">Player</h4>
+          <p class="passcode-success-desc">New 6-character prediction passcode:</p>
+          <div class="passcode-display-box">
+            <div class="passcode-code-text" id="passcodeModalCodeDisplay">------</div>
+            <button type="button" class="btn btn-secondary copy-passcode-action-btn" id="passcodeModalCopyBtn">
+              <span>📋</span> Copy
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer mgmt-modal-footer" style="margin-top: 16px;">
+          <button type="button" class="btn btn-primary" id="finishPasscodeDisplayBtn" style="width: 100%;">Done</button>
+        </div>
       </div>
     </div>
   </div>

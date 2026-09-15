@@ -31,12 +31,15 @@ import {
   apiFetchScoringRules,
   apiUpdateScoringRules,
   apiResetScoringRules,
-  apiPingActivity
+  apiPingActivity,
+  apiFetchPasSettings,
+  apiSavePasSettings,
+  apiResetPasSettings
 } from './api.js';
 import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
 import { initRulesEditorModal, openRulesEditorModal, renderIconElement, generateLowestScenarioPreset } from './rulesEditor.js';
 import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
-import { renderWhatIfView, renderWhatIfDashboardWidget } from './whatIfStandings.js';
+import { renderWhatIfView, renderWhatIfDashboardWidget, resetWhatIfCache } from './whatIfStandings.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
@@ -706,8 +709,8 @@ function renderAuthHeader() {
       mgmtBtn.classList.add('is-hidden');
     }
     if (whatIfBtn) {
-      whatIfBtn.style.display = 'none';
-      whatIfBtn.classList.add('is-hidden');
+      whatIfBtn.style.display = 'inline-flex';
+      whatIfBtn.classList.remove('is-hidden');
     }
     if (groupBox) groupBox.style.display = 'block';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
@@ -722,8 +725,8 @@ function renderAuthHeader() {
       mgmtBtn.classList.add('is-hidden');
     }
     if (whatIfBtn) {
-      whatIfBtn.style.display = 'none';
-      whatIfBtn.classList.add('is-hidden');
+      whatIfBtn.style.display = 'inline-flex';
+      whatIfBtn.classList.remove('is-hidden');
     }
     if (groupBox) groupBox.style.display = 'none';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
@@ -1635,7 +1638,7 @@ function renderDashboardComponents() {
 
 // ─── View Navigation (SPA) ────────────────────────────────────────────────────
 function renderViewByName(targetView) {
-  if ((targetView === 'management' || targetView === 'whatif') && state.auth.role !== 'admin') {
+  if (targetView === 'management' && state.auth.role !== 'admin') {
     targetView = 'dashboard';
   }
   state.activeView = targetView;
@@ -1697,10 +1700,6 @@ function initNavigation() {
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
   whatIfBtn?.addEventListener('click', () => {
-    if (state.auth.role !== 'admin') {
-      renderViewByName('dashboard');
-      return;
-    }
     renderViewByName('whatif');
   });
   scoringBtn?.addEventListener('click', () => renderViewByName('scoring'));
@@ -6990,84 +6989,334 @@ function renderMgmtScoringRulesSummary() {
   }).join('');
 }
 
-function initManagementEvents() {
-  const teamModeRadios = document.getElementsByName('mgmtTeamMode');
-  const chipGrid = document.getElementById('mgmtTeamChipGrid');
+// ─── Management Page Event Handlers & Modal Controllers ─────────────────────
+function openCreateGroupModal() {
+  const modal = document.getElementById('createGroupModal');
+  if (!modal) return;
+  const nameInput = document.getElementById('newGroupNameInput');
+  const startGwSelect = document.getElementById('newGroupStartGwSelect');
+  const modeAll = document.getElementById('modalNewGroupModeAll');
+  const customBox = document.getElementById('modalNewGroupCustomTeamsBox');
+  const errorBanner = document.getElementById('createGroupErrorBanner');
 
-  teamModeRadios.forEach(r => {
-    r.addEventListener('change', (e) => {
-      if (chipGrid) {
-        chipGrid.style.display = e.target.value === 'CUSTOM' ? 'grid' : 'none';
-      }
-    });
-  });
+  if (nameInput) nameInput.value = '';
+  if (errorBanner) errorBanner.style.display = 'none';
+  if (modeAll) modeAll.checked = true;
+  if (customBox) customBox.style.display = 'none';
 
-  // Populate starting gameweek options in group creation form
-  const startGwSelect = document.getElementById('mgmtGroupStartGwSelect');
-  if (startGwSelect && startGwSelect.options.length <= 1) {
+  if (startGwSelect) {
     startGwSelect.innerHTML = `
       <option value="1" selected>GW 1 (Full Season)</option>
       ${Array.from({ length: 37 }, (_, i) => i + 2).map(gw => `<option value="${gw}">GW ${gw} (Mid-Season)</option>`).join('')}
     `;
   }
 
-  document.getElementById('mgmtCreateGroupBtn')?.addEventListener('click', async () => {
-    const input = document.getElementById('mgmtNewGroupNameInput');
-    const name = input.value.trim();
-    if (!name) return;
+  renderModalNewGroupTeamGrid();
+  modal.style.display = 'flex';
+  setTimeout(() => nameInput?.focus(), 50);
+}
+
+function closeCreateGroupModal() {
+  const modal = document.getElementById('createGroupModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderModalNewGroupTeamGrid() {
+  const grid = document.getElementById('modalNewGroupTeamGrid');
+  const countEl = document.getElementById('modalNewGroupTeamsCount');
+  if (!grid) return;
+
+  const teamNames = Object.values(state.teams).map(t => t.name).sort();
+  grid.innerHTML = teamNames.map(name => {
+    const teamObj = Object.values(state.teams).find(t => t.name === name);
+    const crestUrl = teamObj?.code ? getCrestUrl(teamObj.code) : '';
+    const details = getClubDetails(name) || teamObj;
+    return `
+      <label class="mgmt-scope-team-chip" title="${name}">
+        <input type="checkbox" value="${name}" class="modal-newgroup-team-cb form-checkbox" style="cursor: pointer;" />
+        ${crestUrl ? `<img src="${crestUrl}" width="18" height="18" alt="${name}" style="flex-shrink:0;" />` : ''}
+        <span class="mgmt-chip-name" style="font-weight:600; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${details?.shortName || name}</span>
+      </label>
+    `;
+  }).join('');
+
+  const updateCount = () => {
+    const checked = grid.querySelectorAll('.modal-newgroup-team-cb:checked');
+    if (countEl) countEl.textContent = checked.length;
+    grid.querySelectorAll('.modal-newgroup-team-cb').forEach(cb => {
+      const chip = cb.closest('.mgmt-scope-team-chip');
+      if (chip) {
+        if (cb.checked) chip.classList.add('selected');
+        else chip.classList.remove('selected');
+      }
+    });
+  };
+
+  grid.querySelectorAll('.modal-newgroup-team-cb').forEach(cb => {
+    cb.addEventListener('change', updateCount);
+  });
+  updateCount();
+}
+
+function openCreatePlayerModal() {
+  const modal = document.getElementById('createPlayerModal');
+  if (!modal) return;
+  const nameInput = document.getElementById('newPlayerNameInput');
+  const groupList = document.getElementById('newPlayerGroupCheckboxes');
+  const form = document.getElementById('createPlayerForm');
+  const successView = document.getElementById('createPlayerSuccessView');
+  const errorBanner = document.getElementById('createPlayerErrorBanner');
+
+  if (nameInput) nameInput.value = '';
+  if (errorBanner) errorBanner.style.display = 'none';
+  if (form) form.style.display = 'block';
+  if (successView) successView.style.display = 'none';
+
+  if (groupList) {
+    const activeGId = state.activeGroup ? state.activeGroup.id : null;
+    if (state.groups.length === 0) {
+      groupList.innerHTML = `<span style="font-size:0.84rem; color:var(--text-muted);">No league groups yet.</span>`;
+    } else {
+      groupList.innerHTML = state.groups.map(g => {
+        const isChecked = g.id === activeGId;
+        return `
+          <label class="mgmt-group-checkbox-item ${isChecked ? 'checked' : ''}">
+            <input type="checkbox" value="${g.id}" class="modal-newplayer-group-cb form-checkbox" ${isChecked ? 'checked' : ''} />
+            <span style="font-weight:600;">🏆 ${g.name}</span>
+          </label>
+        `;
+      }).join('');
+
+      groupList.querySelectorAll('.modal-newplayer-group-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const item = cb.closest('.mgmt-group-checkbox-item');
+          if (item) {
+            if (cb.checked) item.classList.add('checked');
+            else item.classList.remove('checked');
+          }
+        });
+      });
+    }
+  }
+
+  modal.style.display = 'flex';
+  setTimeout(() => nameInput?.focus(), 50);
+}
+
+function closeCreatePlayerModal() {
+  const modal = document.getElementById('createPlayerModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openPasscodeDisplayModal(name, passcode) {
+  const modal = document.getElementById('passcodeDisplayModal');
+  if (!modal) return;
+  const nameEl = document.getElementById('passcodeModalPlayerName');
+  const codeEl = document.getElementById('passcodeModalCodeDisplay');
+  if (nameEl) nameEl.textContent = name;
+  if (codeEl) codeEl.textContent = passcode;
+  modal.style.display = 'flex';
+}
+
+function closePasscodeDisplayModal() {
+  const modal = document.getElementById('passcodeDisplayModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function initManagementEvents() {
+  // Modal Triggers
+  document.getElementById('mgmtOpenCreateGroupModalBtn')?.addEventListener('click', openCreateGroupModal);
+  document.getElementById('closeCreateGroupModalBtn')?.addEventListener('click', closeCreateGroupModal);
+  document.getElementById('cancelCreateGroupModalBtn')?.addEventListener('click', closeCreateGroupModal);
+
+  document.getElementById('mgmtOpenCreatePlayerModalBtn')?.addEventListener('click', openCreatePlayerModal);
+  document.getElementById('closeCreatePlayerModalBtn')?.addEventListener('click', closeCreatePlayerModal);
+  document.getElementById('cancelCreatePlayerModalBtn')?.addEventListener('click', closeCreatePlayerModal);
+  document.getElementById('finishCreatePlayerBtn')?.addEventListener('click', closeCreatePlayerModal);
+
+  document.getElementById('addAnotherPlayerBtn')?.addEventListener('click', () => {
+    openCreatePlayerModal();
+  });
+
+  document.getElementById('closePasscodeDisplayModalBtn')?.addEventListener('click', closePasscodeDisplayModal);
+  document.getElementById('finishPasscodeDisplayBtn')?.addEventListener('click', closePasscodeDisplayModal);
+
+  // Copy passcode buttons
+  document.getElementById('copyCreatedPasscodeBtn')?.addEventListener('click', () => {
+    const code = document.getElementById('createdPlayerPasscodeDisplay')?.textContent?.trim();
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = document.getElementById('copyCreatedPasscodeBtn');
+      if (btn) {
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<span>✅</span> Copied!';
+        setTimeout(() => { btn.innerHTML = oldHtml; }, 1500);
+      }
+      showSaveToast(`📋 Passcode ${code} copied!`);
+    }).catch(() => {});
+  });
+
+  document.getElementById('passcodeModalCopyBtn')?.addEventListener('click', () => {
+    const code = document.getElementById('passcodeModalCodeDisplay')?.textContent?.trim();
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = document.getElementById('passcodeModalCopyBtn');
+      if (btn) {
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<span>✅</span> Copied!';
+        setTimeout(() => { btn.innerHTML = oldHtml; }, 1500);
+      }
+      showSaveToast(`📋 Passcode ${code} copied!`);
+    }).catch(() => {});
+  });
+
+  // Create Group Mode Switch (ALL vs CUSTOM)
+  const groupModeRadios = document.getElementsByName('modalNewGroupTeamMode');
+  const customTeamsBox = document.getElementById('modalNewGroupCustomTeamsBox');
+  groupModeRadios.forEach(r => {
+    r.addEventListener('change', (e) => {
+      if (customTeamsBox) {
+        customTeamsBox.style.display = e.target.value === 'CUSTOM' ? 'block' : 'none';
+      }
+    });
+  });
+
+  // Preset buttons in Create Group modal
+  document.getElementById('modalNewGroupSelectAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.modal-newgroup-team-cb').forEach(cb => { cb.checked = true; });
+    const grid = document.getElementById('modalNewGroupTeamGrid');
+    const countEl = document.getElementById('modalNewGroupTeamsCount');
+    if (countEl) countEl.textContent = document.querySelectorAll('.modal-newgroup-team-cb:checked').length;
+    grid?.querySelectorAll('.mgmt-scope-team-chip').forEach(c => c.classList.add('selected'));
+  });
+
+  document.getElementById('modalNewGroupClearAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.modal-newgroup-team-cb').forEach(cb => { cb.checked = false; });
+    const grid = document.getElementById('modalNewGroupTeamGrid');
+    const countEl = document.getElementById('modalNewGroupTeamsCount');
+    if (countEl) countEl.textContent = 0;
+    grid?.querySelectorAll('.mgmt-scope-team-chip').forEach(c => c.classList.remove('selected'));
+  });
+
+  document.getElementById('modalNewGroupBig6Btn')?.addEventListener('click', () => {
+    const big6 = ['Arsenal', 'Chelsea', 'Liverpool', 'Man City', 'Man Utd', 'Spurs'];
+    const grid = document.getElementById('modalNewGroupTeamGrid');
+    document.querySelectorAll('.modal-newgroup-team-cb').forEach(cb => {
+      cb.checked = isTeamInList(cb.value, big6);
+      const chip = cb.closest('.mgmt-scope-team-chip');
+      if (chip) {
+        if (cb.checked) chip.classList.add('selected');
+        else chip.classList.remove('selected');
+      }
+    });
+    const countEl = document.getElementById('modalNewGroupTeamsCount');
+    if (countEl) countEl.textContent = document.querySelectorAll('.modal-newgroup-team-cb:checked').length;
+  });
+
+  // Create Group Form Submission
+  document.getElementById('createGroupForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('newGroupNameInput');
+    const errorBanner = document.getElementById('createGroupErrorBanner');
+    const name = input?.value?.trim();
+    if (!name) {
+      if (errorBanner) {
+        errorBanner.textContent = 'Please enter a group name.';
+        errorBanner.style.display = 'block';
+      }
+      return;
+    }
 
     let teamsFilter = 'ALL';
-    const mode = Array.from(teamModeRadios).find(r => r.checked)?.value;
-    if (mode === 'CUSTOM' && chipGrid) {
-      const selected = Array.from(chipGrid.querySelectorAll('.mgmt-team-checkbox:checked')).map(cb => cb.value);
+    const mode = Array.from(groupModeRadios).find(r => r.checked)?.value || 'ALL';
+    if (mode === 'CUSTOM') {
+      const selected = Array.from(document.querySelectorAll('.modal-newgroup-team-cb:checked')).map(cb => cb.value);
       if (selected.length === 0) {
-        alert('Please select at least one team for custom team scope, or switch to All Teams!');
+        if (errorBanner) {
+          errorBanner.textContent = 'Please select at least one team for custom team scope, or choose All Teams!';
+          errorBanner.style.display = 'block';
+        }
         return;
       }
       teamsFilter = selected;
     }
 
-    const startGw = parseInt(document.getElementById('mgmtGroupStartGwSelect')?.value, 10) || 1;
+    const startGw = parseInt(document.getElementById('newGroupStartGwSelect')?.value, 10) || 1;
 
     try {
+      if (errorBanner) errorBanner.style.display = 'none';
       const newGroup = await apiCreateGroup(name, teamsFilter, startGw);
       state.groups.push(newGroup);
       state.activeGroup = newGroup;
-      input.value = '';
+      closeCreateGroupModal();
+      showSaveToast(`🏆 Group "${name}" created!`);
 
       await reloadMasterData();
       await loadActiveGroupData(newGroup.id);
       populateGroupDropdown();
       renderManagementPage();
     } catch (err) {
-      alert(err.message);
+      if (errorBanner) {
+        errorBanner.textContent = err.message;
+        errorBanner.style.display = 'block';
+      }
     }
   });
 
-  document.getElementById('mgmtCreatePlayerBtn')?.addEventListener('click', async () => {
-    const input = document.getElementById('mgmtNewPlayerNameInput');
-    const val = input.value.trim();
-    if (!val) return;
+  // Create Player Form Submission
+  document.getElementById('createPlayerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('newPlayerNameInput');
+    const errorBanner = document.getElementById('createPlayerErrorBanner');
+    const name = input?.value?.trim();
+    if (!name) {
+      if (errorBanner) {
+        errorBanner.textContent = 'Please enter a player name.';
+        errorBanner.style.display = 'block';
+      }
+      return;
+    }
 
-    const defaultGroupIds = state.activeGroup ? [state.activeGroup.id] : [];
+    const selectedGroupIds = Array.from(document.querySelectorAll('.modal-newplayer-group-cb:checked')).map(cb => parseInt(cb.value, 10)).filter(Boolean);
 
     try {
-      const newPlayer = await apiCreateMasterPlayer(val, defaultGroupIds);
+      if (errorBanner) errorBanner.style.display = 'none';
+      const newPlayer = await apiCreateMasterPlayer(name, selectedGroupIds);
       state.masterPlayers.push(newPlayer);
-      input.value = '';
 
-      if (newPlayer.passcode) {
-        alert(`Player "${newPlayer.name}" created!\n6-Character Passcode: ${newPlayer.passcode}`);
-      }
+      // Transition to passcode reveal card inside modal
+      const form = document.getElementById('createPlayerForm');
+      const successView = document.getElementById('createPlayerSuccessView');
+      const nameDisp = document.getElementById('createdPlayerNameDisplay');
+      const codeDisp = document.getElementById('createdPlayerPasscodeDisplay');
 
+      if (nameDisp) nameDisp.textContent = `${newPlayer.name} Added!`;
+      if (codeDisp) codeDisp.textContent = newPlayer.passcode || '------';
+      if (form) form.style.display = 'none';
+      if (successView) successView.style.display = 'block';
+
+      showSaveToast(`👤 Player "${name}" added!`);
       await reloadMasterData();
       if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
       renderManagementPage();
     } catch (err) {
-      alert(err.message);
+      if (errorBanner) {
+        errorBanner.textContent = err.message;
+        errorBanner.style.display = 'block';
+      }
     }
   });
 
+  // Click outside overlay to close modal
+  ['createGroupModal', 'createPlayerModal', 'passcodeDisplayModal'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', (e) => {
+      if (e.target.id === id) {
+        document.getElementById(id).style.display = 'none';
+      }
+    });
+  });
+
+  // Search input in master player table
   document.getElementById('mgmtSearchPlayerInput')?.addEventListener('input', (e) => {
     state.playerSearchQuery = e.target.value.toLowerCase().trim();
     renderMasterPlayersTable();
@@ -7110,79 +7359,402 @@ function initManagementEvents() {
       }
     }
   });
+
+  // PAS Settings Events
+  initPasSettingsEvents();
+}
+
+function updatePasLivePreview() {
+  const matchIn = document.getElementById('mgmtPasMatchInput');
+  const rankIn = document.getElementById('mgmtPasRankInput');
+  const ptsIn = document.getElementById('mgmtPasPtsInput');
+  const barMatch = document.getElementById('mgmtPasBarMatch');
+  const barRank = document.getElementById('mgmtPasBarRank');
+  const barPts = document.getElementById('mgmtPasBarPts');
+  const formulaEl = document.getElementById('mgmtPasFormulaPreview');
+  const totalEl = document.getElementById('mgmtPasTotalBadge');
+  const legMatch = document.getElementById('mgmtPasLegendMatch');
+  const legRank = document.getElementById('mgmtPasLegendRank');
+  const legPts = document.getElementById('mgmtPasLegendPts');
+
+  if (!matchIn || !rankIn || !ptsIn) return;
+
+  const rawMatch = parseFloat(matchIn.value) || 0;
+  const rawRank = parseFloat(rankIn.value) || 0;
+  const rawPts = parseFloat(ptsIn.value) || 0;
+  const sum = rawMatch + rawRank + rawPts;
+
+  let normMatch = 50, normRank = 35, normPts = 15;
+  if (sum > 0) {
+    normMatch = Math.round((rawMatch / sum) * 100);
+    normRank = Math.round((rawRank / sum) * 100);
+    normPts = Math.max(0, 100 - normMatch - normRank);
+  }
+
+  if (barMatch) barMatch.style.width = `${normMatch}%`;
+  if (barRank) barRank.style.width = `${normRank}%`;
+  if (barPts) barPts.style.width = `${normPts}%`;
+
+  if (legMatch) legMatch.textContent = `${normMatch}%`;
+  if (legRank) legRank.textContent = `${normRank}%`;
+  if (legPts) legPts.textContent = `${normPts}%`;
+
+  if (formulaEl) {
+    formulaEl.textContent = `${normMatch}% Match + ${normRank}% Rank + ${normPts}% Pts`;
+  }
+
+  if (totalEl) {
+    if (sum === 100) {
+      totalEl.textContent = 'Total: 100%';
+      totalEl.style.color = '#34d399';
+    } else {
+      totalEl.textContent = `Total: ${sum}% (Normalized to 100%)`;
+      totalEl.style.color = '#f59e0b';
+    }
+  }
+}
+
+async function renderPasSettingsSection() {
+  try {
+    const data = await apiFetchPasSettings();
+
+    const sourceBadge = document.getElementById('mgmtPasSourceBadge');
+    if (sourceBadge) {
+      if (data.source === 'database') {
+        sourceBadge.textContent = 'Custom (Saved in DB)';
+        sourceBadge.className = 'status-live-badge live';
+        sourceBadge.style.background = 'rgba(52, 211, 153, 0.15)';
+        sourceBadge.style.color = '#34d399';
+        sourceBadge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
+      } else if (data.source === 'env') {
+        sourceBadge.textContent = 'Configured in .env';
+        sourceBadge.className = 'status-live-badge';
+        sourceBadge.style.background = 'rgba(168, 85, 247, 0.2)';
+        sourceBadge.style.color = '#c084fc';
+        sourceBadge.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+      } else {
+        sourceBadge.textContent = 'Default (50/35/15)';
+        sourceBadge.className = 'status-live-badge';
+        sourceBadge.style.background = 'rgba(255, 255, 255, 0.08)';
+        sourceBadge.style.color = 'var(--text-muted)';
+        sourceBadge.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+      }
+    }
+
+    const matchInput = document.getElementById('mgmtPasMatchInput');
+    const matchRange = document.getElementById('mgmtPasMatchRange');
+    const rankInput = document.getElementById('mgmtPasRankInput');
+    const rankRange = document.getElementById('mgmtPasRankRange');
+    const ptsInput = document.getElementById('mgmtPasPtsInput');
+    const ptsRange = document.getElementById('mgmtPasPtsRange');
+    const rhoInput = document.getElementById('mgmtPasRhoInput');
+    const rhoRange = document.getElementById('mgmtPasRhoRange');
+    const marsInput = document.getElementById('mgmtPasMarsInput');
+    const marsRange = document.getElementById('mgmtPasMarsRange');
+
+    if (matchInput) matchInput.value = data.weights.match;
+    if (matchRange) matchRange.value = data.weights.match;
+    if (rankInput) rankInput.value = data.weights.rank;
+    if (rankRange) rankRange.value = data.weights.rank;
+    if (ptsInput) ptsInput.value = data.weights.points;
+    if (ptsRange) ptsRange.value = data.weights.points;
+
+    if (rhoInput) rhoInput.value = data.weights.rho;
+    if (rhoRange) rhoRange.value = data.weights.rho;
+    if (marsInput) marsInput.value = data.weights.mars;
+    if (marsRange) marsRange.value = data.weights.mars;
+
+    updatePasLivePreview();
+  } catch (err) {
+    console.warn('Could not load PAS settings:', err.message);
+  }
+}
+
+function initPasSettingsEvents() {
+  const syncPair = (inputEl, rangeEl, onSync) => {
+    if (!inputEl || !rangeEl) return;
+    inputEl.addEventListener('input', () => {
+      let val = Math.max(0, Math.min(100, parseFloat(inputEl.value) || 0));
+      rangeEl.value = val;
+      if (onSync) onSync();
+    });
+    rangeEl.addEventListener('input', () => {
+      inputEl.value = rangeEl.value;
+      if (onSync) onSync();
+    });
+  };
+
+  syncPair(
+    document.getElementById('mgmtPasMatchInput'),
+    document.getElementById('mgmtPasMatchRange'),
+    updatePasLivePreview
+  );
+  syncPair(
+    document.getElementById('mgmtPasRankInput'),
+    document.getElementById('mgmtPasRankRange'),
+    updatePasLivePreview
+  );
+  syncPair(
+    document.getElementById('mgmtPasPtsInput'),
+    document.getElementById('mgmtPasPtsRange'),
+    updatePasLivePreview
+  );
+  syncPair(
+    document.getElementById('mgmtPasRhoInput'),
+    document.getElementById('mgmtPasRhoRange')
+  );
+  syncPair(
+    document.getElementById('mgmtPasMarsInput'),
+    document.getElementById('mgmtPasMarsRange')
+  );
+
+  // Save Button
+  const saveBtn = document.getElementById('mgmtSavePasWeightsBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const match = parseFloat(document.getElementById('mgmtPasMatchInput')?.value) || 0;
+      const rank = parseFloat(document.getElementById('mgmtPasRankInput')?.value) || 0;
+      const points = parseFloat(document.getElementById('mgmtPasPtsInput')?.value) || 0;
+      const rho = parseFloat(document.getElementById('mgmtPasRhoInput')?.value) || 0;
+      const mars = parseFloat(document.getElementById('mgmtPasMarsInput')?.value) || 0;
+
+      const sum = match + rank + points;
+      if (sum <= 0) {
+        alert('Total weight must be greater than 0%.');
+        return;
+      }
+
+      saveBtn.disabled = true;
+      const oldHtml = saveBtn.innerHTML;
+      saveBtn.innerHTML = '<span>⏳</span> Saving...';
+
+      try {
+        await apiSavePasSettings({ match, rank, points, rho, mars });
+        resetWhatIfCache();
+        showPasFeedback('✅ PAS weightages saved to database! Changes apply immediately across all player evaluations.', 'success');
+        await renderPasSettingsSection();
+      } catch (err) {
+        showPasFeedback(`❌ Failed to save weightages: ${err.message}`, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = oldHtml;
+      }
+    });
+  }
+
+  // Reset Button
+  const resetBtn = document.getElementById('mgmtResetPasWeightsBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      if (!confirm('Reset PAS weightages to environment variables or system defaults? This will remove custom database overrides.')) {
+        return;
+      }
+
+      resetBtn.disabled = true;
+      const oldHtml = resetBtn.innerHTML;
+      resetBtn.innerHTML = '<span>⏳</span> Resetting...';
+
+      try {
+        await apiResetPasSettings();
+        resetWhatIfCache();
+        showPasFeedback('↺ Weightages reset to defaults / environment variables.', 'info');
+        await renderPasSettingsSection();
+      } catch (err) {
+        showPasFeedback(`❌ Failed to reset weightages: ${err.message}`, 'error');
+      } finally {
+        resetBtn.disabled = false;
+        resetBtn.innerHTML = oldHtml;
+      }
+    });
+  }
+}
+
+function showPasFeedback(msg, type = 'success') {
+  const el = document.getElementById('mgmtPasStatusMessage');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  if (type === 'success') {
+    el.style.background = 'rgba(52, 211, 153, 0.15)';
+    el.style.color = '#34d399';
+    el.style.border = '1px solid rgba(52, 211, 153, 0.3)';
+  } else if (type === 'info') {
+    el.style.background = 'rgba(56, 189, 248, 0.15)';
+    el.style.color = '#38bdf8';
+    el.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+  } else {
+    el.style.background = 'rgba(244, 63, 94, 0.15)';
+    el.style.color = '#fb7185';
+    el.style.border = '1px solid rgba(244, 63, 94, 0.3)';
+  }
+  setTimeout(() => {
+    if (el) el.style.display = 'none';
+  }, 4000);
 }
 
 function renderManagementPage() {
-  renderMgmtScoringRulesSummary();
-  renderTeamSelectionGrid();
   renderGroupsGrid();
   renderMasterPlayersTable();
   renderPlayerActivityTable();
+  renderPasSettingsSection();
+}
+
+function getGroupScopeDisplayDetails(g) {
+  const raw = g.teams_filter;
+  if (!raw || raw === 'ALL') {
+    return {
+      badge: 'All 20 Clubs',
+      desc: 'Full Premier League Season (All Teams)'
+    };
+  }
+
+  let parsed;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (e) {
+    return { badge: 'All 20 Clubs', desc: 'Full Premier League Season (All Teams)' };
+  }
+
+  // Direct list of clubs: ["Arsenal", "Spurs"]
+  if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+    const big6 = ['Arsenal', 'Chelsea', 'Liverpool', 'Man City', 'Man Utd', 'Spurs'];
+    const isBig6 = parsed.length === 6 && big6.every(t => parsed.includes(t));
+    if (isBig6) {
+      return {
+        badge: 'Big 6 Clubs',
+        desc: 'Arsenal, Chelsea, Liverpool, Man City, Man Utd, Spurs'
+      };
+    }
+    if (parsed.length <= 3) {
+      return {
+        badge: `${parsed.length} Clubs`,
+        desc: parsed.join(', ')
+      };
+    }
+    return {
+      badge: `${parsed.length} Clubs`,
+      desc: `${parsed.slice(0, 3).join(', ')} +${parsed.length - 3} more`
+    };
+  }
+
+  // Multi-phase gameweek segments: [{ from_gw: 1, to_gw: 4, teams: [...] }, ...]
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].from_gw !== undefined) {
+    if (parsed.length === 1) {
+      const s = parsed[0];
+      const count = (!s.teams || s.teams === 'ALL') ? 'All 20 Clubs' : `${s.teams.length} Clubs`;
+      return { badge: count, desc: `Effective from Gameweek ${s.from_gw}` };
+    }
+    const parts = parsed.map(s => {
+      const gw = (s.to_gw && s.to_gw < 38) ? `GW ${s.from_gw}–${s.to_gw}` : `GW ${s.from_gw}+`;
+      const t = (!s.teams || s.teams === 'ALL') ? 'All 20' : `${s.teams.length} Clubs`;
+      return `${gw} (${t})`;
+    });
+    return {
+      badge: 'Multi-Phase',
+      desc: parts.join(' ➔ ')
+    };
+  }
+
+  return { badge: 'Custom Scope', desc: 'Custom club filter' };
 }
 
 function renderGroupsGrid() {
   const grid = document.getElementById('mgmtGroupsGrid');
+  const countBadge = document.getElementById('mgmtGroupCountBadge');
+  if (countBadge) {
+    countBadge.textContent = `${state.groups.length} Group${state.groups.length === 1 ? '' : 's'}`;
+  }
   if (!grid) return;
 
   if (state.groups.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1; color:var(--text-muted); padding:16px;">No groups created yet. Type a group name above to create one!</div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1; color:var(--text-muted); padding:28px 16px; text-align:center; background:rgba(255,255,255,0.02); border:1px dashed var(--border-glass); border-radius:var(--radius-md);">No league groups created yet. Click "➕ New League Group" above to create your first mini-league!</div>`;
     return;
   }
 
   grid.innerHTML = state.groups.map(g => {
     const groupPlayers = state.masterPlayers.filter(p => p.group_ids.includes(g.id));
-    const scopeLabel = getGroupScopeSummary(g);
+    const fullScopeLabel = getGroupScopeSummary(g);
+    const scopeDetails = getGroupScopeDisplayDetails(g);
     const startGw = g.start_gw ? Number(g.start_gw) : 1;
-    const startGwLabel = startGw > 1 ? `🚩 Starts: GW ${startGw}` : '🚩 Full Season (GW 1)';
+    const safeName = (g.name || '').replace(/"/g, '&quot;');
+    const safeFullScope = (fullScopeLabel || '').replace(/"/g, '&quot;');
 
     return `
-      <div class="mgmt-group-card">
+      <div class="mgmt-group-card" data-id="${g.id}">
         <div class="mgmt-group-header">
-          <input type="text" class="form-input mgmt-group-name-input" data-id="${g.id}" value="${g.name}" style="font-weight:700; font-family:var(--font-title); font-size:1.05rem;" />
-          <div style="display: flex; gap: 4px; align-items: center;">
-            <button class="btn-icon edit-group-scope-btn" data-id="${g.id}" title="Edit Team Scope (Option A)">⚙️</button>
-            <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group">🗑️</button>
+          <div class="mgmt-group-title-col">
+            <div class="mgmt-group-name-row">
+              <h4 class="mgmt-group-title" title="${safeName}">${safeName}</h4>
+              <button type="button" class="btn-icon rename-group-btn" data-id="${g.id}" title="Rename Group" aria-label="Rename Group">✏️</button>
+            </div>
+            <span class="mgmt-group-id-badge" title="Group ID #${g.id}">ID #${g.id}</span>
+          </div>
+          <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group" aria-label="Delete Group">🗑️</button>
+        </div>
+
+        <div class="mgmt-group-body">
+          <div class="mgmt-group-info-row">
+            <span class="mgmt-group-info-label">👥 Members:</span>
+            <span class="mgmt-group-info-value">${groupPlayers.length} ${groupPlayers.length === 1 ? 'player' : 'players'}</span>
+          </div>
+
+          <div class="mgmt-group-info-row">
+            <span class="mgmt-group-info-label">🚩 Starts From:</span>
+            <select class="control-dropdown mgmt-group-start-gw-select" data-id="${g.id}" title="Starting Gameweek for points calculation in this group">
+              ${Array.from({ length: 38 }, (_, i) => i + 1).map(num => `<option value="${num}" ${num === startGw ? 'selected' : ''}>GW ${num}${num === 1 ? ' (Full Season)' : ''}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="mgmt-group-scope-section">
+            <div class="mgmt-group-scope-header">
+              <span class="mgmt-group-info-label">⚽ Club Scope:</span>
+              <span class="mgmt-group-scope-badge">${scopeDetails.badge}</span>
+            </div>
+            <div class="mgmt-group-scope-desc" title="${safeFullScope}">
+              ${scopeDetails.desc}
+            </div>
           </div>
         </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0;">
-          <span style="font-size:0.8rem; color:var(--accent-purple); font-weight:600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${scopeLabel}">
-            ${scopeLabel}
-          </span>
-          <button type="button" class="btn btn-secondary edit-group-scope-btn" data-id="${g.id}" style="padding: 2px 8px; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;">
-            🎯 Edit Scope
+
+        <div class="mgmt-group-footer">
+          <button type="button" class="btn btn-secondary edit-group-scope-btn" data-id="${g.id}">
+            🎯 Edit Club Scope
           </button>
-        </div>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin: 4px 0; font-size:0.82rem;">
-          <span style="color:var(--text-muted); font-weight:600;">Start GW:</span>
-          <select class="control-dropdown mgmt-group-start-gw-select" data-id="${g.id}" style="padding:2px 8px; font-size:0.78rem; min-width:110px;" title="First gameweek counted in this group">
-            ${Array.from({ length: 38 }, (_, i) => i + 1).map(num => `<option value="${num}" ${num === startGw ? 'selected' : ''}>GW ${num}${num === 1 ? ' (Full)' : ''}</option>`).join('')}
-          </select>
-        </div>
-        <div style="font-size:0.8rem; color:var(--text-muted); display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
-          <span>👥 ${groupPlayers.length} Members</span>
-          <span class="mgmt-group-start-gw-badge">${startGwLabel}</span>
-          <span style="color:var(--text-dim);">ID #${g.id}</span>
         </div>
       </div>
     `;
   }).join('');
 
-  grid.querySelectorAll('.mgmt-group-name-input').forEach(input => {
-    input.addEventListener('change', async () => {
-      const gId = parseInt(input.dataset.id, 10);
-      const val = input.value.trim();
-      if (!val) return;
+  grid.querySelectorAll('.rename-group-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const gId = parseInt(btn.dataset.id, 10);
+      const group = state.groups.find(g => g.id === gId);
+      if (!group) return;
+      const newName = prompt('Enter a new name for this league group:', group.name);
+      if (!newName || !newName.trim() || newName.trim() === group.name) return;
+      const cleanName = newName.trim();
       try {
-        const group = state.groups.find(g => g.id === gId);
-        const filterVal = group ? group.teams_filter : 'ALL';
-        const startGwVal = group ? (group.start_gw || 1) : 1;
-        await apiRenameGroup(gId, val, filterVal, startGwVal);
-        if (group) group.name = val;
+        const filterVal = group.teams_filter || 'ALL';
+        const startGwVal = group.start_gw || 1;
+        await apiRenameGroup(gId, cleanName, filterVal, startGwVal);
+        group.name = cleanName;
+        if (state.activeGroup && state.activeGroup.id === gId) {
+          state.activeGroup.name = cleanName;
+        }
         populateGroupDropdown();
         renderMasterPlayersTable();
+        renderGroupsGrid();
       } catch (err) {
         alert(err.message);
       }
+    });
+  });
+
+  grid.querySelectorAll('.mgmt-group-title').forEach(titleEl => {
+    titleEl.addEventListener('dblclick', () => {
+      const card = titleEl.closest('.mgmt-group-card');
+      const renameBtn = card?.querySelector('.rename-group-btn');
+      if (renameBtn) renameBtn.click();
     });
   });
 
@@ -7489,6 +8061,10 @@ export function initGroupScopeModalEvents() {
 
 function renderMasterPlayersTable() {
   const tbody = document.getElementById('mgmtPlayersBody');
+  const countBadge = document.getElementById('mgmtPlayerCountBadge');
+  if (countBadge) {
+    countBadge.textContent = `${state.masterPlayers.length} Player${state.masterPlayers.length === 1 ? '' : 's'}`;
+  }
   if (!tbody) return;
 
   let players = state.masterPlayers;
@@ -7497,7 +8073,7 @@ function renderMasterPlayersTable() {
   }
 
   if (players.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">No players found. Add someone to your master directory above!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">No players found. Click "👤 Add New Player" above to register someone!</td></tr>`;
     return;
   }
 
@@ -7564,9 +8140,9 @@ function renderMasterPlayersTable() {
 
       try {
         const res = await apiResetPasscode(pId);
-        alert(`New 6-character passcode for ${player ? player.name : 'player'}: ${res.passcode}`);
         await reloadMasterData();
         renderMasterPlayersTable();
+        openPasscodeDisplayModal(player ? player.name : 'Player', res.passcode);
       } catch (err) {
         alert(err.message);
       }

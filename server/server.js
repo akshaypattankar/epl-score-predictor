@@ -14,8 +14,11 @@ import db, {
   resetScoringRules,
   backupDatabase,
   listBackups,
-  scheduleNightlyBackup
+  scheduleNightlyBackup,
+  setAppSetting,
+  deleteAppSetting
 } from './db.js';
+import { calculateBackendWhatIfStandings, getPasSettingsDetails } from './whatif.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -903,6 +906,74 @@ app.get('/api/admin/backups', requireAdmin, (req, res) => {
     res.json(backups);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── WHAT-IF STANDINGS SIMULATOR ENDPOINT ────────────────────────────────────
+app.get('/api/whatif/standings', (req, res) => {
+  try {
+    const sess = getSession(req);
+    const playerId = req.query.playerId || (sess ? sess.playerId : null);
+    const mode = req.query.mode || 'completed';
+    const startGw = req.query.startGw || 1;
+    const gwLimit = req.query.gwLimit || 'all';
+
+    const result = calculateBackendWhatIfStandings(db, {
+      playerId,
+      mode,
+      startGw,
+      gwLimit
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('What-If standings calculation error:', err);
+    res.status(500).json({ error: 'Failed to calculate What-If standings: ' + err.message });
+  }
+});
+
+// ─── PAS ACCURACY SCORE SETTINGS ENDPOINTS ────────────────────────────────────
+// Get current PAS weightages, active source (db/env/default), and defaults
+app.get('/api/whatif/pas-settings', (req, res) => {
+  try {
+    const details = getPasSettingsDetails(db);
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve PAS settings: ' + err.message });
+  }
+});
+
+// Save custom PAS weightages into database (Admin only)
+app.put('/api/whatif/pas-settings', requireAdmin, (req, res) => {
+  try {
+    const { match, rank, points, rho, mars } = req.body;
+
+    if (match !== undefined) setAppSetting('pas_weight_match', match);
+    if (rank !== undefined) setAppSetting('pas_weight_rank', rank);
+    if (points !== undefined) setAppSetting('pas_weight_points', points);
+    if (rho !== undefined) setAppSetting('pas_weight_rho', rho);
+    if (mars !== undefined) setAppSetting('pas_weight_mars', mars);
+
+    const details = getPasSettingsDetails(db);
+    res.json({ success: true, ...details });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save PAS settings: ' + err.message });
+  }
+});
+
+// Reset PAS weightages to environment or system defaults (Admin only)
+app.post('/api/whatif/pas-settings/reset', requireAdmin, (req, res) => {
+  try {
+    deleteAppSetting('pas_weight_match');
+    deleteAppSetting('pas_weight_rank');
+    deleteAppSetting('pas_weight_points');
+    deleteAppSetting('pas_weight_rho');
+    deleteAppSetting('pas_weight_mars');
+
+    const details = getPasSettingsDetails(db);
+    res.json({ success: true, message: 'Reset to defaults/environment', ...details });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reset PAS settings: ' + err.message });
   }
 });
 

@@ -508,4 +508,55 @@ export async function apiFetchSvgAssets() {
   }
 }
 
+export async function apiFetchWhatIfStandings({ playerId = null, mode = 'completed', startGw = 1, gwLimit = 'all' } = {}) {
+  const params = new URLSearchParams();
+  if (playerId) params.append('playerId', playerId);
+  if (mode) params.append('mode', mode);
+  if (startGw) params.append('startGw', startGw);
+  if (gwLimit) params.append('gwLimit', gwLimit);
+  const res = await fetch(`/api/whatif/standings?${params.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch What-If standings from backend');
+  return res.json();
+}
+
+export async function apiFetchPasSettings() {
+  const res = await fetch('/api/whatif/pas-settings', {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch PAS settings');
+  return res.json();
+}
+
+export async function apiSavePasSettings(weights) {
+  const res = await fetch('/api/whatif/pas-settings', {
+    method: 'PUT',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(weights),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to save PAS settings');
+  }
+  return res.json();
+}
+
+export async function apiResetPasSettings() {
+  const res = await fetch('/api/whatif/pas-settings/reset', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to reset PAS settings');
+  }
+  return res.json();
+}
+
+
+
 
