@@ -2337,12 +2337,12 @@ function renderTeamBreakdown() {
   if (selectedTeams.length === 1) {
     const team = selectedTeams[0];
     const club = getClubDetails(team) || Object.values(state.teams).find(t => t.name === team);
-    document.getElementById('teamBreakdownTitle').innerHTML = `${club?.fullName || team} <span class="team-title-short" style="color:var(--accent-cyan); font-size:0.9rem; font-weight:700;">(${club?.shortName || club?.short || ''})</span>`;
+    document.getElementById('teamBreakdownTitle').innerHTML = `${club?.fullName || team} <span class="team-title-short" style="color:var(--accent-cyan); font-size:var(--font-size-sm, 0.875rem); font-weight:700;">(${club?.shortName || club?.short || ''})</span>`;
     document.getElementById('teamBreakdownSubtitle').innerHTML = `
       <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
         ${club?.stadium ? `<span class="meta-chip" title="Home Stadium">🏟️ ${club.stadium}</span>` : ''}
         ${club?.city ? `<span class="meta-chip" title="Club City">📍 ${club.city}</span>` : ''}
-        <span style="color:var(--text-muted); font-size:0.8rem;">Participant predictions & breakdown</span>
+        <span style="color:var(--text-muted); font-size:var(--font-size-xs, 0.8125rem);">Participant predictions & breakdown</span>
       </span>
     `;
     const code = club?.code || Object.values(state.teams).find(t => t.name === team)?.code;
@@ -2385,7 +2385,7 @@ function renderTeamBreakdown() {
   const participantGrid = document.getElementById('teamParticipantGrid');
   if (isGuest) {
     participantGrid.innerHTML = `
-      <div style="grid-column: 1/-1; padding: 12px; color: var(--text-muted); font-size: 0.88rem;">
+      <div style="grid-column: 1/-1; padding: 12px; color: var(--text-muted); font-size:var(--font-size-sm, 0.875rem);">
         🔒 Participant predictions and statistics are hidden for guest users.
       </div>`;
   } else {
@@ -2437,7 +2437,7 @@ function renderTeamBreakdown() {
         <div class="snapshot-card ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
           <div class="snapshot-avatar-col">
             <div class="rank-medal-badge" style="background: ${shades.badgeBg}; border-color: ${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="${p.name}">
-              <span class="rank-medal-icon" style="font-size: 0.85rem; font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
+              <span class="rank-medal-icon" style="font-size:var(--font-size-sm, 0.875rem); font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
             </div>
             ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
           </div>
@@ -2508,14 +2508,14 @@ function renderTeamBreakdown() {
       const tierObj = res ? SCORING_TIERS.find(t => t.tier === res.tier) : null;
       const tierIcon = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 13) : '';
       const activeBonuses = res?.activeBonuses || [];
-      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size:var(--font-size-2xs, 0.75rem); margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
       const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
-      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}${scoreInfo.isLive ? ' pts-live' : ''}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}" title="${(scoreInfo.isLive ? '[LIVE] ' : '')}${tierLabel(res.tier)}${bonusTitles} (${res.total} pts against ${scoreInfo.home}–${scoreInfo.away})"><span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${res.total}</span>${bonusIconsHtml}</span>` : '';
+      const ptsBadge = res ? `<span class="pts-badge pts-interactive ${ptsBadgeClass(res)}${scoreInfo.isLive ? ' pts-live' : ''}" data-match="${f.id}" data-player="${p.id}" tabindex="0" role="button" aria-label="Points breakdown for ${p.name}" title="${(scoreInfo.isLive ? '[LIVE] ' : '')}${tierLabel(res.tier)}${bonusTitles} (${res.total} pts against ${scoreInfo.home}–${scoreInfo.away})"><span class="tier-pill-icon" style="font-size:var(--font-size-xs, 0.8125rem); line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${res.total}</span>${bonusIconsHtml}</span>` : '';
 
       if (!canEdit) {
         return `
           <td style="text-align:center; white-space:nowrap;">
-            <div style="font-family:var(--font-title); font-weight:700; font-size:0.95rem; white-space:nowrap; ${!isMatchInScope ? 'color:var(--text-dim); opacity:0.7;' : ''}">${pH !== '' ? `${pH}&nbsp;–&nbsp;${pA}` : (locked ? '-' : '?')}</div>
+            <div style="font-family:var(--font-title); font-weight:700; font-size:var(--font-size-base, 0.9375rem); white-space:nowrap; ${!isMatchInScope ? 'color:var(--text-dim); opacity:0.7;' : ''}">${pH !== '' ? `${pH}&nbsp;–&nbsp;${pA}` : (locked ? '-' : '?')}</div>
             ${ptsBadge}
           </td>
         `;
@@ -2528,7 +2528,7 @@ function renderTeamBreakdown() {
                 value="${pH}"
                 data-match="${f.id}" data-player="${p.id}" data-side="h"
                 aria-label="${p.name} home score">
-              <span style="color:var(--text-dim); font-size:0.8rem; font-weight:700;">–</span>
+              <span style="color:var(--text-dim); font-size:var(--font-size-xs, 0.8125rem); font-weight:700;">–</span>
               <input type="number" min="0" max="99" class="score-input"
                 id="tb_inp_${f.id}_${p.id}_a"
                 value="${pA}"
@@ -2788,10 +2788,10 @@ function renderMatrix() {
       const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
       const tierIcon = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
       const activeBonuses = result?.activeBonuses || [];
-      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+      const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size:var(--font-size-2xs, 0.75rem); margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
       const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
       const ptsText = result
-        ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
+        ? `<span class="tier-pill-icon" style="font-size:var(--font-size-xs, 0.8125rem); line-height: 1; margin-right: 2px;">${tierIcon}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
         : (locked ? '-' : '?');
       const ptsTitle = result
         ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + bonusTitles + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
@@ -3091,10 +3091,10 @@ function updatePtsBadge(matchId, playerId) {
   const tierObj = result ? SCORING_TIERS.find(t => t.tier === result.tier) : null;
   const tierIconHtml = tierObj ? renderIconElement(tierObj.icon, tierObj.icon_type, 14) : '';
   const activeBonuses = result?.activeBonuses || [];
-  const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size: 0.75rem; margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
+  const bonusIconsHtml = activeBonuses.map(b => `<span class="bonus-pill-icon" style="font-size:var(--font-size-2xs, 0.75rem); margin-left: 2px; display: inline-flex; align-items: center;" title="${b.name} (+${b.pts} pts)">${renderIconElement(b.icon, b.icon_type, 12)}</span>`).join('');
   const bonusTitles = activeBonuses.map(b => ` +${b.icon || '⭐'} ${b.name} (+${b.pts})`).join('');
   const badgeInner = result
-    ? `<span class="tier-pill-icon" style="font-size: 0.8rem; line-height: 1; margin-right: 2px;">${tierIconHtml}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
+    ? `<span class="tier-pill-icon" style="font-size:var(--font-size-xs, 0.8125rem); line-height: 1; margin-right: 2px;">${tierIconHtml}</span><span class="pts-val">${result.total}</span>${bonusIconsHtml}`
     : (isLocked(fixture) ? '-' : '?');
   const ptsTitle = result
     ? (scoreInfo.isLive ? '[LIVE] ' : '') + tierLabel(result.tier) + bonusTitles + ` (${result.total} pts against ${scoreInfo.home}–${scoreInfo.away})`
@@ -4832,7 +4832,7 @@ function renderAllGameweeksChart() {
           <rect class="chart-match-tick-bg" x="${x - 12}" y="${yBase + 4}" width="24" height="44" rx="4" fill="rgba(255,255,255,0.02)" stroke="transparent" />
           <line x1="${x}" y1="${yBase}" x2="${x}" y2="${yBase + 4}" stroke="${isPlayed ? 'var(--accent-cyan)' : 'var(--border-glass)'}" stroke-width="${isPlayed ? '1.5' : '1'}" />
           <image href="${homeCrestUrl}" x="${x - 7.5}" y="${yBase + 5}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
-          <text class="chart-axis-tick" x="${x}" y="${yBase + 27}" fill="var(--text-dim)" font-size="7.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">vs</text>
+          <text class="chart-axis-tick" x="${x}" y="${yBase + 27}" fill="var(--text-dim)" font-size="9.5" font-weight="700" text-anchor="middle" font-family="var(--font-main)">vs</text>
           <image href="${awayCrestUrl}" x="${x - 7.5}" y="${yBase + 30}" width="15" height="15" preserveAspectRatio="xMidYMid meet" />
         </g>
       `;
@@ -5281,7 +5281,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
         return `
               <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
                 <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
-                  <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                  <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                   <span class="chart-tooltip-dot" style="background:${p.color};"></span>
                   <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
                 </div>
@@ -5304,7 +5304,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
           ${data.players.map(p => `
             <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
                 <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
               </div>
@@ -5326,7 +5326,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
           ${data.players.map(p => `
             <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
                 <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
               </div>
@@ -5614,7 +5614,7 @@ function renderGameweekMatchesChart(gw) {
 
         <!-- Crests & 'v' Separator -->
         <image href="${homeCrestUrl}" x="${x - crestSize - 4}" y="${crestY}" width="${crestSize}" height="${crestSize}" preserveAspectRatio="xMidYMid meet" />
-        <text x="${x}" y="${crestY + crestSize - 2}" fill="var(--text-dim)" font-size="${isMobile ? '8' : '9'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">v</text>
+        <text x="${x}" y="${crestY + crestSize - 2}" fill="var(--text-dim)" font-size="${isMobile ? '9' : '10.5'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">v</text>
         <image href="${awayCrestUrl}" x="${x + 4}" y="${crestY}" width="${crestSize}" height="${crestSize}" preserveAspectRatio="xMidYMid meet" />
 
         <!-- Team Short Code Matchup: MCI v ARS (with clean live dot if live) -->
@@ -6022,7 +6022,7 @@ function attachMatchTooltipHandlers(matchStandings, svgWidth) {
       return `
             <div class="chart-tooltip-row ${p.isYou ? 'is-you' : ''}">
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:0.72rem; color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
+                <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
                 <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
               </div>
@@ -6192,14 +6192,14 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   let earnedPtsHtml = '';
   if (breakdown.status === 'evaluated') {
     if (isLive) {
-      earnedPtsHtml = `<div class="pts-score-total-val live" style="color:#ff5572;">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:#ff5572; text-transform:uppercase;"><span class="live-pulse-dot" style="width:5px;height:5px;display:inline-block;margin-right:3px;"></span>Live Pts</span>`;
+      earnedPtsHtml = `<div class="pts-score-total-val live" style="color:#ff5572;">+${breakdown.total}</div><span style="font-size:var(--font-size-3xs, 0.6875rem); font-weight:700; color:#ff5572; text-transform:uppercase;"><span class="live-pulse-dot" style="width:5px;height:5px;display:inline-block;margin-right:3px;"></span>Live Pts</span>`;
     } else {
-      earnedPtsHtml = `<div class="pts-score-total-val">+${breakdown.total}</div><span style="font-size:0.68rem; font-weight:700; color:var(--accent-green); text-transform:uppercase;">Points</span>`;
+      earnedPtsHtml = `<div class="pts-score-total-val">+${breakdown.total}</div><span style="font-size:var(--font-size-3xs, 0.6875rem); font-weight:700; color:var(--accent-green); text-transform:uppercase;">Points</span>`;
     }
   } else if (breakdown.status === 'no_prediction') {
-    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-rose);">0</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">No Pred</span>`;
+    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--accent-rose);">0</div><span style="font-size:var(--font-size-3xs, 0.6875rem); font-weight:700; color:var(--text-muted); text-transform:uppercase;">No Pred</span>`;
   } else {
-    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--text-dim); font-size:1.05rem;">-</div><span style="font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Upcoming</span>`;
+    earnedPtsHtml = `<div class="pts-score-total-val" style="color:var(--text-dim); font-size:var(--font-size-md, 1.0625rem);">-</div><span style="font-size:var(--font-size-3xs, 0.6875rem); font-weight:700; color:var(--text-muted); text-transform:uppercase;">Upcoming</span>`;
   }
 
   let formulaHtml = '';
@@ -6248,9 +6248,9 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
           ${homeCrest}
           <span>${matchTitle}</span>
           ${awayCrest}
-          ${gwText ? `<span style="color:var(--accent-purple); font-size:0.75rem; font-weight:700;">(${gwText})</span>` : ''}
+          ${gwText ? `<span style="color:var(--accent-purple); font-size:var(--font-size-2xs, 0.75rem); font-weight:700;">(${gwText})</span>` : ''}
         </div>
-        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
+        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
         <div class="pts-tooltip-player-tag" style="border-color:${pColor}55; color:${pColor};">
           <span class="player-color-dot" style="background:${pColor}; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
           <span>${player.name}</span>
@@ -6616,14 +6616,14 @@ function renderScoringViewSummary() {
 
       return `
         <div class="glass-card scoring-rule-card tier-${t.tier}">
-          <div class="rule-icon" style="font-size: 2rem; line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
+          <div class="rule-icon" style="font-size:var(--font-size-2xl, 1.625rem); line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
           <div class="rule-title">Tier ${t.tier} — ${t.name}</div>
           <div class="rule-pts">${t.pts} ${t.pts === 1 ? 'Pt' : 'Pts'}</div>
           <p class="rule-desc">${t.desc || t.shortDesc || ''}</p>
           <div class="rule-example-box">
             <div class="rule-example-header">
               <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Lowest score threshold)</span></span>
+              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim);">(Lowest score threshold)</span></span>
             </div>
             <div class="rule-example-body">
               ${renderExampleChipsFromString(exDisplay)}
@@ -6651,14 +6651,14 @@ function renderScoringViewSummary() {
 
       return `
         <div class="glass-card scoring-rule-card bonus-${idx + 1}">
-          <div class="rule-icon" style="font-size: 2rem;">${renderIconElement(b.icon, b.icon_type, 36)}</div>
+          <div class="rule-icon" style="font-size:var(--font-size-2xl, 1.625rem);">${renderIconElement(b.icon, b.icon_type, 36)}</div>
           <div class="rule-title">${b.name}</div>
           <div class="rule-pts">+${b.pts} ${b.pts === 1 ? 'Pt' : 'Pts'}</div>
           <p class="rule-desc">${b.desc || b.shortDesc || ''}</p>
           <div class="rule-example-box">
             <div class="rule-example-header">
               <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Lowest score threshold)</span></span>
+              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim);">(Lowest score threshold)</span></span>
             </div>
             <div class="rule-example-body">
               ${renderExampleChipsFromString(exDisplay)}
@@ -6681,7 +6681,7 @@ function renderExampleChipsFromString(exStr) {
   if (!exStr) return '';
   const parts = exStr.split('|');
   if (parts.length < 2) {
-    return `<div style="font-size:0.85rem; color:var(--text-muted);">${exStr}</div>`;
+    return `<div style="font-size:var(--font-size-sm, 0.875rem); color:var(--text-muted);">${exStr}</div>`;
   }
   const actualPart = (parts[0] || '').replace(/^Actual\s*/i, '').trim();
   const predPart = (parts[1] || '').replace(/^Predicted\s*/i, '').trim();
@@ -6750,20 +6750,20 @@ function renderComprehensiveScenariosMatrix() {
     return `
       <tr>
         <td>
-          <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">${actH} – ${actA}</div>
-          <div style="color:var(--text-muted); font-size:0.75rem;">Total ${totalGoals} goals</div>
+          <div style="font-weight:700; font-size:var(--font-size-base, 0.9375rem); color:var(--text-main);">${actH} – ${actA}</div>
+          <div style="color:var(--text-muted); font-size:var(--font-size-2xs, 0.75rem);">Total ${totalGoals} goals</div>
         </td>
         <td>
-          <div style="font-weight:700; font-size:0.95rem; color:var(--accent-cyan);">${predH} – ${predA}</div>
-          <div style="color:var(--text-muted); font-size:0.75rem;">${note}</div>
+          <div style="font-weight:700; font-size:var(--font-size-base, 0.9375rem); color:var(--accent-cyan);">${predH} – ${predA}</div>
+          <div style="color:var(--text-muted); font-size:var(--font-size-2xs, 0.75rem);">${note}</div>
         </td>
         <td>
-          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.82rem; padding:4px 10px;">
+          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:var(--font-size-xs, 0.8125rem); padding:4px 10px;">
             ${renderIconElement(tierObj.icon, tierObj.icon_type, 18)}
             <span>${tierObj.name}</span>
           </span>
         </td>
-        <td style="text-align:center; font-weight:700; font-size:0.9rem; color:var(--text-main);">
+        <td style="text-align:center; font-weight:700; font-size:var(--font-size-sm, 0.875rem); color:var(--text-main);">
           ${res.base} ${res.base === 1 ? 'Pt' : 'Pts'}
         </td>
         <td style="text-align:center;">
@@ -6773,7 +6773,7 @@ function renderComprehensiveScenariosMatrix() {
           ${drawBonusHtml}
         </td>
         <td style="text-align:center;">
-          <strong style="color:var(--accent-green); font-size:1.15rem; font-family:var(--font-title);">${total} ${total === 1 ? 'Pt' : 'Pts'}</strong>
+          <strong style="color:var(--accent-green); font-size:var(--font-size-lg, 1.1875rem); font-family:var(--font-title);">${total} ${total === 1 ? 'Pt' : 'Pts'}</strong>
         </td>
       </tr>
     `;
@@ -7152,7 +7152,7 @@ function renderSimulatorInspector(inspH, inspA, refH, refA) {
       <div class="sim-breakdown-row">
         <span class="sim-breakdown-label">Base Rule Met:</span>
         <div class="sim-rule-badge-wrap">
-          <span class="pts-badge tier-${tierObj.tier}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:0.9rem; padding:5px 12px;">
+          <span class="pts-badge tier-${tierObj.tier}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:var(--font-size-sm, 0.875rem); padding:5px 12px;">
             ${renderIconElement(tierObj.icon, tierObj.icon_type, 20)}
             <span>${tierObj.name}</span>
           </span>
@@ -7258,10 +7258,10 @@ function renderMgmtScoringRulesSummary() {
     const badgeClass = r.badgeClass || (tierNum ? `p${pts}` : 'p-bonus');
     return `
       <div style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border-glass); border-radius:var(--radius-sm); padding:10px 14px;">
-        <span style="font-size:1.4rem;">${renderIconElement(icon, r.icon_type, 24)}</span>
+        <span style="font-size:var(--font-size-xl, 1.375rem);">${renderIconElement(icon, r.icon_type, 24)}</span>
         <div style="flex:1; min-width:0;">
-          <div style="font-size:0.82rem; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
-          ${tierNum ? `<div style="font-size:0.75rem; color:var(--text-muted);">Tier ${tierNum}</div>` : `<div style="font-size:0.75rem; color:var(--accent-purple);">Bonus</div>`}
+          <div style="font-size:var(--font-size-xs, 0.8125rem); font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+          ${tierNum ? `<div style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted);">Tier ${tierNum}</div>` : `<div style="font-size:var(--font-size-2xs, 0.75rem); color:var(--accent-purple);">Bonus</div>`}
         </div>
         <span class="pts-badge ${badgeClass}" style="flex-shrink:0;">${pts >= 0 ? `${tierNum ? '' : '+'}${pts}` : pts} pts</span>
       </div>`;
@@ -7314,7 +7314,7 @@ function renderModalNewGroupTeamGrid() {
       <label class="mgmt-scope-team-chip" title="${name}">
         <input type="checkbox" value="${name}" class="modal-newgroup-team-cb form-checkbox" style="cursor: pointer;" />
         ${crestUrl ? `<img src="${crestUrl}" width="18" height="18" alt="${name}" style="flex-shrink:0;" />` : ''}
-        <span class="mgmt-chip-name" style="font-weight:600; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${details?.shortName || name}</span>
+        <span class="mgmt-chip-name" style="font-weight:600; font-size:var(--font-size-xs, 0.8125rem); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${details?.shortName || name}</span>
       </label>
     `;
   }).join('');
@@ -7354,7 +7354,7 @@ function openCreatePlayerModal() {
   if (groupList) {
     const activeGId = state.activeGroup ? state.activeGroup.id : null;
     if (state.groups.length === 0) {
-      groupList.innerHTML = `<span style="font-size:0.84rem; color:var(--text-muted);">No league groups yet.</span>`;
+      groupList.innerHTML = `<span style="font-size:var(--font-size-sm, 0.875rem); color:var(--text-muted);">No league groups yet.</span>`;
     } else {
       groupList.innerHTML = state.groups.map(g => {
         const isChecked = g.id === activeGId;
@@ -8191,7 +8191,7 @@ export function openGroupScopeModal(groupId) {
 
   if (teamGrid) {
     if (allTeamNames.length === 0) {
-      teamGrid.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; padding:8px;">Loading club data...</div>`;
+      teamGrid.innerHTML = `<div style="color:var(--text-muted); font-size:var(--font-size-sm, 0.875rem); padding:8px;">Loading club data...</div>`;
     } else {
       teamGrid.innerHTML = allTeamNames.map(teamName => {
         const teamObj = Object.values(state.teams).find(t => t.name === teamName);
@@ -8201,7 +8201,7 @@ export function openGroupScopeModal(groupId) {
           <label class="mgmt-team-chip" style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass);">
             <input type="checkbox" value="${teamName}" class="modal-scope-team-cb" ${isChecked ? 'checked' : ''} style="cursor: pointer;" />
             ${crestUrl ? `<img src="${crestUrl}" width="18" height="18" alt="${teamName}" style="flex-shrink:0;" />` : ''}
-            <span style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${teamName}</span>
+            <span style="font-size:var(--font-size-xs, 0.8125rem); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${teamName}</span>
           </label>
         `;
       }).join('');
@@ -8375,22 +8375,22 @@ function renderMasterPlayersTable() {
           <button class="btn-icon copy-passcode-btn" data-code="${p.passcode || ''}" title="Copy Passcode">📋</button>
           <button class="btn-icon reset-passcode-btn" data-id="${p.id}" title="Reset 6-Char Passcode">🔄</button>
          </div>`
-      : `<span style="color:var(--text-dim); font-size:0.8rem;">🔒 Hidden</span>`;
+      : `<span style="color:var(--text-dim); font-size:var(--font-size-xs, 0.8125rem);">🔒 Hidden</span>`;
 
     return `
       <tr class="mgmt-player-row">
         <td class="mgmt-player-cell-name">
-          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">👤 Player Name</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">👤 Player Name</div>
           <input type="text" class="form-input mgmt-player-name-input" data-id="${p.id}" value="${p.name}" style="font-weight:600;" />
         </td>
         <td class="mgmt-player-cell-groups">
-          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🏆 League Memberships</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🏆 League Memberships</div>
           <div class="group-tag-pill-container">
             ${groupPills}
           </div>
         </td>
         <td class="mgmt-player-cell-passcode" style="text-align: center;">
-          <div class="mobile-only-label" style="display:none; font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🔑 Passcode</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🔑 Passcode</div>
           ${passcodeDisplay}
         </td>
         <td class="mgmt-player-cell-actions" style="text-align: center;">
@@ -8653,8 +8653,8 @@ function renderPlayerActivityTable() {
     const initial = (p.name || '?').slice(0, 1).toUpperCase();
     const groupPills = state.groups
       .filter(g => p.group_ids && p.group_ids.includes(g.id))
-      .map(g => `<span class="group-tag-pill active" style="cursor:default; font-size:0.75rem; padding:2px 8px;">✓ ${g.name}</span>`)
-      .join('') || `<span style="color:var(--text-dim); font-size:0.78rem;">No groups assigned</span>`;
+      .map(g => `<span class="group-tag-pill active" style="cursor:default; font-size:var(--font-size-2xs, 0.75rem); padding:2px 8px;">✓ ${g.name}</span>`)
+      .join('') || `<span style="color:var(--text-dim); font-size:var(--font-size-xs, 0.8125rem);">No groups assigned</span>`;
 
     return `
       <tr>
@@ -8883,7 +8883,7 @@ async function init() {
     document.getElementById('matrixBody').innerHTML = `
       <tr><td colspan="10">
         <div class="error-state">
-          <span style="font-size:2rem">⚠️</span>
+          <span style="font-size:var(--font-size-2xl, 1.625rem)">⚠️</span>
           <strong>Could not connect to backend server</strong>
           <span>${err.message}</span>
           <button class="btn btn-primary" onclick="location.reload()">🔄 Retry</button>

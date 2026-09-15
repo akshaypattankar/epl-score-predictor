@@ -45,7 +45,7 @@
             <span class="nav-tab-text">DASHBOARD</span>
           </button>
           <button class="nav-tab" id="navWhatIfBtn" title="What-If Standings Simulator">
-            <span class="nav-tab-icon" style="font-size: 1.05rem; line-height: 1; display: inline-block;">🔮</span>
+            <span class="nav-tab-icon" class="nav-tab-icon">🔮</span>
             <span class="nav-tab-text">WHAT-IF</span>
           </button>
           <button class="nav-tab" id="navScoringBtn" title="Scoring Rules Explainer">
@@ -53,7 +53,7 @@
             <span class="nav-tab-text">RULES</span>
           </button>
           <button class="nav-tab" id="navManagementBtn" style="display: none;" title="Manage Leagues & Players">
-            <span class="nav-tab-icon" style="font-size: 1.05rem; line-height: 1; display: inline-block;">⚙️</span>
+            <span class="nav-tab-icon" class="nav-tab-icon">⚙️</span>
             <span class="nav-tab-text">MANAGE</span>
           </button>
         </nav>
@@ -114,7 +114,7 @@
       <!-- GUEST MODE BANNER -->
       <div class="guest-mode-banner" id="guestNoticeBanner" style="display: none;">
         <div class="guest-mode-banner-text">
-          <span style="font-size: 1.3rem;">ℹ️</span>
+          <span style="font-size: var(--font-size-xl, 1.375rem);">ℹ️</span>
           <div>
             <strong>Viewing as Guest:</strong> Displaying Premier League fixture schedules and official scores.
             Log in with your 6-character player passcode or admin password to view player predictions, scores, and
@@ -234,7 +234,7 @@
         </div>
 
         <div class="team-matches-wrapper" style="margin-top: 20px;">
-          <h3 style="font-family: var(--font-title); font-size: 1rem; margin-bottom: 12px; color: var(--text-main);">
+          <h3 style="font-family: var(--font-title); font-size: var(--font-size-sm, 0.875rem); margin-bottom: 12px; color: var(--text-main);">
             📋 Match Predictions & Outcomes
           </h3>
           <div class="table-responsive">
@@ -478,10 +478,10 @@
       <!-- Section Header -->
       <div class="mgmt-page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
-          <h2 style="font-family: var(--font-title); font-size: 1.8rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+          <h2 style="font-family: var(--font-title); font-size: var(--font-size-xl, 1.375rem); font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
             <img src="assets/report/rules.png" alt="Rules" class="page-title-icon" style="width: 28px; height: 28px; object-fit: contain; vertical-align: middle;" /> Official Scoring Engine Specification
           </h2>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">
+          <p style="color: var(--text-muted); font-size: var(--font-size-sm, 0.875rem);">
             Learn how predictions earn base points across 6 tiers, plus additive bonus points for high-scoring thrillers
             and exact draw predictions.
           </p>
@@ -490,13 +490,13 @@
           <button type="button" class="btn btn-secondary btn-back-dashboard" id="scoringBackToDashboardBtn" title="Return to Match Predictions Dashboard">
             📊 ← Dashboard
           </button>
-          <button class="btn btn-secondary" id="exportScoringRulesPdfBtn" style="padding: 9px 15px; font-size: 0.88rem;">
+          <button class="btn btn-secondary" id="exportScoringRulesPdfBtn" style="padding: 9px 15px; font-size: var(--font-size-sm, 0.875rem);">
             📄 Export PDF
           </button>
-          <button class="btn btn-secondary" id="exportScoringRulesJpgBtn" style="padding: 9px 15px; font-size: 0.88rem;">
+          <button class="btn btn-secondary" id="exportScoringRulesJpgBtn" style="padding: 9px 15px; font-size: var(--font-size-sm, 0.875rem);">
             🖼️ Export JPEG
           </button>
-          <button class="btn btn-primary" id="openScoringRulesEditorBtn" style="display: none; padding: 9px 18px; font-size: 0.88rem;">
+          <button class="btn btn-primary" id="openScoringRulesEditorBtn" style="display: none; padding: 9px 18px; font-size: var(--font-size-sm, 0.875rem);">
             ✏️ Edit Scoring Rules
           </button>
         </div>
@@ -511,10 +511,10 @@
       <!-- Bonus Points Section -->
       <div class="mgmt-page-header" style="margin-top: 36px;">
         <div>
-          <h2 style="font-family: var(--font-title); font-size: 1.5rem; font-weight: 800; color: var(--text-main);">
+          <h2 style="font-family: var(--font-title); font-size: var(--font-size-lg, 1.1875rem); font-weight: 800; color: var(--text-main);">
             🔥 Additive Bonus Points
           </h2>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">
+          <p style="color: var(--text-muted); font-size: var(--font-size-sm, 0.875rem);">
             Earn extra points on goal-fests and exact draw predictions that stack on top of base tier points.
           </p>
         </div>
@@ -530,12 +530,12 @@
         <div class="section-header heatmap-section-header" style="margin-bottom: 20px;">
           <div>
             <div class="heatmap-title-row">
-              <h3 style="font-family: var(--font-title); font-size: 1.35rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+              <h3 style="font-family: var(--font-title); font-size: var(--font-size-lg, 1.1875rem); font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                 <span>🎮</span> Interactive Score Simulator Heatmap
               </h3>
               <span class="heatmap-badge" id="simPerspectiveBadge">Reference Score: 3–1</span>
             </div>
-            <p style="color: var(--text-muted); font-size: 0.86rem; margin-top: 4px;">
+            <p style="color: var(--text-muted); font-size: var(--font-size-xs, 0.8125rem); margin-top: 4px;">
               Enter any match scoreline to view a live 2D points heatmap. Single-click any cell to inspect; double-click a cell to set it as the reference scoreline.
             </p>
           </div>
@@ -649,12 +649,12 @@
       <section class="glass-card"
         style="margin-top: 24px; background: rgba(124,58,237,0.06); border-color: rgba(124,58,237,0.3);">
         <div style="display: flex; align-items: center; gap: 16px;">
-          <span style="font-size: 2.2rem;">🔒</span>
+          <span style="font-size: var(--font-size-2xl, 1.625rem);">🔒</span>
           <div>
             <h4
-              style="font-family: var(--font-title); font-size: 1.15rem; color: var(--text-main); margin-bottom: 4px;">
+              style="font-family: var(--font-title); font-size: var(--font-size-md, 1.0625rem); color: var(--text-main); margin-bottom: 4px;">
               Time Lock Enforcement</h4>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            <p style="color: var(--text-muted); font-size: var(--font-size-sm, 0.875rem); margin: 0;">
               All match score input fields lock automatically at official kickoff time (in UTC). Predictions cannot be
               submitted or edited after a match starts.
             </p>
@@ -736,7 +736,7 @@
               <tr>
                 <th>Player Name</th>
                 <th>League Group Memberships <span
-                    style="font-weight:400; font-size:0.75rem; color:var(--text-dim);">(Click chip to add/remove)</span>
+                    style="font-weight:400; font-size: var(--font-size-2xs, 0.75rem); color:var(--text-dim);">(Click chip to add/remove)</span>
                 </th>
                 <th style="width: 150px; text-align: center;">6-Char Passcode</th>
                 <th style="width: 90px; text-align: center;">Actions</th>
@@ -809,9 +809,9 @@
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 0.85rem; color: var(--text-muted);">Search:</span>
+            <span style="font-size: var(--font-size-sm, 0.875rem); color: var(--text-muted);">Search:</span>
             <input type="text" id="mgmtActivitySearchInput" class="form-input" placeholder="Search player name..."
-              style="max-width: 200px; padding: 6px 10px; font-size: 0.85rem;" />
+              style="max-width: 200px; padding: 6px 10px; font-size: var(--font-size-sm, 0.875rem);" />
           </div>
         </div>
 
@@ -857,115 +857,116 @@
         </div>
 
         <!-- PAS Settings Content Card -->
-        <div class="mgmt-pas-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 18px 20px;">
+        <!-- PAS Settings Content Card -->
+        <div class="mgmt-pas-card">
           <!-- Live Preview Bar and Formula Summary -->
-          <div style="margin-bottom: 18px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.06);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-              <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+          <div class="mgmt-pas-preview-box">
+            <div class="mgmt-pas-preview-header">
+              <span class="mgmt-pas-formula-title">
                 <span>📊</span> Formula Distribution:
-                <code id="mgmtPasFormulaPreview" style="color: var(--accent-cyan); background: rgba(56,189,248,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem;">50% Match + 35% Rank + 15% Pts</code>
+                <code id="mgmtPasFormulaPreview" class="mgmt-pas-formula-code">50% Match + 35% Rank + 15% Pts</code>
               </span>
-              <span id="mgmtPasTotalBadge" style="font-size: 0.82rem; font-weight: 800; color: #34d399; font-family: var(--font-mono);">
+              <span id="mgmtPasTotalBadge" class="mgmt-pas-total-badge">
                 Total: 100%
               </span>
             </div>
             <!-- Proportional Bar -->
-            <div style="height: 10px; width: 100%; border-radius: 5px; overflow: hidden; display: flex; background: rgba(255,255,255,0.08);">
-              <div id="mgmtPasBarMatch" style="width: 50%; background: #38bdf8; transition: width 0.2s ease;" title="Match Score Precision"></div>
-              <div id="mgmtPasBarRank" style="width: 35%; background: #a78bfa; transition: width 0.2s ease;" title="Table Rank Proximity"></div>
-              <div id="mgmtPasBarPts" style="width: 15%; background: #34d399; transition: width 0.2s ease;" title="Points Calibration"></div>
+            <div class="mgmt-pas-prog-bar">
+              <div id="mgmtPasBarMatch" class="mgmt-pas-bar-match" style="width: 50%;" title="Match Score Precision"></div>
+              <div id="mgmtPasBarRank" class="mgmt-pas-bar-rank" style="width: 35%;" title="Table Rank Proximity"></div>
+              <div id="mgmtPasBarPts" class="mgmt-pas-bar-pts" style="width: 15%;" title="Points Calibration"></div>
             </div>
-            <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); flex-wrap: wrap;">
-              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #38bdf8;"></span> Match Precision (<span id="mgmtPasLegendMatch">50%</span>)</span>
-              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #a78bfa;"></span> Rank Proximity (<span id="mgmtPasLegendRank">35%</span>)</span>
-              <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #34d399;"></span> Points Calibration (<span id="mgmtPasLegendPts">15%</span>)</span>
+            <div class="mgmt-pas-legend-row">
+              <span class="mgmt-pas-legend-item"><span class="mgmt-pas-legend-pip pip-match"></span> Match Precision (<span id="mgmtPasLegendMatch">50%</span>)</span>
+              <span class="mgmt-pas-legend-item"><span class="mgmt-pas-legend-pip pip-rank"></span> Rank Proximity (<span id="mgmtPasLegendRank">35%</span>)</span>
+              <span class="mgmt-pas-legend-item"><span class="mgmt-pas-legend-pip pip-pts"></span> Points Calibration (<span id="mgmtPasLegendPts">15%</span>)</span>
             </div>
           </div>
 
           <!-- Sliders Grid for the 3 Core Pillars -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px;">
+          <div class="mgmt-pas-sliders-grid">
             <!-- Pillar 1: Match Score Precision -->
-            <div class="mgmt-pas-slider-box" style="background: rgba(56, 189, 248, 0.04); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 14px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label for="mgmtPasMatchInput" style="font-weight: 700; font-size: 0.85rem; color: #38bdf8;">🎯 Match Score Precision</label>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <input type="number" id="mgmtPasMatchInput" min="0" max="100" step="1" value="50" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #38bdf8;" class="form-input" />
-                  <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8;">%</span>
+            <div class="mgmt-pas-slider-box box-match">
+              <div class="mgmt-pas-slider-header">
+                <label for="mgmtPasMatchInput" class="mgmt-pas-slider-label label-match">🎯 Match Score Precision</label>
+                <div class="mgmt-pas-input-wrap">
+                  <input type="number" id="mgmtPasMatchInput" min="0" max="100" step="1" value="50" class="form-input mgmt-pas-num-input input-match" />
+                  <span class="mgmt-pas-unit unit-match">%</span>
                 </div>
               </div>
-              <input type="range" id="mgmtPasMatchRange" min="0" max="100" step="1" value="50" style="width: 100%; accent-color: #38bdf8; cursor: pointer;" />
-              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+              <input type="range" id="mgmtPasMatchRange" min="0" max="100" step="1" value="50" class="mgmt-pas-range range-match" />
+              <p class="mgmt-pas-slider-hint">
                 Rewards exact scores (100 pts), correct outcomes with goal diff (85 pts), and correct outcomes (70 pts).
               </p>
             </div>
 
             <!-- Pillar 2: Table Rank Proximity -->
-            <div class="mgmt-pas-slider-box" style="background: rgba(167, 139, 250, 0.04); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: var(--radius-sm); padding: 14px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label for="mgmtPasRankInput" style="font-weight: 700; font-size: 0.85rem; color: #a78bfa;">📐 Table Rank Proximity</label>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <input type="number" id="mgmtPasRankInput" min="0" max="100" step="1" value="35" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #a78bfa;" class="form-input" />
-                  <span style="font-size: 0.8rem; font-weight: 700; color: #a78bfa;">%</span>
+            <div class="mgmt-pas-slider-box box-rank">
+              <div class="mgmt-pas-slider-header">
+                <label for="mgmtPasRankInput" class="mgmt-pas-slider-label label-rank">📐 Table Rank Proximity</label>
+                <div class="mgmt-pas-input-wrap">
+                  <input type="number" id="mgmtPasRankInput" min="0" max="100" step="1" value="35" class="form-input mgmt-pas-num-input input-rank" />
+                  <span class="mgmt-pas-unit unit-rank">%</span>
                 </div>
               </div>
-              <input type="range" id="mgmtPasRankRange" min="0" max="100" step="1" value="35" style="width: 100%; accent-color: #a78bfa; cursor: pointer;" />
-              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+              <input type="range" id="mgmtPasRankRange" min="0" max="100" step="1" value="35" class="mgmt-pas-range range-rank" />
+              <p class="mgmt-pas-slider-hint">
                 Spearman rank correlation and Mean Absolute Rank Shift (MARS) across all 20 Premier League positions.
               </p>
             </div>
 
             <!-- Pillar 3: Points Calibration -->
-            <div class="mgmt-pas-slider-box" style="background: rgba(52, 211, 153, 0.04); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: var(--radius-sm); padding: 14px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label for="mgmtPasPtsInput" style="font-weight: 700; font-size: 0.85rem; color: #34d399;">⚖️ Points Calibration</label>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <input type="number" id="mgmtPasPtsInput" min="0" max="100" step="1" value="15" style="width: 60px; text-align: right; padding: 3px 6px; font-size: 0.85rem; font-weight: 800; color: #34d399;" class="form-input" />
-                  <span style="font-size: 0.8rem; font-weight: 700; color: #34d399;">%</span>
+            <div class="mgmt-pas-slider-box box-pts">
+              <div class="mgmt-pas-slider-header">
+                <label for="mgmtPasPtsInput" class="mgmt-pas-slider-label label-pts">⚖️ Points Calibration</label>
+                <div class="mgmt-pas-input-wrap">
+                  <input type="number" id="mgmtPasPtsInput" min="0" max="100" step="1" value="15" class="form-input mgmt-pas-num-input input-pts" />
+                  <span class="mgmt-pas-unit unit-pts">%</span>
                 </div>
               </div>
-              <input type="range" id="mgmtPasPtsRange" min="0" max="100" step="1" value="15" style="width: 100%; accent-color: #34d399; cursor: pointer;" />
-              <p style="font-size: 0.74rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 0;">
+              <input type="range" id="mgmtPasPtsRange" min="0" max="100" step="1" value="15" class="mgmt-pas-range range-pts" />
+              <p class="mgmt-pas-slider-hint">
                 Mean Absolute Points Error (MAPE) measuring total distance between predicted club points and actual club points.
               </p>
             </div>
           </div>
 
           <!-- Advanced Sub-Weights (Spearman rho vs MARS) -->
-          <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;">
-            <details style="cursor: pointer;">
-              <summary style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); outline: none; user-select: none;">
+          <div class="mgmt-pas-advanced-wrap">
+            <details class="mgmt-pas-details">
+              <summary class="mgmt-pas-summary">
                 ⚙️ Advanced: Table Rank Sub-Weightages (Spearman ρ vs MARS)
               </summary>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.18); border-radius: var(--radius-sm);">
-                <div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <label for="mgmtPasRhoInput" style="font-size: 0.8rem; font-weight: 700; color: #c084fc;">Spearman Rank Correlation (ρ)</label>
-                    <div style="display: flex; align-items: center; gap: 2px;">
-                      <input type="number" id="mgmtPasRhoInput" min="0" max="100" step="1" value="60" style="width: 55px; text-align: right; padding: 2px 4px; font-size: 0.8rem;" class="form-input" />
-                      <span style="font-size: 0.75rem;">%</span>
+              <div class="mgmt-pas-sub-grid">
+                <div class="mgmt-pas-sub-item">
+                  <div class="mgmt-pas-sub-header">
+                    <label for="mgmtPasRhoInput" class="mgmt-pas-sub-label label-rho">Spearman Rank Correlation (ρ)</label>
+                    <div class="mgmt-pas-input-wrap">
+                      <input type="number" id="mgmtPasRhoInput" min="0" max="100" step="1" value="60" class="form-input mgmt-pas-num-input input-rho" />
+                      <span class="mgmt-pas-unit unit-rho">%</span>
                     </div>
                   </div>
-                  <input type="range" id="mgmtPasRhoRange" min="0" max="100" step="1" value="60" style="width: 100%; accent-color: #c084fc; cursor: pointer;" />
-                  <span style="font-size: 0.7rem; color: var(--text-dim);">Measures relative order accuracy across the entire table</span>
+                  <input type="range" id="mgmtPasRhoRange" min="0" max="100" step="1" value="60" class="mgmt-pas-range range-rho" />
+                  <span class="mgmt-pas-sub-hint">Measures relative order accuracy across the entire table</span>
                 </div>
 
-                <div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <label for="mgmtPasMarsInput" style="font-size: 0.8rem; font-weight: 700; color: #fb7185;">Mean Absolute Rank Shift (MARS)</label>
-                    <div style="display: flex; align-items: center; gap: 2px;">
-                      <input type="number" id="mgmtPasMarsInput" min="0" max="100" step="1" value="40" style="width: 55px; text-align: right; padding: 2px 4px; font-size: 0.8rem;" class="form-input" />
-                      <span style="font-size: 0.75rem;">%</span>
+                <div class="mgmt-pas-sub-item">
+                  <div class="mgmt-pas-sub-header">
+                    <label for="mgmtPasMarsInput" class="mgmt-pas-sub-label label-mars">Mean Absolute Rank Shift (MARS)</label>
+                    <div class="mgmt-pas-input-wrap">
+                      <input type="number" id="mgmtPasMarsInput" min="0" max="100" step="1" value="40" class="form-input mgmt-pas-num-input input-mars" />
+                      <span class="mgmt-pas-unit unit-mars">%</span>
                     </div>
                   </div>
-                  <input type="range" id="mgmtPasMarsRange" min="0" max="100" step="1" value="40" style="width: 100%; accent-color: #fb7185; cursor: pointer;" />
-                  <span style="font-size: 0.7rem; color: var(--text-dim);">Penalizes large spot displacement per club</span>
+                  <input type="range" id="mgmtPasMarsRange" min="0" max="100" step="1" value="40" class="mgmt-pas-range range-mars" />
+                  <span class="mgmt-pas-sub-hint">Penalizes large spot displacement per club</span>
                 </div>
               </div>
             </details>
           </div>
 
           <!-- Status Banner for Feedback -->
-          <div id="mgmtPasStatusMessage" style="display: none; margin-top: 14px; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.82rem; font-weight: 600;"></div>
+          <div id="mgmtPasStatusMessage" class="mgmt-pas-status-banner" style="display: none;"></div>
         </div>
       </section>
 
@@ -1116,10 +1117,10 @@
     <div class="modal-card glass-card rules-editor-modal-card" style="max-width: 880px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; padding: 24px;">
       <div class="modal-header" style="padding-bottom: 14px; border-bottom: 1px solid var(--border-glass);">
         <div>
-          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 800;">
-            <span style="font-size: 1.5rem;">⚙️</span> Scoring Rules & Tiers Studio
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: var(--font-size-lg, 1.1875rem); font-weight: 800;">
+            <span style="font-size: var(--font-size-lg, 1.1875rem);">⚙️</span> Scoring Rules & Tiers Studio
           </h3>
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+          <p style="color: var(--text-muted); font-size: var(--font-size-sm, 0.875rem); margin-top: 4px;">
             Customize tier names, point values, visual icons (Emoji or SVG), and condition thresholds with live preview.
           </p>
         </div>
@@ -1135,13 +1136,13 @@
 
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-glass); margin-top: 6px; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <button type="button" class="btn" id="resetScoringRulesBtn" style="background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.3); font-size: 0.88rem;">
+          <button type="button" class="btn" id="resetScoringRulesBtn" style="background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.3); font-size: var(--font-size-sm, 0.875rem);">
             🔄 Reset to Defaults
           </button>
-          <button type="button" class="btn btn-secondary" id="modalExportPdfBtn" style="font-size: 0.88rem;">
+          <button type="button" class="btn btn-secondary" id="modalExportPdfBtn" style="font-size: var(--font-size-sm, 0.875rem);">
             📄 PDF
           </button>
-          <button type="button" class="btn btn-secondary" id="modalExportJpgBtn" style="font-size: 0.88rem;">
+          <button type="button" class="btn btn-secondary" id="modalExportJpgBtn" style="font-size: var(--font-size-sm, 0.875rem);">
             🖼️ JPEG
           </button>
         </div>
@@ -1162,10 +1163,10 @@
     <div class="modal-card glass-card group-scope-modal-card" style="max-width: 720px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
       <div class="modal-header" style="padding-bottom: 14px; border-bottom: 1px solid var(--border-glass);">
         <div>
-          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 1.35rem; font-weight: 800;">
-            <span style="font-size: 1.5rem;">🎯</span> <span id="groupScopeModalTitle">Edit Group Team Scope</span>
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: var(--font-size-lg, 1.1875rem); font-weight: 800;">
+            <span style="font-size: var(--font-size-lg, 1.1875rem);">🎯</span> <span id="groupScopeModalTitle">Edit Group Team Scope</span>
           </h3>
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;" id="groupScopeModalSubtitle">
+          <p style="color: var(--text-muted); font-size: var(--font-size-sm, 0.875rem); margin-top: 4px;" id="groupScopeModalSubtitle">
             Configure participating clubs and define gameweek effectiveness (Option A).
           </p>
         </div>
@@ -1176,10 +1177,10 @@
         
         <!-- Current Scope Breakdown Card -->
         <div class="group-scope-info-box" style="background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.25); border-radius: 10px; padding: 14px 16px;">
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+          <div style="font-size: var(--font-size-sm, 0.875rem); font-weight: 700; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
             📜 Current League Scope Timeline
           </div>
-          <div id="groupScopeTimelineDisplay" style="font-size: 0.9rem; color: var(--text-main);">
+          <div id="groupScopeTimelineDisplay" style="font-size: var(--font-size-sm, 0.875rem); color: var(--text-main);">
             <!-- Rendered dynamically -->
           </div>
         </div>
@@ -1204,17 +1205,17 @@
         <!-- Custom Team Selection Container -->
         <div id="modalCustomTeamsContainer" style="display: none; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-glass); border-radius: 10px; padding: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">
+            <span style="font-size: var(--font-size-sm, 0.875rem); color: var(--text-muted); font-weight: 600;">
               Selected: <strong id="modalSelectedTeamsCount" style="color: var(--accent-cyan);">0</strong> / 20 Clubs
             </span>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary" id="modalScopeBig6Btn" style="padding: 4px 10px; font-size: 0.78rem;">
+              <button type="button" class="btn btn-secondary" id="modalScopeBig6Btn" style="padding: 4px 10px; font-size: var(--font-size-xs, 0.8125rem);">
                 ⚡ Big 6 Preset
               </button>
-              <button type="button" class="btn btn-secondary" id="modalScopeSelectAllBtn" style="padding: 4px 10px; font-size: 0.78rem;">
+              <button type="button" class="btn btn-secondary" id="modalScopeSelectAllBtn" style="padding: 4px 10px; font-size: var(--font-size-xs, 0.8125rem);">
                 Select All
               </button>
-              <button type="button" class="btn btn-secondary" id="modalScopeClearAllBtn" style="padding: 4px 10px; font-size: 0.78rem;">
+              <button type="button" class="btn btn-secondary" id="modalScopeClearAllBtn" style="padding: 4px 10px; font-size: var(--font-size-xs, 0.8125rem);">
                 Clear All
               </button>
             </div>
@@ -1238,13 +1239,13 @@
               <input type="radio" name="modalScopeApplyMode" value="effective" checked class="form-radio" style="margin-top: 3px;" id="modalApplyModeEffective" />
               <div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <strong style="color: var(--text-main); font-size: 0.95rem;">⭐ Option A: Apply from Gameweek</strong>
-                  <select id="modalEffectiveGwSelect" class="control-dropdown" style="padding: 2px 8px; font-size: 0.85rem; font-weight: 700; color: var(--accent-cyan);">
+                  <strong style="color: var(--text-main); font-size: var(--font-size-base, 0.9375rem);">⭐ Option A: Apply from Gameweek</strong>
+                  <select id="modalEffectiveGwSelect" class="control-dropdown" style="padding: 2px 8px; font-size: var(--font-size-sm, 0.875rem); font-weight: 700; color: var(--accent-cyan);">
                     <!-- Populated dynamically -->
                   </select>
-                  <strong style="color: var(--text-main); font-size: 0.95rem;">onwards (Recommended)</strong>
+                  <strong style="color: var(--text-main); font-size: var(--font-size-base, 0.9375rem);">onwards (Recommended)</strong>
                 </div>
-                <div style="color: var(--text-muted); font-size: 0.82rem; margin-top: 4px; line-height: 1.4;">
+                <div style="color: var(--text-muted); font-size: var(--font-size-xs, 0.8125rem); margin-top: 4px; line-height: 1.4;">
                   Preserves past gameweeks' historical standings and scores exactly as played. Players will only predict the new scope for future games starting from this Gameweek.
                 </div>
               </div>
@@ -1255,9 +1256,9 @@
               <input type="radio" name="modalScopeApplyMode" value="retroactive" class="form-radio" style="margin-top: 3px;" id="modalApplyModeRetroactive" />
               <div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <strong style="color: var(--text-main); font-size: 0.95rem;">Apply Retroactively Across Entire Season (GW 1–38)</strong>
+                  <strong style="color: var(--text-main); font-size: var(--font-size-base, 0.9375rem);">Apply Retroactively Across Entire Season (GW 1–38)</strong>
                 </div>
-                <div style="color: #f87171; font-size: 0.82rem; margin-top: 4px; line-height: 1.4;">
+                <div style="color: #f87171; font-size: var(--font-size-xs, 0.8125rem); margin-top: 4px; line-height: 1.4;">
                   ⚠️ Overwrites past gameweeks. Past matches that were previously out-of-scope will count as 0 pts (missed) for players who did not predict them.
                 </div>
               </div>
