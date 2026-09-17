@@ -254,12 +254,16 @@
 
       <!-- GAMEWEEK MATRIX -->
       <section class="glass-card matrix-section">
-        <div class="section-header">
-          <div>
+        <div class="section-header matrix-section-header">
+          <div class="matrix-title-row">
             <h2 id="matrixTitle">📅 GW 1 Predictions</h2>
-            <p id="matrixSubtitle">Enter your scores before kick-off - fields lock automatically</p>
+            <button type="button" class="btn-matrix-toggle showing-me" id="matrixToggleOthersBtn" style="display: none;" title="Currently showing only your predictions. Click to show all players." aria-label="Toggle other players visibility" aria-pressed="true">
+              <span class="matrix-toggle-icon">👤</span>
+              <span class="matrix-toggle-text">Only Me</span>
+            </button>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <div class="matrix-subtitle-row">
+            <p id="matrixSubtitle">Enter your scores before kick-off - fields lock automatically</p>
             <div class="matrix-meta" id="matrixMeta"></div>
           </div>
         </div>

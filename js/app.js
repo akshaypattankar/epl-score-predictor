@@ -63,6 +63,7 @@ const state = {
   chartMode: localStorage.getItem('epl_chart_mode') || 'ribbon', // 'ribbon' | 'stepped' | 'linear'
   chartDrilldownGW: null, // null (Season Overview) or number e.g. 1 (isolated drilldown view)
   chartExpandedGWs: null, // Initialized to default active current GW expanded, e.g. new Set([activeGW])
+  matrixShowOtherPlayers: localStorage.getItem('epl_matrix_show_others') === 'true',
   auth: {
     role: 'guest',    // 'guest' | 'player' | 'admin'
     activePlayerId: null,
@@ -2152,6 +2153,30 @@ function initGWSkipControls() {
   });
 }
 
+// ─── Rank Badge Helper ───────────────────────────────────────────────────────
+/**
+ * Renders an image rank badge (for ranks 1-10) using graphical assets,
+ * or formatted numeric text (#11, #12...) for ranks beyond 10.
+ *
+ * @param {number} rank - Player rank (1-indexed)
+ * @param {Object} [options]
+ * @param {number} [options.size] - Image dimension in pixels (default: 24)
+ * @param {string} [options.className] - Additional CSS class name(s)
+ * @param {string} [options.alt] - Custom alt text
+ * @returns {string} Rendered HTML string
+ */
+function getRankBadgeHtml(rank, options = {}) {
+  const r = parseInt(rank, 10);
+  const size = options.size || 24;
+  const extraClass = options.className ? ` ${options.className}` : '';
+  const alt = options.alt || `Rank #${r}`;
+
+  if (r >= 1 && r <= 10) {
+    return `<img src="assets/ranks/rank-badge-${r}.png" alt="${alt}" class="rank-badge-img${extraClass}" width="${size}" height="${size}" loading="lazy" onerror="this.onerror=null;this.replaceWith('#${r}');" />`;
+  }
+  return `<span class="rank-badge-text${extraClass}">#${r || '–'}</span>`;
+}
+
 // ─── Render: Snapshot Leaderboard ────────────────────────────────────────────
 function renderSnapshot(lb) {
   const container = document.getElementById('leaderboardSnapshot');
@@ -2171,8 +2196,7 @@ function renderSnapshot(lb) {
     return;
   }
 
-  const medals = ['🥇', '🥈', '🥉'];
-  container.innerHTML = lb.slice(0, 3).map(r => {
+  container.innerHTML = lb.slice(0, 10).map(r => {
     const isYou = state.auth.activePlayerId === r.id;
     const shades = getPlayerColorShades(r);
 
@@ -2200,13 +2224,13 @@ function renderSnapshot(lb) {
       <div class="snapshot-card rank-${r.rank} ${isYou ? 'active-player-card' : ''}" style="border-top: 3px solid ${shades.primary}; background-image: radial-gradient(circle at top right, ${shades.glow}, transparent 65%);">
         <div class="snapshot-avatar-col">
           <div class="rank-medal-badge rank-${r.rank}" style="background:${shades.badgeBg}; border-color:${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="Rank #${r.rank}">
-            <span class="rank-medal-icon">${medals[r.rank - 1] ?? `#${r.rank}`}</span>
+            <span class="rank-medal-icon">${getRankBadgeHtml(r.rank, { size: 34, className: 'rank-badge-snapshot' })}</span>
           </div>
           ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
         </div>
         <div class="snapshot-info">
           <div class="snapshot-header-row">
-            <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${r.name}">${r.name}</span>
+            <span class="snapshot-name" style="color: ${shades.primary}; font-weight:850;" title="${r.name}">${r.name}</span>
           </div>
           <div class="snapshot-pts-row">
             <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${mainScore}</span>
@@ -2443,7 +2467,7 @@ function renderTeamBreakdown() {
           </div>
           <div class="snapshot-info">
             <div class="snapshot-header-row">
-              <span class="snapshot-name" style="color: ${shades.primary}; font-weight:700;" title="${p.name}">${p.name}</span>
+              <span class="snapshot-name" style="color: ${shades.primary}; font-weight:850;" title="${p.name}">${p.name}</span>
             </div>
             <div class="snapshot-pts-row">
               <span class="snapshot-pts" style="background:${shades.textGradient}; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${pts}</span>
@@ -2660,12 +2684,45 @@ function renderMatrix() {
     <span class="meta-chip">⏳ ${yetToPlay} yet to play</span>
   `;
 
-  let players = isGuest ? [] : [...state.players];
+  const totalGroupPlayers = isGuest ? [] : [...state.players];
+  let players = [...totalGroupPlayers];
   if (!isGuest && state.auth.activePlayerId) {
     const youIdx = players.findIndex(p => p.id === state.auth.activePlayerId);
     if (youIdx > 0) {
       const [youPlayer] = players.splice(youIdx, 1);
       players.unshift(youPlayer);
+    }
+  }
+
+  // Update toggle button visibility and state
+  const toggleBtn = document.getElementById('matrixToggleOthersBtn');
+  if (toggleBtn) {
+    if (isGuest || totalGroupPlayers.length <= 1) {
+      toggleBtn.style.display = 'none';
+    } else {
+      toggleBtn.style.display = 'inline-flex';
+      const otherCount = totalGroupPlayers.length - 1;
+      if (state.matrixShowOtherPlayers) {
+        toggleBtn.className = 'btn-matrix-toggle showing-all';
+        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">👥</span><span class="matrix-toggle-text">All Players (${totalGroupPlayers.length})</span>`;
+        toggleBtn.title = `Currently showing all ${totalGroupPlayers.length} players. Click to hide other players.`;
+        toggleBtn.setAttribute('aria-pressed', 'false');
+      } else {
+        toggleBtn.className = 'btn-matrix-toggle showing-me';
+        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">👤</span><span class="matrix-toggle-text">Only Me <span class="matrix-toggle-pill">+${otherCount} hidden</span></span>`;
+        toggleBtn.title = `Currently hiding ${otherCount} other player${otherCount === 1 ? '' : 's'}. Click to show all players.`;
+        toggleBtn.setAttribute('aria-pressed', 'true');
+      }
+    }
+  }
+
+  // If user chose to hide other players, filter to just the active player (or first player if admin)
+  if (!isGuest && !state.matrixShowOtherPlayers && players.length > 1) {
+    const activeId = state.auth.activePlayerId;
+    if (activeId && players.some(p => p.id === activeId)) {
+      players = players.filter(p => p.id === activeId);
+    } else {
+      players = [players[0]];
     }
   }
   const head = document.getElementById('matrixHead');
@@ -3243,12 +3300,10 @@ function renderLeaderboard() {
     return;
   }
 
-  const medals = ['🥇', '🥈', '🥉'];
-
   tbody.innerHTML = lb.map(r => {
     const isYou = state.auth.activePlayerId === r.id;
     const shades = getPlayerColorShades(r);
-    const rankDisplay = medals[r.rank - 1] ?? `#${r.rank}`;
+    const rankBadgeHtml = getRankBadgeHtml(r.rank, { size: 26, className: 'lb-rank-asset' });
 
     // Late joiner tag if first predicted GW is later than group start GW
     const isLateJoiner = r.firstPredictedGW && r.firstPredictedGW > startGw;
@@ -3260,7 +3315,7 @@ function renderLeaderboard() {
       <tr class="${isYou ? 'active-player-row' : ''}" style="${isYou ? `background:${shades.bgSubtle}; border-left:3px solid ${shades.primary};` : ''}">
         <td class="lb-player-cell" style="white-space:nowrap;">
           <div class="lb-player-info" style="display:inline-flex; align-items:center; gap:8px; white-space:nowrap; flex-wrap:nowrap;">
-            <span class="lb-rank-badge rank-${r.rank}">${rankDisplay}</span>
+            <span class="lb-rank-badge rank-${r.rank}" title="Rank #${r.rank}">${rankBadgeHtml}</span>
             <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;min-width:8px;border-radius:50%;background:${shades.primary};box-shadow:0 0 6px ${shades.glow};flex-shrink:0;"></span>
             <span class="lb-player-name" style="color:${shades.primary};font-weight:700;white-space:nowrap;">${r.name}</span>
             ${lateJoinerTag}
@@ -6102,7 +6157,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       <div class="pts-tooltip-header">
         <div class="pts-tooltip-header-left">
           <div class="pts-tooltip-title-wrap">
-            <div class="pts-tooltip-icon-badge" style="background:rgba(56, 189, 248, 0.15); border-color:rgba(56, 189, 248, 0.35);">📖</div>
+            <div class="pts-tooltip-icon-badge rules-guide">📖</div>
             <div class="pts-tooltip-title-meta">
               <div class="pts-tooltip-title-row">
                 <span class="pts-tooltip-tier-name">Scoring Engine Rules</span>
@@ -6220,14 +6275,14 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
     `;
   } else if (breakdown.status === 'no_prediction') {
     formulaHtml = `
-      <div class="pts-breakdown-card" style="border-color:rgba(244,63,94,0.3); background:rgba(244,63,94,0.06);">
+      <div class="pts-breakdown-card no-pred">
         <div class="pts-breakdown-card-title" style="color:var(--accent-rose);">⚠️ Prediction Status</div>
         <div class="pts-breakdown-explanation" style="color:var(--text-main);">No score prediction was entered by ${player.name} for this match (0 points awarded).</div>
       </div>
     `;
   } else {
     formulaHtml = `
-      <div class="pts-breakdown-card" style="border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.05);">
+      <div class="pts-breakdown-card upcoming">
         <div class="pts-breakdown-card-title">⏳ Match Upcoming</div>
         <div class="pts-breakdown-explanation">Prediction submitted: <strong style="color:var(--text-main); font-family:var(--font-title);">${breakdown.predScore || 'None'}</strong>. Points will be automatically computed dynamically as the match kicks off and progresses.</div>
       </div>
@@ -8721,6 +8776,18 @@ function initCopyBtn() {
   });
 }
 
+function initMatrixToggleControls() {
+  const toggleBtn = document.getElementById('matrixToggleOthersBtn');
+  if (!toggleBtn) return;
+  toggleBtn.addEventListener('click', () => {
+    state.matrixShowOtherPlayers = !state.matrixShowOtherPlayers;
+    try {
+      localStorage.setItem('epl_matrix_show_others', state.matrixShowOtherPlayers ? 'true' : 'false');
+    } catch (_) { }
+    renderMatrix();
+  });
+}
+
 function initChartControls() {
   const stepBtn = document.getElementById('chartModeStepBtn');
   const linearBtn = document.getElementById('chartModeLinearBtn');
@@ -8833,6 +8900,7 @@ async function init() {
   document.getElementById('exportScoringRulesJpgBtn')?.addEventListener('click', exportRulesToJpeg);
   initScoreSimulator();
   initCopyBtn();
+  initMatrixToggleControls();
   startLockRefresh();
   startActivityHeartbeat();
   initPointsTooltip();
