@@ -386,11 +386,11 @@
           <div class="heatmap-controls-row">
             <!-- Mobile Toggle Switch (Visible on screens <= 768px) -->
             <div class="heatmap-mobile-toggle-group" id="heatmapMobileToggleGroup">
-              <button type="button" class="heatmap-toggle-btn active" data-target="actual" id="heatmapToggleActualBtn" title="View Actual Results Heatmap">
-                ⚽ Actual Results
-              </button>
-              <button type="button" class="heatmap-toggle-btn" data-target="predicted" id="heatmapTogglePredictedBtn" title="View Predicted Results Heatmap">
+              <button type="button" class="heatmap-toggle-btn active" data-target="predicted" id="heatmapTogglePredictedBtn" title="View Predicted Results Heatmap">
                 🎯 Predicted
+              </button>
+              <button type="button" class="heatmap-toggle-btn" data-target="actual" id="heatmapToggleActualBtn" title="View Actual Results Heatmap">
+                ⚽ Actual Results
               </button>
             </div>
             <!-- Measure Selector -->
@@ -405,38 +405,18 @@
             </div>
             <!-- Player Filter for Predictions -->
             <div class="heatmap-player-filter-wrapper" id="heatmapPlayerFilterWrapper">
-              <label for="heatmapPlayerSelect" class="heatmap-filter-label">Player:</label>
+              <label for="heatmapPlayerSelect" class="heatmap-filter-label" id="heatmapPlayerFilterLabel">Player:</label>
               <select id="heatmapPlayerSelect" class="form-select heatmap-select" aria-label="Select player for predictions and points">
                 <option value="ALL">👥 All Players (Aggregate)</option>
               </select>
+              <div class="heatmap-player-pills-container" id="heatmapPlayerPillsContainer" style="display: none;"></div>
             </div>
           </div>
         </div>
 
         <!-- Heatmaps Display Grid -->
         <div class="heatmaps-grid-container" id="heatmapsGridContainer">
-          <!-- Card 1: Actual Results Heatmap -->
-          <div class="heatmap-card" id="heatmapActualCard">
-            <div class="heatmap-card-header">
-              <div class="heatmap-card-title">
-                <span class="heatmap-card-icon">⚽</span>
-                <div>
-                  <h3>Actual Results Heatmap</h3>
-                  <span class="heatmap-card-sub" id="actualHeatmapSummary">0 matches recorded</span>
-                </div>
-              </div>
-              <div class="heatmap-legend-strip" id="actualHeatmapLegend">
-                <span class="legend-label">Low</span>
-                <div class="legend-bar actual-legend-bar"></div>
-                <span class="legend-label">High</span>
-              </div>
-            </div>
-            <div class="heatmap-matrix-wrapper" id="actualHeatmapMatrix">
-              <!-- Rendered by JS -->
-            </div>
-          </div>
-
-          <!-- Card 2: Predicted Results Heatmap -->
+          <!-- Card 1: Predicted Results Heatmap -->
           <div class="heatmap-card" id="heatmapPredictedCard">
             <div class="heatmap-card-header">
               <div class="heatmap-card-title">
@@ -453,6 +433,27 @@
               </div>
             </div>
             <div class="heatmap-matrix-wrapper" id="predictedHeatmapMatrix">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Card 2: Actual Results Heatmap -->
+          <div class="heatmap-card mobile-hidden" id="heatmapActualCard">
+            <div class="heatmap-card-header">
+              <div class="heatmap-card-title">
+                <span class="heatmap-card-icon">⚽</span>
+                <div>
+                  <h3>Actual Results Heatmap</h3>
+                  <span class="heatmap-card-sub" id="actualHeatmapSummary">0 matches recorded</span>
+                </div>
+              </div>
+              <div class="heatmap-legend-strip" id="actualHeatmapLegend">
+                <span class="legend-label">Low</span>
+                <div class="legend-bar actual-legend-bar"></div>
+                <span class="legend-label">High</span>
+              </div>
+            </div>
+            <div class="heatmap-matrix-wrapper" id="actualHeatmapMatrix">
               <!-- Rendered by JS -->
             </div>
           </div>

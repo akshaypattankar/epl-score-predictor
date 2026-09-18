@@ -353,7 +353,79 @@ export function getTimezoneAbbr(tz = state.timezone || 'UTC', d = new Date()) {
   return tzName || (tz === 'UTC' ? 'UTC' : tz.split('/').pop().replace('_', ' '));
 }
 
-function formatKO(isoStr) {
+export function getKickoffPeriod(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+
+  let hour = 15;
+  let minute = 0;
+  let ukTimeStr = '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(d);
+
+    for (const p of parts) {
+      if (p.type === 'hour') hour = parseInt(p.value, 10);
+      if (p.type === 'minute') minute = parseInt(p.value, 10);
+    }
+    ukTimeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  } catch (e) {
+    hour = d.getUTCHours();
+    minute = d.getUTCMinutes();
+    ukTimeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  const totalMinutes = hour * 60 + minute;
+  let periodId = 'afternoon';
+  let periodName = 'Afternoon';
+
+  // Premier League UK Kickoff time categorization based on UK match slots:
+  // Morning / Lunchtime early kickoff: < 13:00 (e.g. 12:00, 12:30 UK)
+  // Afternoon: 13:00 - 16:59 (e.g. 14:00, 15:00 Saturday blackout, 16:30 Sunday)
+  // Evening: 17:00 - 19:14 (e.g. 17:30 Saturday tea-time, 18:00)
+  // Night: 19:15+ (e.g. 19:30, 19:45, 20:00 Friday/Monday Night & midweek floodlights)
+  if (totalMinutes < 780) {
+    periodId = 'morning';
+    periodName = 'Morning';
+  } else if (totalMinutes < 1020) {
+    periodId = 'afternoon';
+    periodName = 'Afternoon';
+  } else if (totalMinutes < 1155) {
+    periodId = 'evening';
+    periodName = 'Evening';
+  } else {
+    periodId = 'night';
+    periodName = 'Night';
+  }
+
+  return { periodId, periodName, ukTimeStr };
+}
+
+export function getKickoffPeriodSvg(periodInfo) {
+  if (!periodInfo) return '';
+  const { periodId, periodName, ukTimeStr } = periodInfo;
+  const tooltipText = `UK ${periodName} kickoff (${ukTimeStr} UK time)`;
+
+  switch (periodId) {
+    case 'morning':
+      return `<svg class="ko-time-icon ko-icon-morning" viewBox="0 0 16 16" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tooltipText}" title="${tooltipText}"><path d="M2 13.5h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M5 13.5a3 3 0 0 1 6 0" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="1.3"/><path d="M8 8V2m-2 2.2L8 2l2 2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 8.5l1.5 1.2M13.5 8.5l-1.5 1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+    case 'afternoon':
+      return `<svg class="ko-time-icon ko-icon-afternoon" viewBox="0 0 16 16" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tooltipText}" title="${tooltipText}"><circle cx="8" cy="8" r="2.8" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v2m0 9v2M1.5 8h2m9 0h2M3.4 3.4l1.4 1.4m6.4 6.4l1.4 1.4M3.4 12.6l1.4-1.4m6.4-6.4l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+    case 'evening':
+      return `<svg class="ko-time-icon ko-icon-evening" viewBox="0 0 16 16" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tooltipText}" title="${tooltipText}"><path d="M2 13.5h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M5 13.5a3 3 0 0 1 6 0" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="1.3"/><path d="M8 2v6m-2-2.2L8 8l2-2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 8.5l1.5 1.2M13.5 8.5l-1.5 1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+    case 'night':
+      return `<svg class="ko-time-icon ko-icon-night" viewBox="0 0 16 16" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tooltipText}" title="${tooltipText}"><path d="M12.8 9.8A5.2 5.2 0 0 1 6.2 3.2 5.5 5.5 0 1 0 12.8 9.8z" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5 2v2.5M11.25 3.25h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+    default:
+      return '';
+  }
+}
+
+function formatKO(isoStr, withIndicator = false) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   const tz = state.timezone || 'UTC';
@@ -361,7 +433,17 @@ function formatKO(isoStr) {
     const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
     const timePart = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
     const tzName = getTimezoneAbbr(tz, d);
-    return `${datePart} ${timePart} ${tzName}`.trim();
+    const text = `${datePart} ${timePart} ${tzName}`.trim();
+
+    if (!withIndicator) {
+      return text;
+    }
+
+    const period = getKickoffPeriod(isoStr);
+    const svg = getKickoffPeriodSvg(period);
+    if (!svg) return text;
+
+    return `<span class="ko-time-wrap">${svg}<span class="ko-time-text">${text}</span></span>`;
   } catch (e) {
     return d.toUTCString().slice(0, 22);
   }
@@ -1592,7 +1674,7 @@ export function renderNextGameIndicator() {
             ${moreCount > 0 ? `<span class="next-game-more-tag" title="${moreTooltip}">+${moreCount} more</span>` : ''}
           </div>
           <div class="next-game-ko-wrap">
-            <span class="next-game-ko-formatted" id="nextGameKoDetail" title="Kickoff in ${state.timezone || 'UTC'}">${koFormatted}</span>
+            <span class="next-game-ko-formatted" id="nextGameKoDetail" title="Kickoff in ${state.timezone || 'UTC'}">${formatKO(f.kickoff_time, true)}</span>
           </div>
         </div>
       </div>
@@ -2337,9 +2419,9 @@ function getStatusLogoHtml(f, isGuest = false) {
 function getMatchStatusHtml(f, isGuest = false) {
   const scoreInfo = getMatchScoreInfo(f);
   if (scoreInfo.isFinished && scoreInfo.hasScore) {
-    return `<span class="actual-score-badge" title="Official Premier League Result">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    return `<span class="actual-score-badge pts-interactive actual-score-interactive" data-match="${f.id}" data-match-overview="true" role="button" tabindex="0" title="Click to view match prediction heatmap & group results">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
   } else if (scoreInfo.isLive) {
-    return `<span class="actual-score-badge live" title="Live Match in Progress: ${scoreInfo.home} – ${scoreInfo.away}"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    return `<span class="actual-score-badge live pts-interactive actual-score-interactive" data-match="${f.id}" data-match-overview="true" role="button" tabindex="0" title="Click to view live prediction heatmap & group results"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
   } else {
     return getStatusLogoHtml(f, isGuest);
   }
@@ -2590,7 +2672,7 @@ function renderTeamBreakdown() {
               </span>
             </div>
             <div class="match-meta-line">
-              <span class="match-ko">${formatKO(f.kickoff_time)}</span>
+              <span class="match-ko">${formatKO(f.kickoff_time, true)}</span>
               ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
             </div>
           </div>
@@ -2820,7 +2902,7 @@ function renderMatrix() {
               </div>
             </div>
           </td>
-          <td class="col-ko">${formatKO(f.kickoff_time)}</td>
+          <td class="col-ko">${formatKO(f.kickoff_time, true)}</td>
           <td class="col-status">${statusHtml}</td>
         </tr>
       `;
@@ -2922,7 +3004,7 @@ function renderMatrix() {
               </span>
             </div>
             <div class="match-meta-line">
-              <span class="match-ko">${formatKO(f.kickoff_time)}</span>
+              <span class="match-ko">${formatKO(f.kickoff_time, true)}</span>
               ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
             </div>
           </div>
@@ -3345,7 +3427,7 @@ function initLeaderboardControls() {
 let heatmapPlayerScope = null;
 let heatmapPlayerExplicitlyChanged = false;
 let heatmapSelectedMeasure = 'count'; // 'count' | 'count_pct' | 'points' | 'points_pct'
-let heatmapMobileActiveTab = 'actual'; // 'actual' | 'predicted'
+let heatmapMobileActiveTab = 'predicted'; // 'predicted' | 'actual'
 
 function getHeatmapMaxGoal(playerIdFilter = 'ALL') {
   let maxGoal = 5;
@@ -3385,12 +3467,12 @@ function getHeatmapMaxGoal(playerIdFilter = 'ALL') {
 function getThreeWayPercentages(val1, val2, val3) {
   const total = Number(val1 || 0) + Number(val2 || 0) + Number(val3 || 0);
   if (total <= 0) {
-    return ['0.0', '0.0', '0.0'];
+    return ['0', '0', '0'];
   }
   const items = [
-    { idx: 0, raw: (Number(val1 || 0) / total) * 1000 },
-    { idx: 1, raw: (Number(val2 || 0) / total) * 1000 },
-    { idx: 2, raw: (Number(val3 || 0) / total) * 1000 }
+    { idx: 0, raw: (Number(val1 || 0) / total) * 100 },
+    { idx: 1, raw: (Number(val2 || 0) / total) * 100 },
+    { idx: 2, raw: (Number(val3 || 0) / total) * 100 }
   ];
 
   items.forEach(it => {
@@ -3399,9 +3481,9 @@ function getThreeWayPercentages(val1, val2, val3) {
   });
 
   const sumFloor = items.reduce((acc, it) => acc + it.floor, 0);
-  const rem = 1000 - sumFloor;
+  const rem = 100 - sumFloor;
 
-  // Distribute remaining tenths to items with largest fractional remainders
+  // Distribute remaining units to items with largest fractional remainders
   const sorted = [...items].sort((a, b) => b.frac - a.frac);
   for (let i = 0; i < rem; i++) {
     sorted[i % 3].floor += 1;
@@ -3409,7 +3491,7 @@ function getThreeWayPercentages(val1, val2, val3) {
 
   const result = [];
   items.forEach(it => {
-    result[it.idx] = (it.floor / 10).toFixed(1);
+    result[it.idx] = String(it.floor);
   });
   return result;
 }
@@ -3735,17 +3817,77 @@ function renderScoreHeatmaps() {
     measureSelect.value = heatmapSelectedMeasure;
   }
 
-  // Populate Player Select Dropdown
+  // Populate Player Controls (Pills if <= 4 players, dropdown if > 4 players)
+  const players = state.players || [];
   const playerSelect = document.getElementById('heatmapPlayerSelect');
-  if (playerSelect) {
-    const currentVal = heatmapPlayerScope || 'ALL';
-    let optionsHtml = `<option value="ALL" ${currentVal === 'ALL' ? 'selected' : ''}>👥 All Players (Aggregate)</option>`;
-    state.players.forEach(p => {
-      const isYou = state.auth.activePlayerId === p.id;
-      const isSelected = String(p.id) === String(currentVal);
-      optionsHtml += `<option value="${p.id}" ${isSelected ? 'selected' : ''}>${p.name}${isYou ? ' (You)' : ''}</option>`;
-    });
-    playerSelect.innerHTML = optionsHtml;
+  const pillsContainer = document.getElementById('heatmapPlayerPillsContainer');
+  const currentVal = heatmapPlayerScope || 'ALL';
+
+  if (players.length > 4 || players.length === 0) {
+    if (playerSelect) {
+      playerSelect.style.display = '';
+      let optionsHtml = `<option value="ALL" ${currentVal === 'ALL' ? 'selected' : ''}>👥 All Players (Aggregate)</option>`;
+      players.forEach(p => {
+        const isYou = state.auth.activePlayerId === p.id;
+        const isSelected = String(p.id) === String(currentVal);
+        optionsHtml += `<option value="${p.id}" ${isSelected ? 'selected' : ''}>${p.name}${isYou ? ' (You)' : ''}</option>`;
+      });
+      playerSelect.innerHTML = optionsHtml;
+      playerSelect.value = currentVal;
+    }
+    if (pillsContainer) {
+      pillsContainer.style.display = 'none';
+      pillsContainer.innerHTML = '';
+    }
+  } else {
+    // <= 4 players: lay them all out horizontally as quick-switch pills (like gameweek tabs with player accents)
+    if (playerSelect) {
+      playerSelect.style.display = 'none';
+    }
+    if (pillsContainer) {
+      pillsContainer.style.display = 'flex';
+      const isAllActive = currentVal === 'ALL';
+      let pillsHtml = `
+        <button type="button" 
+          class="heatmap-player-pill ${isAllActive ? 'active' : ''}" 
+          data-scope="ALL"
+          style="--pill-color: #a855f7; --pill-border: rgba(168, 85, 247, 0.35); --pill-bg: rgba(168, 85, 247, 0.08); --pill-hover-bg: rgba(168, 85, 247, 0.16); --pill-active-bg: linear-gradient(135deg, #a855f7, #6366f1); --pill-glow: rgba(168, 85, 247, 0.45); --pill-light-bg: rgba(168, 85, 247, 0.07); --pill-light-border: rgba(168, 85, 247, 0.3);"
+          title="View Aggregate Predictions of All Players"
+          aria-pressed="${isAllActive ? 'true' : 'false'}">
+          <span class="heatmap-player-pill-icon">👥</span>
+          <span class="heatmap-player-pill-name">All</span>
+        </button>
+      `;
+
+      players.forEach(p => {
+        const isSelected = String(p.id) === String(currentVal);
+        const isYou = state.auth.activePlayerId === p.id;
+        const pColor = getPlayerColor(p);
+        const pDark = darkenHex(pColor, 0.62);
+        const pGlow = hexToRgba(pColor, 0.45);
+        const pBorder = hexToRgba(pColor, 0.38);
+        const pBg = hexToRgba(pColor, 0.08);
+        const pHoverBg = hexToRgba(pColor, 0.16);
+
+        pillsHtml += `
+          <button type="button"
+            class="heatmap-player-pill ${isSelected ? 'active' : ''}"
+            data-scope="${p.id}"
+            style="--pill-color: ${pColor}; --pill-border: ${pBorder}; --pill-bg: ${pBg}; --pill-hover-bg: ${pHoverBg}; --pill-active-bg: linear-gradient(135deg, ${pColor}, ${pDark}); --pill-glow: ${pGlow}; --pill-light-bg: ${hexToRgba(pColor, 0.07)}; --pill-light-border: ${hexToRgba(pColor, 0.3)};"
+            title="View Predictions for ${p.name}"
+            aria-pressed="${isSelected ? 'true' : 'false'}">
+            <span class="heatmap-player-pill-dot" style="background-color: ${pColor}; box-shadow: 0 0 6px ${pGlow};"></span>
+            <span class="heatmap-player-pill-name">${p.name}${isYou ? ' <span class="heatmap-pill-you">(You)</span>' : ''}</span>
+          </button>
+        `;
+      });
+      pillsContainer.innerHTML = pillsHtml;
+
+      const activePill = pillsContainer.querySelector('.heatmap-player-pill.active');
+      if (activePill) {
+        activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
   }
 
   // Resolve accent colors
@@ -3753,8 +3895,8 @@ function renderScoreHeatmaps() {
   if (heatmapPlayerScope && heatmapPlayerScope !== 'ALL') {
     const targetPlayer = state.players.find(p => String(p.id) === String(heatmapPlayerScope));
     predictedAccentColor = targetPlayer ? getPlayerColor(targetPlayer) : getPlayerColor(heatmapPlayerScope);
-  } else if (state.auth.activePlayerId) {
-    predictedAccentColor = getPlayerColor(state.auth.activePlayerId);
+  } else {
+    predictedAccentColor = '#a855f7';
   }
 
   const neutralActualColor = '#94a3b8'; // neutral slate for everyone
@@ -3884,8 +4026,8 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
       const points = pointsMatrix[a][h];
       const isDraw = h === a;
 
-      const countPct = countTotal > 0 ? ((count / countTotal) * 100).toFixed(1) : '0.0';
-      const pointsPct = pointsTotal > 0 ? ((points / pointsTotal) * 100).toFixed(1) : '0.0';
+      const countPct = countTotal > 0 ? String(Math.round((count / countTotal) * 100)) : '0';
+      const pointsPct = pointsTotal > 0 ? String(Math.round((points / pointsTotal) * 100)) : '0';
 
       let cellText = '·';
       let ratio = 0;
@@ -3905,7 +4047,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
         ratio = maxPoints > 0 ? points / maxPoints : 0;
       } else if (measure === 'points_pct') {
         hasValue = points > 0;
-        cellText = hasValue ? `${pointsPct}%` : (count > 0 ? '0.0%' : '·');
+        cellText = hasValue ? `${pointsPct}%` : (count > 0 ? '0%' : '·');
         ratio = maxPoints > 0 ? points / maxPoints : 0;
       }
 
@@ -3948,75 +4090,83 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
 
   let topLabel = 'MOST FREQUENT';
   let topVal = '—';
-  let topSub = `0 ${itemLabel}`;
+  let topMain = `0 ${itemLabel}`;
+  let topSub = 'No data';
 
   const kpiHwLabel = 'Home Win';
   let kpiHwVal = `${hwCountPct}%`;
-  let kpiHwSub = `${homeWins} of ${countTotal} ${itemLabel}`;
+  let kpiHwSub = `${homeWins} ${itemLabel}`;
   let kpiHwBar = hwCountPct;
 
   const kpiDrLabel = 'Drawn';
   let kpiDrVal = `${drCountPct}%`;
-  let kpiDrSub = `${draws} of ${countTotal} ${itemLabel}`;
+  let kpiDrSub = `${draws} ${itemLabel}`;
   let kpiDrBar = drCountPct;
 
   const kpiAwLabel = 'Away Win';
   let kpiAwVal = `${awCountPct}%`;
-  let kpiAwSub = `${awayWins} of ${countTotal} ${itemLabel}`;
+  let kpiAwSub = `${awayWins} ${itemLabel}`;
   let kpiAwBar = awCountPct;
 
   if (measure === 'points') {
     topLabel = 'TOP EARNER';
     topVal = maxPoints > 0 ? `${topPointsScore.h} - ${topPointsScore.a}` : '—';
-    const ptsShare = pointsTotal > 0 ? ((maxPoints / pointsTotal) * 100).toFixed(1) : '0.0';
-    topSub = maxPoints > 0 ? `+${maxPoints} pts (${ptsShare}% of total)` : '0 pts';
+    const ptsShare = pointsTotal > 0 ? Math.round((maxPoints / pointsTotal) * 100) : 0;
+    topMain = maxPoints > 0 ? `+${maxPoints} pts` : '0 pts';
+    topSub = maxPoints > 0 ? `${ptsShare}% of all points` : 'No points';
 
     kpiHwVal = `${hwPtsPct}%`;
-    kpiHwSub = `${homePoints || 0} of ${pointsTotal} pts`;
+    kpiHwSub = `${homePoints || 0} pts`;
     kpiHwBar = hwPtsPct;
 
     kpiDrVal = `${drPtsPct}%`;
-    kpiDrSub = `${drawPoints || 0} of ${pointsTotal} pts`;
+    kpiDrSub = `${drawPoints || 0} pts`;
     kpiDrBar = drPtsPct;
 
     kpiAwVal = `${awPtsPct}%`;
-    kpiAwSub = `${awayPoints || 0} of ${pointsTotal} pts`;
+    kpiAwSub = `${awayPoints || 0} pts`;
     kpiAwBar = awPtsPct;
   } else if (measure === 'points_pct') {
     topLabel = 'TOP PTS SHARE';
-    const topPtsPct = pointsTotal > 0 ? ((maxPoints / pointsTotal) * 100).toFixed(1) : '0.0';
+    const topPtsPct = pointsTotal > 0 ? Math.round((maxPoints / pointsTotal) * 100) : 0;
     topVal = maxPoints > 0 ? `${topPointsScore.h} - ${topPointsScore.a}` : '—';
-    topSub = maxPoints > 0 ? `${topPtsPct}% (+${maxPoints} pts)` : '0.0%';
+    topMain = maxPoints > 0 ? `${topPtsPct}% share` : '0%';
+    topSub = maxPoints > 0 ? `+${maxPoints} pts earned` : 'No points';
 
     kpiHwVal = `${hwPtsPct}%`;
-    kpiHwSub = `${homePoints || 0} of ${pointsTotal} pts`;
+    kpiHwSub = `${homePoints || 0} pts`;
     kpiHwBar = hwPtsPct;
 
     kpiDrVal = `${drPtsPct}%`;
-    kpiDrSub = `${drawPoints || 0} of ${pointsTotal} pts`;
+    kpiDrSub = `${drawPoints || 0} pts`;
     kpiDrBar = drPtsPct;
 
     kpiAwVal = `${awPtsPct}%`;
-    kpiAwSub = `${awayPoints || 0} of ${pointsTotal} pts`;
+    kpiAwSub = `${awayPoints || 0} pts`;
     kpiAwBar = awPtsPct;
   } else if (measure === 'count_pct') {
     topLabel = 'TOP GAME SHARE';
-    const topCountPct = countTotal > 0 ? ((maxCount / countTotal) * 100).toFixed(1) : '0.0';
+    const topCountPct = countTotal > 0 ? Math.round((maxCount / countTotal) * 100) : 0;
     topVal = maxCount > 0 ? `${topCountScore.h} - ${topCountScore.a}` : '—';
-    topSub = maxCount > 0 ? `${topCountPct}% (${maxCount} of ${countTotal} ${itemLabel})` : '0.0%';
+    topMain = maxCount > 0 ? `${topCountPct}% share` : '0%';
+    topSub = maxCount > 0 ? `${maxCount} ${itemLabel}` : `0 ${itemLabel}`;
   } else {
     topLabel = 'MOST FREQUENT';
     topVal = maxCount > 0 ? `${topCountScore.h} - ${topCountScore.a}` : '—';
-    const share = countTotal > 0 ? ((maxCount / countTotal) * 100).toFixed(1) : '0.0';
-    topSub = maxCount > 0 ? `${maxCount} of ${countTotal} ${itemLabel} (${share}%)` : `0 ${itemLabel}`;
+    const share = countTotal > 0 ? Math.round((maxCount / countTotal) * 100) : 0;
+    topMain = maxCount > 0 ? `${maxCount} ${itemLabel}` : `0 ${itemLabel}`;
+    topSub = maxCount > 0 ? `${share}% share` : 'No matches';
   }
 
   // Points Most Missed calculation for Card 2
   const missedLabel = type === 'actual' ? 'POINTS MOST MISSED' : 'MOST COSTLY MISS';
   const missedVal = topMissedScore && topMissedScore.points > 0 ? `${topMissedScore.h} - ${topMissedScore.a}` : '—';
-  const missedSub = topMissedScore && topMissedScore.points > 0
-    ? `-${topMissedScore.points} pts lost (${topMissedScore.missCount} ${itemLabel})`
-    : 'No missed points';
+  let missedMain = '0 pts lost';
+  let missedSub = 'Clean record';
+  if (topMissedScore && topMissedScore.points > 0) {
+    missedMain = `-${topMissedScore.points} pts lost`;
+    missedSub = `${topMissedScore.missCount} ${itemLabel}`;
+  }
 
   gridHtml += `
     <div class="heatmap-summary-panel">
@@ -4027,7 +4177,11 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
             <span class="heatmap-highlight-badge badge-earner">⭐ ${topLabel}</span>
             <span class="heatmap-highlight-score badge-score-earner">${topVal}</span>
           </div>
-          <div class="heatmap-highlight-desc">${topSub}</div>
+          <div class="heatmap-highlight-desc">
+            <span class="heatmap-stat-main">${topMain}</span>
+            <span class="heatmap-stat-dot">•</span>
+            <span class="heatmap-stat-sub">${topSub}</span>
+          </div>
         </div>
 
         <div class="heatmap-top-highlight-card card-most-missed">
@@ -4035,7 +4189,11 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
             <span class="heatmap-highlight-badge badge-missed">⚠️ ${missedLabel}</span>
             <span class="heatmap-highlight-score badge-score-missed">${missedVal}</span>
           </div>
-          <div class="heatmap-highlight-desc">${missedSub}</div>
+          <div class="heatmap-highlight-desc">
+            <span class="heatmap-stat-main">${missedMain}</span>
+            <span class="heatmap-stat-dot">•</span>
+            <span class="heatmap-stat-sub">${missedSub}</span>
+          </div>
         </div>
       </div>
 
@@ -4043,14 +4201,14 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
       <div class="heatmap-outcome-section">
         <div class="heatmap-outcome-header">
           <span>Outcome Breakdown</span>
-          <span class="heatmap-outcome-legend">🏠 Home + 🤝 Drawn + ✈️ Away = 100%</span>
+          <span class="heatmap-outcome-legend">🏠 Home Win + 🤝 Drawn + ✈️ Away Win = 100%</span>
         </div>
 
         <!-- Stacked 100% Distribution Bar -->
         <div class="heatmap-stacked-bar">
-          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="🏠 ${kpiHwLabel}: ${kpiHwVal} (${kpiHwSub})"></div>
-          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="🤝 ${kpiDrLabel}: ${kpiDrVal} (${kpiDrSub})"></div>
-          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="✈️ ${kpiAwLabel}: ${kpiAwVal} (${kpiAwSub})"></div>
+          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="🏠 ${kpiHwLabel}: ${kpiHwVal} (${homeWins} of ${countTotal} ${itemLabel})"></div>
+          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="🤝 ${kpiDrLabel}: ${kpiDrVal} (${draws} of ${countTotal} ${itemLabel})"></div>
+          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="✈️ ${kpiAwLabel}: ${kpiAwVal} (${awayWins} of ${countTotal} ${itemLabel})"></div>
         </div>
 
         <!-- 3 Proportional Outcome Cards -->
@@ -4058,7 +4216,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
           <div class="heatmap-outcome-card card-home">
             <div class="heatmap-outcome-card-top">
               <span>🏠 ${kpiHwLabel}</span>
-              <span class="heatmap-outcome-axis-hint">(Home > Away)</span>
+              <span class="heatmap-outcome-axis-hint">(H > A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiHwVal}</div>
             <div class="heatmap-outcome-sub">${kpiHwSub}</div>
@@ -4067,7 +4225,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
           <div class="heatmap-outcome-card card-draw">
             <div class="heatmap-outcome-card-top">
               <span>🤝 ${kpiDrLabel}</span>
-              <span class="heatmap-outcome-axis-hint">(Home = Away)</span>
+              <span class="heatmap-outcome-axis-hint">(H = A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiDrVal}</div>
             <div class="heatmap-outcome-sub">${kpiDrSub}</div>
@@ -4076,7 +4234,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
           <div class="heatmap-outcome-card card-away">
             <div class="heatmap-outcome-card-top">
               <span>✈️ ${kpiAwLabel}</span>
-              <span class="heatmap-outcome-axis-hint">(Home < Away)</span>
+              <span class="heatmap-outcome-axis-hint">(H < A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiAwVal}</div>
             <div class="heatmap-outcome-sub">${kpiAwSub}</div>
@@ -4286,14 +4444,27 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
 function applyHeatmapMobileTabVisibility() {
   const actualCard = document.getElementById('heatmapActualCard');
   const predCard = document.getElementById('heatmapPredictedCard');
+  const actualBtn = document.getElementById('heatmapToggleActualBtn');
+  const predBtn = document.getElementById('heatmapTogglePredictedBtn');
+
+  if (actualBtn && predBtn) {
+    if (heatmapMobileActiveTab === 'predicted') {
+      predBtn.classList.add('active');
+      actualBtn.classList.remove('active');
+    } else {
+      actualBtn.classList.add('active');
+      predBtn.classList.remove('active');
+    }
+  }
+
   if (!actualCard || !predCard) return;
 
-  if (heatmapMobileActiveTab === 'actual') {
+  if (heatmapMobileActiveTab === 'predicted') {
+    predCard.classList.remove('mobile-hidden');
+    actualCard.classList.add('mobile-hidden');
+  } else {
     actualCard.classList.remove('mobile-hidden');
     predCard.classList.add('mobile-hidden');
-  } else {
-    actualCard.classList.add('mobile-hidden');
-    predCard.classList.remove('mobile-hidden');
   }
 }
 
@@ -4304,15 +4475,11 @@ function initScoreHeatmapControls() {
   if (actualBtn && predBtn) {
     actualBtn.addEventListener('click', () => {
       heatmapMobileActiveTab = 'actual';
-      actualBtn.classList.add('active');
-      predBtn.classList.remove('active');
       applyHeatmapMobileTabVisibility();
     });
 
     predBtn.addEventListener('click', () => {
       heatmapMobileActiveTab = 'predicted';
-      predBtn.classList.add('active');
-      actualBtn.classList.remove('active');
       applyHeatmapMobileTabVisibility();
     });
   }
@@ -4331,6 +4498,20 @@ function initScoreHeatmapControls() {
       heatmapPlayerScope = e.target.value;
       heatmapPlayerExplicitlyChanged = true;
       renderScoreHeatmaps();
+    });
+  }
+
+  const pillsContainer = document.getElementById('heatmapPlayerPillsContainer');
+  if (pillsContainer) {
+    pillsContainer.addEventListener('click', (e) => {
+      const pill = e.target.closest('.heatmap-player-pill');
+      if (!pill) return;
+      const scope = pill.dataset.scope;
+      if (scope && scope !== heatmapPlayerScope) {
+        heatmapPlayerScope = scope;
+        heatmapPlayerExplicitlyChanged = true;
+        renderScoreHeatmaps();
+      }
     });
   }
 }
@@ -6145,6 +6326,27 @@ function attachMatchTooltipHandlers(matchStandings, svgWidth) {
 let tooltipPopoverEl = null;
 let tooltipBackdropEl = null;
 let activeTooltipTarget = null;
+let isTooltipFullscreenActive = false;
+
+function renderTooltipHeaderActions(closeAriaLabel = 'Close') {
+  const isFs = Boolean(isTooltipFullscreenActive);
+  return `
+    <div class="pts-tooltip-header-actions">
+      <button class="pts-tooltip-action-btn pts-fullscreen-btn ${isFs ? 'is-active' : ''}" id="ptsTooltipFullscreenBtn" title="${isFs ? 'Exit Fullscreen' : 'Expand to Fullscreen (Screenshot Mode)'}" aria-label="${isFs ? 'Exit Fullscreen' : 'Expand to Fullscreen'}">
+        ${isFs ? `
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+          </svg>
+        ` : `
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        `}
+      </button>
+      <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="${closeAriaLabel}">✕</button>
+    </div>
+  `;
+}
 
 function renderPointsTooltip(matchId, playerId, isGeneralRulesOnly) {
   return generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly);
@@ -6153,7 +6355,7 @@ function renderPointsTooltip(matchId, playerId, isGeneralRulesOnly) {
 function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   if (isGeneralRulesOnly) {
     return `
-      <span class="pts-sheet-handle"></span>
+      <span class="pts-sheet-handle" role="button" tabindex="0" title="Tap to toggle fullscreen (screenshot mode)" aria-label="Toggle fullscreen"></span>
       <div class="pts-tooltip-header">
         <div class="pts-tooltip-header-left">
           <div class="pts-tooltip-title-wrap">
@@ -6166,7 +6368,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
             </div>
           </div>
         </div>
-        <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close rules guide">✕</button>
+        ${renderTooltipHeaderActions('Close rules guide')}
       </div>
 
       <div class="pts-rules-section" style="border-top:none; padding-top:0;">
@@ -6290,13 +6492,133 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   }
 
   const scoreBoxLabel = isLive ? 'Current Score (Live)' : (isFinished ? 'Final Result' : 'Actual Result');
+
   const scoreBoxColor = actH !== null ? (isLive ? '#ff5572' : 'var(--accent-cyan)') : 'var(--text-dim)';
   const scoreBoxValue = actH !== null
     ? (isLive ? `<span class="live-pulse-dot" style="margin-right:4px;"></span>${actH} – ${actA}` : `${actH} – ${actA}`)
     : (fixture && isLocked(fixture) ? 'Locked' : 'Open');
 
+  // ── Build mini heatmap grid ────────────────────────────────────
+  const maxGoalVal = Math.max(actH ?? 0, actA ?? 0, pH ?? 0, pA ?? 0);
+  const miniMax = Math.min(7, Math.max(5, maxGoalVal)); // 6×6 minimum (0-5), dynamic up to 7
+  const gridSize = miniMax + 1;
+
+  const hasPred = pH !== null && pA !== null;
+  const hasActual = actH !== null && actA !== null;
+  const scoresOverlap = hasPred && hasActual && pH === actH && pA === actA;
+
+  const predInGrid = hasPred && pH <= miniMax && pA <= miniMax;
+  const actInGrid = hasActual && actH <= miniMax && actA <= miniMax;
+
+  let miniGridHtml = `<div class="mini-heatmap-wrap">`;
+  miniGridHtml += `<div class="mini-heatmap-axis-top"><span>Home Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-with-axis">`;
+  miniGridHtml += `<div class="mini-heatmap-axis-y"><span>Away Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-grid" style="grid-template-columns: 22px repeat(${gridSize}, 1fr); grid-template-rows: 22px repeat(${gridSize}, 1fr);">`;
+  miniGridHtml += `<div class="mini-hm-corner"></div>`;
+
+  // Column headers (Home Goals 0 to miniMax)
+  for (let h = 0; h <= miniMax; h++) {
+    const isActCol = actInGrid && h === actH;
+    const isPredCol = predInGrid && h === pH;
+    miniGridHtml += `<div class="mini-hm-col-hdr ${isActCol ? 'act-highlight' : ''} ${isPredCol ? 'pred-highlight' : ''}">${h}</div>`;
+  }
+
+  // Rows (Away Goals 0 to miniMax)
+  for (let a = 0; a <= miniMax; a++) {
+    const isActRow = actInGrid && a === actA;
+    const isPredRow = predInGrid && a === pA;
+    miniGridHtml += `<div class="mini-hm-row-hdr ${isActRow ? 'act-highlight' : ''} ${isPredRow ? 'pred-highlight' : ''}">${a}</div>`;
+    for (let h = 0; h <= miniMax; h++) {
+      const isPred = predInGrid && h === pH && a === pA;
+      const isAct = actInGrid && h === actH && a === actA;
+      const isDraw = h === a;
+
+      // Determine tier & bonuses for this cell
+      let cellTier = 6;
+      let cellBonuses = [];
+      if (hasPred) {
+        const evalRes = evaluatePrediction(h, a, pH, pA);
+        if (evalRes) {
+          cellTier = evalRes.tier;
+          cellBonuses = evalRes.activeBonuses || [];
+        }
+      } else if (hasActual) {
+        const evalRes = evaluatePrediction(actH, actA, h, a);
+        if (evalRes) {
+          cellTier = evalRes.tier;
+          cellBonuses = evalRes.activeBonuses || [];
+        }
+      }
+      const tierObj = SCORING_TIERS.find(t => t.tier === cellTier) || SCORING_TIERS[SCORING_TIERS.length - 1];
+      const tierIconHtml = renderIconElement(tierObj.icon, tierObj.icon_type, 18);
+
+      // Bonus pip in top-right corner if cell qualifies for any bonus
+      let bonusPipHtml = '';
+      if (cellBonuses.length > 0) {
+        const bonusIcons = cellBonuses.map(b => renderIconElement(b.icon, b.icon_type, 10)).join('');
+        const bonusTitle = cellBonuses.map(b => `${b.name} (+${b.pts}p)`).join(', ');
+        bonusPipHtml = `<span class="mini-cell-bonus-pip" title="${bonusTitle}">${bonusIcons}</span>`;
+      }
+
+      let cellClass = `mini-hm-cell tier-${cellTier}`;
+      if (isDraw) cellClass += ' is-draw';
+      if (isPred && isAct) cellClass += ' mini-indicator-exact';
+      else if (isPred) cellClass += ' mini-indicator-pred';
+      else if (isAct) cellClass += ` mini-indicator-act ${isLive ? 'live-border' : ''}`;
+
+      let cellContent = `${bonusPipHtml}<span class="mini-hm-tier-icon">${tierIconHtml}</span>`;
+      if (isAct) {
+        // Show points earned for the actual cell only
+        let ptsText = '0p';
+        if (breakdown.status === 'evaluated') {
+          ptsText = `+${breakdown.total}p`;
+        }
+        cellContent += `<span class="mini-hm-actual-pts">${ptsText}</span>`;
+      }
+
+      const tooltipTitle = `Score ${h}–${a}: ${tierObj.name} (${tierObj.pts} pts)${cellBonuses.length > 0 ? ' + ' + cellBonuses.map(b => `${b.name} (+${b.pts}p)`).join(', ') : ''}`;
+      miniGridHtml += `<div class="${cellClass}" title="${tooltipTitle}">${cellContent}</div>`;
+    }
+  }
+
+  miniGridHtml += `</div></div>`;
+
+  // Legend below grid (indicating borders only, no scores)
+  miniGridHtml += `<div class="mini-hm-legend">`;
+  miniGridHtml += `
+    <div class="mini-hm-legend-item">
+      <span class="mini-hm-border-swatch mini-indicator-pred"></span>
+      <span>Predicted</span>
+    </div>
+  `;
+  if (hasActual) {
+    miniGridHtml += `
+      <div class="mini-hm-legend-item">
+        <span class="mini-hm-border-swatch mini-indicator-act ${isLive ? 'live-border' : ''}"></span>
+        <span>${isLive ? 'Live Score' : 'Actual Score'}</span>
+      </div>
+    `;
+  }
+  if (scoresOverlap) {
+    miniGridHtml += `
+      <div class="mini-hm-legend-item">
+        <span class="mini-hm-border-swatch mini-indicator-exact"></span>
+        <span>Exact Match</span>
+      </div>
+    `;
+  }
+  miniGridHtml += `
+    <div class="mini-hm-legend-item">
+      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">🔥</span>
+      <span>Bonus Active</span>
+    </div>
+  `;
+  miniGridHtml += `</div>`;
+  miniGridHtml += `</div>`;
+
   return `
-    <span class="pts-sheet-handle"></span>
+    <span class="pts-sheet-handle" role="button" tabindex="0" title="Tap to toggle fullscreen (screenshot mode)" aria-label="Toggle fullscreen"></span>
     <div class="pts-tooltip-header">
       <div class="pts-tooltip-header-left">
         <div class="pts-tooltip-match-title">
@@ -6312,13 +6634,13 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
           ${isYou ? '<span class="you-tag" style="margin-left:4px;">You</span>' : ''}
         </div>
       </div>
-      <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close breakdown">✕</button>
+      ${renderTooltipHeaderActions('Close breakdown')}
     </div>
 
     <div class="pts-tooltip-score-strip">
       <div class="pts-score-box">
         <div class="pts-score-box-label">Predicted</div>
-        <div class="pts-score-box-value" style="color:${pH !== null ? 'var(--text-main)' : 'var(--text-dim)'};">${pH !== null ? `${pH} – ${pA}` : '-'}</div>
+        <div class="pts-score-box-value" style="color:${pH !== null ? 'var(--text-main)' : 'var(--text-dim)'};">${pH !== null ? `${pH} – ${pA}` : '—'}</div>
       </div>
       <div class="pts-score-sep">vs</div>
       <div class="pts-score-box">
@@ -6331,11 +6653,13 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       </div>
     </div>
 
+    ${miniGridHtml}
+
     ${formulaHtml}
 
     <div class="pts-rules-section">
       <div class="pts-rules-title">
-        <span>📖 Scoring Tiers Breakdown</span>
+        <span>📖 Scoring Tiers</span>
         <span class="pts-rules-sub">Highest achieved tier awarded</span>
       </div>
       <div class="pts-rules-list">
@@ -6350,7 +6674,6 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
                   ${isAchieved ? '<span class="pts-active-pill"><span class="pts-active-dot"></span>Awarded</span>' : ''}
                 </div>
                 <div class="pts-rule-short">${t.shortDesc || t.desc}</div>
-                ${renderExampleContainer(t.example)}
               </div>
               <div class="pts-rule-pts pts-p${t.pts}">+${t.pts} pts</div>
             </div>
@@ -6359,24 +6682,23 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       </div>
 
       <div class="pts-rules-title" style="margin-top:14px;">
-        <span>🔥 Multipliers & Bonus Rules</span>
+        <span>🔥 Bonus Rules</span>
         <span class="pts-rules-sub">Additive bonus points</span>
       </div>
       <div class="pts-rules-list">
         ${SCORING_BONUSES.map(b => {
     const isAchieved = breakdown.bonuses && breakdown.bonuses.some(ab => ab.id === b.id || ab.type === b.id || ab.name === b.name);
     return `
-            <div class="pts-rule-row ${isAchieved ? 'active-tier bonus-row' : 'bonus-row'}">
+            <div class="pts-rule-row ${isAchieved ? 'active-tier' : ''}">
               <div class="pts-rule-icon-box bonus-box">${renderIconElement(b.icon, b.icon_type, 22)}</div>
               <div class="pts-rule-body">
                 <div class="pts-rule-top">
                   <span class="pts-rule-name">${b.name}</span>
-                  ${isAchieved ? '<span class="pts-active-pill bonus"><span class="pts-active-dot bonus"></span>Added</span>' : ''}
+                  ${isAchieved ? '<span class="pts-active-pill"><span class="pts-active-dot"></span>Added</span>' : ''}
                 </div>
-                <div class="pts-rule-short">${b.desc}</div>
-                ${renderExampleContainer(b.example)}
+                <div class="pts-rule-short">${b.shortDesc || b.desc}</div>
               </div>
-              <div class="pts-rule-pts pts-bonus">+${b.pts} pt</div>
+              <div class="pts-rule-pts">+${b.pts} pt</div>
             </div>
           `;
   }).join('')}
@@ -6390,7 +6712,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
   if (!tier) return '<div style="padding:15px; color:var(--text-muted);">Tier information not found.</div>';
 
   return `
-    <span class="pts-sheet-handle"></span>
+    <span class="pts-sheet-handle" role="button" tabindex="0" title="Tap to toggle fullscreen (screenshot mode)" aria-label="Toggle fullscreen"></span>
     <div class="pts-tooltip-header">
       <div class="pts-tooltip-header-left">
         <div class="pts-tooltip-title-wrap">
@@ -6414,7 +6736,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
           </div>
         </div>
       </div>
-      <button class="pts-tooltip-close-btn" id="ptsTooltipCloseBtn" aria-label="Close tier details">✕</button>
+      ${renderTooltipHeaderActions('Close tier details')}
     </div>
 
     <div class="pts-requirement-card tier-${tier.tier}">
@@ -6454,9 +6776,427 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
   `;
 }
 
+function renderMatchOverviewTooltip(matchId) {
+  // Find fixture
+  let fixture = null;
+  for (const gw in state.fixtures) {
+    const found = state.fixtures[gw]?.find(item => item.id === matchId);
+    if (found) { fixture = found; break; }
+  }
+  if (!fixture) {
+    return '<div style="padding:16px; color:var(--text-muted); text-align:center;">Match details not found.</div>';
+  }
+
+  const scoreInfo = getMatchScoreInfo(fixture);
+  const isLive = Boolean(scoreInfo.isLive);
+  const isFinished = Boolean(scoreInfo.isFinished);
+  const actH = scoreInfo.home;
+  const actA = scoreInfo.away;
+
+  const homeCrest = getCrestImg(fixture.home_code, fixture.home_name);
+  const awayCrest = getCrestImg(fixture.away_code, fixture.away_name);
+  const matchTitle = `${fixture.home_name} vs ${fixture.away_name}`;
+  const gwText = fixture.event ? `GW ${fixture.event}` : '';
+
+  // Fetch players & predictions
+  const players = (state.players && state.players.length > 0) ? state.players : (state.masterPlayers || []);
+  let maxGoalVal = Math.max(actH ?? 0, actA ?? 0);
+  const cellPredsMap = new Map(); // key: `${h}_${a}` -> array of { player, pH, pA, pColor, evalRes, isYou }
+
+  const playerResults = players.map(p => {
+    const pColor = getPlayerColor(p);
+    const isYou = state.auth.activePlayerId === p.id;
+    const pred = state.predictions[`${matchId}_${p.id}`];
+    const pH = (pred?.predicted_home !== null && pred?.predicted_home !== undefined && pred?.predicted_home !== '') ? Number(pred.predicted_home) : null;
+    const pA = (pred?.predicted_away !== null && pred?.predicted_away !== undefined && pred?.predicted_away !== '') ? Number(pred.predicted_away) : null;
+    const hasPred = pH !== null && pA !== null && !isNaN(pH) && !isNaN(pA);
+
+    let evalRes = null;
+    if (hasPred && actH !== null && actA !== null) {
+      evalRes = evaluatePrediction(actH, actA, pH, pA);
+      maxGoalVal = Math.max(maxGoalVal, pH, pA);
+      const key = `${pH}_${pA}`;
+      if (!cellPredsMap.has(key)) cellPredsMap.set(key, []);
+      cellPredsMap.get(key).push({ player: p, pH, pA, pColor, evalRes, isYou });
+    }
+
+    return {
+      player: p,
+      pColor,
+      isYou,
+      hasPred,
+      pH,
+      pA,
+      evalRes,
+      totalPts: evalRes ? evalRes.total : 0,
+      isExact: evalRes ? Boolean(evalRes.isExactScore) : false
+    };
+  });
+
+  const playersWithPred = playerResults.filter(pr => pr.hasPred);
+  const predCount = playersWithPred.length;
+  const totalPtsSum = playersWithPred.reduce((sum, pr) => sum + pr.totalPts, 0);
+  const avgPts = predCount > 0 ? (totalPtsSum / predCount).toFixed(1) : '0.0';
+  const topPts = predCount > 0 ? Math.max(...playersWithPred.map(pr => pr.totalPts)) : 0;
+
+  // Grid sizing (minimum 6×6: 0-5, dynamic up to 8 if high scores)
+  const miniMax = Math.min(8, Math.max(5, maxGoalVal));
+  const gridSize = miniMax + 1;
+  const actInGrid = actH !== null && actA !== null && actH <= miniMax && actA <= miniMax;
+
+  // Heatmap HTML
+  let miniGridHtml = `<div class="mini-heatmap-wrap">`;
+  miniGridHtml += `<div class="mini-heatmap-axis-top"><span>Home Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-with-axis">`;
+  miniGridHtml += `<div class="mini-heatmap-axis-y"><span>Away Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-grid" style="grid-template-columns: 22px repeat(${gridSize}, 1fr); grid-template-rows: 22px repeat(${gridSize}, 1fr);">`;
+  miniGridHtml += `<div class="mini-hm-corner"></div>`;
+
+  // Column headers (Home Goals 0 to miniMax)
+  for (let h = 0; h <= miniMax; h++) {
+    const isActCol = actInGrid && h === actH;
+    const hasPredCol = Array.from(cellPredsMap.values()).some(list => list.some(item => item.pH === h));
+    miniGridHtml += `<div class="mini-hm-col-hdr ${isActCol ? 'act-highlight' : ''} ${hasPredCol ? 'pred-highlight' : ''}">${h}</div>`;
+  }
+
+  // Rows and Cells
+  for (let a = 0; a <= miniMax; a++) {
+    const isActRow = actInGrid && a === actA;
+    const hasPredRow = Array.from(cellPredsMap.values()).some(list => list.some(item => item.pA === a));
+    miniGridHtml += `<div class="mini-hm-row-hdr ${isActRow ? 'act-highlight' : ''} ${hasPredRow ? 'pred-highlight' : ''}">${a}</div>`;
+
+    for (let h = 0; h <= miniMax; h++) {
+      const isAct = actInGrid && h === actH && a === actA;
+      const cellPlayers = cellPredsMap.get(`${h}_${a}`) || [];
+      const hasPlayers = cellPlayers.length > 0;
+      const isDraw = h === a;
+
+      const cellEval = (actH !== null && actA !== null) ? evaluatePrediction(actH, actA, h, a) : null;
+      const cellTier = cellEval ? cellEval.tier : 6;
+      const cellBonuses = cellEval?.activeBonuses || [];
+      const tierObj = SCORING_TIERS.find(t => t.tier === cellTier) || SCORING_TIERS[SCORING_TIERS.length - 1];
+      const tierIconHtml = renderIconElement(tierObj.icon, tierObj.icon_type, 18);
+
+      let bonusPipHtml = '';
+      if (cellBonuses.length > 0) {
+        const bonusIcons = cellBonuses.map(b => renderIconElement(b.icon, b.icon_type, 10)).join('');
+        const bonusTitle = cellBonuses.map(b => `${b.name} (+${b.pts}p)`).join(', ');
+        bonusPipHtml = `<span class="mini-cell-bonus-pip" title="${bonusTitle}">${bonusIcons}</span>`;
+      }
+
+      let cellClass = `mini-hm-cell tier-${cellTier}`;
+      if (isDraw) cellClass += ' is-draw';
+      if (isAct) cellClass += ` mini-indicator-act ${isLive ? 'live-border' : ''}`;
+      if (hasPlayers) cellClass += ' has-player-preds';
+
+      let cellStyle = '';
+      if (hasPlayers) {
+        if (cellPlayers.length === 1) {
+          const pColor = cellPlayers[0].pColor;
+          if (isAct) {
+            cellStyle = `style="--player-accent:${pColor}; outline: 2.5px solid ${pColor}; outline-offset: -1px; box-shadow: 0 0 0 1.5px #10b981, 0 0 12px ${pColor};"`;
+          } else {
+            cellStyle = `style="--player-accent:${pColor}; outline: 2.5px solid ${pColor}; outline-offset: -1px; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.75), 0 0 10px ${pColor}cc;"`;
+          }
+        } else {
+          const c1 = cellPlayers[0].pColor;
+          const c2 = cellPlayers[1]?.pColor || c1;
+          if (isAct) {
+            cellStyle = `style="--player-accent:${c1}; outline: 2.5px solid #10b981; outline-offset: -1px; box-shadow: 0 0 0 2px #ffffff, 0 0 14px rgba(16, 185, 129, 0.95);"`;
+          } else {
+            cellStyle = `style="--player-accent:${c1}; outline: 2.5px solid ${c1}; outline-offset: -1px; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.85), 0 0 10px ${c1}99, 0 0 10px ${c2}99;"`;
+          }
+        }
+      }
+
+      let cellContent = `${bonusPipHtml}<span class="mini-hm-tier-icon">${tierIconHtml}</span>`;
+      if (isAct) {
+        cellContent += `<span class="mini-hm-actual-pts ${isLive ? 'live-badge' : ''}">${isLive ? 'LIVE' : 'ACT'}</span>`;
+      }
+      if (hasPlayers) {
+        const maxShow = 4;
+        const shown = cellPlayers.slice(0, maxShow);
+        const remainder = cellPlayers.length - maxShow;
+        const posClass = isAct ? 'pos-top-left' : 'pos-bottom';
+        const dotsHtml = shown.map(cp => `<span class="mini-cell-player-dot" style="background:${cp.pColor}; box-shadow:0 0 4px ${cp.pColor};" title="${cp.player.name} (${h}–${a})"></span>`).join('');
+        const moreHtml = remainder > 0 ? `<span class="mini-cell-player-more">+${remainder}</span>` : '';
+        cellContent += `<div class="mini-cell-players-wrap ${posClass}">${dotsHtml}${moreHtml}</div>`;
+      }
+
+      const playerNamesStr = hasPlayers ? `\nPredicted by: ${cellPlayers.map(cp => cp.player.name).join(', ')}` : '';
+      const bonusStr = cellBonuses.length > 0 ? `\nBonus: ${cellBonuses.map(b => `${b.name} (+${b.pts}p)`).join(', ')}` : '';
+      const tooltipTitle = `Score ${h}–${a}: ${tierObj.name} (${tierObj.pts} pts)${playerNamesStr}${bonusStr}`;
+
+      miniGridHtml += `<div class="${cellClass}" data-hm-cell="${h}_${a}" title="${tooltipTitle}" ${cellStyle}>${cellContent}</div>`;
+    }
+  }
+  miniGridHtml += `</div></div>`;
+
+  // Legend
+  miniGridHtml += `<div class="mini-hm-legend">`;
+  miniGridHtml += `
+    <div class="mini-hm-legend-item">
+      <span class="mini-hm-border-swatch mini-indicator-act ${isLive ? 'live-border' : ''}"></span>
+      <span>${isLive ? 'Live Result' : 'Actual Result'}</span>
+    </div>
+    <div class="mini-hm-legend-item">
+      <span class="mini-hm-player-legend-dots">
+        <span class="mini-cell-player-dot" style="background:#00f0ff;"></span>
+        <span class="mini-cell-player-dot" style="background:#eab308;"></span>
+        <span class="mini-cell-player-dot" style="background:#c084fc;"></span>
+      </span>
+      <span>Player Predictions</span>
+    </div>
+  `;
+  const anyExact = playerResults.some(pr => pr.isExact);
+  if (anyExact) {
+    miniGridHtml += `
+      <div class="mini-hm-legend-item">
+        <span class="mini-hm-border-swatch mini-indicator-exact"></span>
+        <span>Exact Match</span>
+      </div>
+    `;
+  }
+  miniGridHtml += `
+    <div class="mini-hm-legend-item">
+      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">🔥</span>
+      <span>Bonus Active</span>
+    </div>
+  `;
+  miniGridHtml += `</div></div>`;
+
+  // Sort Player Results: predictions first, highest points first, exact first, tier ascending, name alphabetical
+  playerResults.sort((a, b) => {
+    if (a.hasPred !== b.hasPred) return a.hasPred ? -1 : 1;
+    if (b.totalPts !== a.totalPts) return b.totalPts - a.totalPts;
+    if (a.isExact !== b.isExact) return a.isExact ? -1 : 1;
+    const tierA = a.evalRes ? a.evalRes.tier : 99;
+    const tierB = b.evalRes ? b.evalRes.tier : 99;
+    if (tierA !== tierB) return tierA - tierB;
+    return (a.player.name || '').localeCompare(b.player.name || '');
+  });
+
+  // Player Rows HTML
+  const playerRowsHtml = playerResults.map(pr => {
+    const { player, pColor, isYou, hasPred, pH, pA, evalRes, isExact } = pr;
+    const tierObj = evalRes ? (SCORING_TIERS.find(t => t.tier === evalRes.tier) || SCORING_TIERS[5]) : null;
+    const targetKey = hasPred ? `${pH}_${pA}` : '';
+
+    return `
+      <div class="match-player-row ${isExact ? 'exact-match' : ''} ${isYou ? 'is-current-user' : ''}" data-hm-target="${targetKey}" style="--player-accent:${pColor};">
+        <div class="match-player-left">
+          <span class="match-player-dot" style="background:${pColor}; box-shadow:0 0 6px ${pColor}88;"></span>
+          <div class="match-player-name-wrap">
+            <span class="match-player-name" title="${player.name}">${player.name}</span>
+            ${isYou ? '<span class="you-tag">You</span>' : ''}
+          </div>
+        </div>
+
+        <div class="match-player-pred-col">
+          ${hasPred ? `
+            <span class="match-player-pred-pill" style="border-color:${pColor}66; color:${pColor}; background:${pColor}14;">${pH}&nbsp;–&nbsp;${pA}</span>
+          ` : `
+            <span class="match-player-no-pred">No prediction</span>
+          `}
+        </div>
+
+        <div class="match-player-tier-col">
+          ${evalRes ? `
+            <span class="match-player-tier-badge tier-${evalRes.tier}">
+              ${renderIconElement(tierObj.icon, tierObj.icon_type, 13)}
+              <span>${tierObj.name}</span>
+            </span>
+            ${evalRes.activeBonuses && evalRes.activeBonuses.length > 0 ? `
+              <div class="match-player-bonuses">
+                ${evalRes.activeBonuses.map(b => `
+                  <span class="match-player-bonus-tag" title="${b.name} (+${b.pts} pt)">
+                    ${renderIconElement(b.icon, b.icon_type, 11)} +${b.pts}p
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+          ` : (hasPred ? `
+            <span class="match-player-tier-badge tier-6">Missed Outcome</span>
+          ` : `
+            <span class="match-player-tier-badge no-pred">—</span>
+          `)}
+        </div>
+
+        <div class="match-player-pts-col">
+          ${evalRes ? `
+            <span class="match-player-pts-pill pts-p${evalRes.base} ${isLive ? 'live' : ''}">+${evalRes.total}&nbsp;pts</span>
+          ` : (hasPred ? `
+            <span class="match-player-pts-pill zero">0&nbsp;pts</span>
+          ` : `
+            <span class="match-player-pts-pill none">—</span>
+          `)}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <span class="pts-sheet-handle" role="button" tabindex="0" title="Tap to toggle fullscreen (screenshot mode)" aria-label="Toggle fullscreen"></span>
+    <div class="pts-tooltip-header">
+      <div class="pts-tooltip-header-left">
+        <div class="pts-tooltip-match-title">
+          ${homeCrest}
+          <span>${matchTitle}</span>
+          ${awayCrest}
+          ${gwText ? `<span style="color:var(--accent-purple); font-size:var(--font-size-2xs, 0.75rem); font-weight:700;">(${gwText})</span>` : ''}
+        </div>
+        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
+        <div class="pts-tooltip-match-status-wrap" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          ${isLive ? `
+            <span class="pts-match-status-badge live">
+              <span class="live-pulse-dot"></span> LIVE IN PROGRESS
+            </span>
+          ` : `
+            <span class="pts-match-status-badge final">
+              ✓ FINAL RESULT
+            </span>
+          `}
+          <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted);">Group Match Overview</span>
+        </div>
+      </div>
+      ${renderTooltipHeaderActions('Close match overview')}
+    </div>
+
+    <div class="pts-tooltip-score-strip match-overview-strip">
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">${isLive ? 'Live Score' : 'Final Score'}</div>
+        <div class="pts-score-box-value" style="color:${isLive ? '#ff5572' : 'var(--accent-cyan)'}; font-weight:900; font-size:1.15rem;">
+          ${isLive ? '<span class="live-pulse-dot" style="margin-right:4px;"></span>' : ''}${actH}&nbsp;–&nbsp;${actA}
+        </div>
+      </div>
+      <div class="pts-score-sep">·</div>
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">Predictions</div>
+        <div class="pts-score-box-value" style="color:var(--text-main); font-weight:800; font-size:1.05rem;">
+          ${predCount}<span style="font-size:0.75rem; color:var(--text-dim); font-weight:600;">/${players.length}</span>
+        </div>
+      </div>
+      <div class="pts-score-sep">·</div>
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">Group Avg</div>
+        <div class="pts-score-box-value" style="color:var(--accent-purple); font-weight:800; font-size:1.05rem;">
+          ${avgPts}&nbsp;<span style="font-size:0.75rem; color:var(--text-dim); font-weight:600;">pts</span>
+        </div>
+      </div>
+      <div class="pts-score-sep">·</div>
+      <div class="pts-score-box">
+        <div class="pts-score-box-label">Top Points</div>
+        <div class="pts-score-box-value" style="color:var(--accent-green); font-weight:800; font-size:1.05rem;">
+          +${topPts}&nbsp;<span style="font-size:0.75rem; color:var(--text-dim); font-weight:600;">pts</span>
+        </div>
+      </div>
+    </div>
+
+    ${miniGridHtml}
+
+    <div class="pts-rules-section match-players-section">
+      <div class="pts-rules-title">
+        <span>👥 Group Player Predictions (${predCount}/${players.length})</span>
+        <span class="pts-rules-sub">Ranked by points</span>
+      </div>
+      <div class="match-players-list">
+        ${playerRowsHtml || '<div style="padding:12px; color:var(--text-muted); text-align:center;">No player predictions registered for this match.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function setupMatchOverviewInteractivity(popover) {
+  if (!popover) return;
+
+  const playerRows = popover.querySelectorAll('.match-player-row[data-hm-target]');
+  playerRows.forEach(row => {
+    const target = row.dataset.hmTarget;
+    if (!target) return;
+    const highlight = () => {
+      popover.querySelectorAll('.mini-hm-cell.cell-focus-highlight').forEach(c => c.classList.remove('cell-focus-highlight'));
+      const cell = popover.querySelector(`.mini-hm-cell[data-hm-cell="${target}"]`);
+      if (cell) cell.classList.add('cell-focus-highlight');
+    };
+    const unhighlight = () => {
+      const cell = popover.querySelector(`.mini-hm-cell[data-hm-cell="${target}"]`);
+      if (cell) cell.classList.remove('cell-focus-highlight');
+    };
+    row.addEventListener('mouseenter', highlight);
+    row.addEventListener('mouseleave', unhighlight);
+    row.addEventListener('click', () => {
+      const cell = popover.querySelector(`.mini-hm-cell[data-hm-cell="${target}"]`);
+      if (cell) {
+        const isFocused = cell.classList.contains('cell-focus-highlight');
+        popover.querySelectorAll('.mini-hm-cell.cell-focus-highlight').forEach(c => c.classList.remove('cell-focus-highlight'));
+        if (!isFocused) cell.classList.add('cell-focus-highlight');
+      }
+    });
+  });
+
+  const cells = popover.querySelectorAll('.mini-hm-cell[data-hm-cell]');
+  cells.forEach(cell => {
+    const key = cell.dataset.hmCell;
+    if (!key) return;
+    const highlightRows = () => {
+      popover.querySelectorAll('.match-player-row.row-focus-highlight').forEach(r => r.classList.remove('row-focus-highlight'));
+      const matchingRows = popover.querySelectorAll(`.match-player-row[data-hm-target="${key}"]`);
+      matchingRows.forEach(r => r.classList.add('row-focus-highlight'));
+    };
+    const unhighlightRows = () => {
+      const matchingRows = popover.querySelectorAll(`.match-player-row[data-hm-target="${key}"]`);
+      matchingRows.forEach(r => r.classList.remove('row-focus-highlight'));
+    };
+    cell.addEventListener('mouseenter', highlightRows);
+    cell.addEventListener('mouseleave', unhighlightRows);
+    cell.addEventListener('click', () => {
+      const matchingRows = popover.querySelectorAll(`.match-player-row[data-hm-target="${key}"]`);
+      if (matchingRows.length > 0) {
+        const isFocused = matchingRows[0].classList.contains('row-focus-highlight');
+        popover.querySelectorAll('.match-player-row.row-focus-highlight').forEach(r => r.classList.remove('row-focus-highlight'));
+        if (!isFocused) {
+          matchingRows.forEach(r => r.classList.add('row-focus-highlight'));
+          matchingRows[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    });
+  });
+}
+
+function toggleTooltipFullscreen() {
+  if (!tooltipPopoverEl) return;
+  isTooltipFullscreenActive = !isTooltipFullscreenActive;
+  tooltipPopoverEl.classList.toggle('is-fullscreen', isTooltipFullscreenActive);
+
+  if (isTooltipFullscreenActive) {
+    tooltipPopoverEl.style.top = '';
+    tooltipPopoverEl.style.left = '';
+    tooltipPopoverEl.style.right = '';
+    tooltipPopoverEl.style.bottom = '';
+  } else if (activeTooltipTarget) {
+    positionTooltipPopover(activeTooltipTarget);
+  }
+
+  const btn = document.getElementById('ptsTooltipFullscreenBtn');
+  if (btn) {
+    btn.classList.toggle('is-active', isTooltipFullscreenActive);
+    btn.title = isTooltipFullscreenActive ? 'Exit Fullscreen' : 'Expand to Fullscreen (Screenshot Mode)';
+    btn.setAttribute('aria-label', isTooltipFullscreenActive ? 'Exit Fullscreen' : 'Expand to Fullscreen');
+    btn.innerHTML = isTooltipFullscreenActive ? `
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+      </svg>
+    ` : `
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+      </svg>
+    `;
+  }
+}
+
 function positionTooltipPopover(targetEl) {
-  if (!tooltipPopoverEl || window.innerWidth <= 768) {
-    if (tooltipPopoverEl) {
+  if (!tooltipPopoverEl || window.innerWidth <= 768 || isTooltipFullscreenActive || tooltipPopoverEl.classList.contains('is-fullscreen')) {
+    if (tooltipPopoverEl && (window.innerWidth <= 768 || isTooltipFullscreenActive || tooltipPopoverEl.classList.contains('is-fullscreen'))) {
       tooltipPopoverEl.style.top = '';
       tooltipPopoverEl.style.left = '';
       tooltipPopoverEl.style.right = '';
@@ -6500,22 +7240,36 @@ function showPointsTooltip(targetEl) {
   const matchId = targetEl.dataset.match ? parseInt(targetEl.dataset.match, 10) : null;
   const playerId = targetEl.dataset.player ? parseInt(targetEl.dataset.player, 10) : null;
   const isRulesHelp = targetEl.dataset.rulesHelp === 'true';
+  const isMatchOverview = targetEl.dataset.matchOverview === 'true';
   const tier = targetEl.dataset.tier ? parseInt(targetEl.dataset.tier, 10) : null;
   const playerName = targetEl.dataset.playerName || null;
   const count = targetEl.dataset.count !== undefined ? targetEl.dataset.count : null;
 
   activeTooltipTarget = targetEl;
 
-  if (tier) {
+  if (isMatchOverview && matchId) {
+    tooltipPopoverEl.innerHTML = renderMatchOverviewTooltip(matchId);
+    setupMatchOverviewInteractivity(tooltipPopoverEl);
+  } else if (tier) {
     tooltipPopoverEl.innerHTML = renderTierHelpTooltip(tier, playerName, count);
   } else {
     tooltipPopoverEl.innerHTML = renderPointsTooltip(matchId, playerId, isRulesHelp);
   }
 
+  tooltipPopoverEl.classList.toggle('is-fullscreen', Boolean(isTooltipFullscreenActive));
   tooltipPopoverEl.style.display = 'block';
+
   document.getElementById('ptsTooltipCloseBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     hidePointsTooltip();
+  });
+  document.getElementById('ptsTooltipFullscreenBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTooltipFullscreen();
+  });
+  tooltipPopoverEl.querySelector('.pts-sheet-handle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTooltipFullscreen();
   });
 
   tooltipBackdropEl?.classList.add('show');
@@ -6546,7 +7300,7 @@ function initPointsTooltip() {
     document.body.appendChild(tooltipBackdropEl);
   }
 
-  const tooltipTriggerSelector = '.pts-badge.pts-interactive, .pts-info-help, .lb-tier-th, .lb-tier-cell';
+  const tooltipTriggerSelector = '.pts-badge.pts-interactive, .pts-info-help, .lb-tier-th, .lb-tier-cell, .actual-score-badge.actual-score-interactive';
 
   // Touch / Click toggle handler ONLY (no hover/mouseover popups)
   document.addEventListener('click', (e) => {
@@ -6570,6 +7324,19 @@ function initPointsTooltip() {
   // Keyboard accessibility
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hidePointsTooltip();
+    if ((e.key === 'f' || e.key === 'F') && tooltipPopoverEl && tooltipPopoverEl.style.display !== 'none' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      toggleTooltipFullscreen();
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.(tooltipTriggerSelector)) {
+      const badge = e.target.closest(tooltipTriggerSelector);
+      e.preventDefault();
+      if (activeTooltipTarget === badge) {
+        hidePointsTooltip();
+      } else {
+        showPointsTooltip(badge);
+      }
+    }
   });
 
   tooltipBackdropEl.addEventListener('click', () => hidePointsTooltip());
@@ -7075,7 +7842,7 @@ function updateScoreSimulator() {
   const summaryPanel = document.getElementById('simSummaryPanel');
   if (summaryPanel) {
     const avgPts = (totalPoints / totalScorelines).toFixed(2);
-    const coveragePct = ((pointsEarningCount / totalScorelines) * 100).toFixed(1);
+    const coveragePct = totalScorelines > 0 ? String(Math.round((pointsEarningCount / totalScorelines) * 100)) : '0';
     const [hwPct, drPct, awPct] = getThreeWayPercentages(hwPoints, drPoints, awPoints);
 
     summaryPanel.innerHTML = `
