@@ -12,3 +12,9 @@ data/*.db-*
 user_credentials.txt
 passwords.txt
 scratch/
+
+# NotebookLM generated packages and documents
+notebooklm_package/
+*notebooklm.md
+*notebooklm.txt
+*_notebooklm.*

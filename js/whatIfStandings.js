@@ -674,6 +674,12 @@ export function renderWhatIfView(appState) {
   const container = document.getElementById('whatIfView');
   if (!container) return;
 
+  if (appState.auth && appState.auth.role === 'guest') {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
   // Determine active player ID to simulate
   const availablePlayers = (appState.players && appState.players.length > 0)
     ? appState.players
@@ -823,7 +829,7 @@ export function renderWhatIfView(appState) {
             <select id="whatIfPlayerSelect" class="control-dropdown" style="font-weight: 700;">
               ${availablePlayers.map(p => `
                 <option value="${p.id}" ${p.id === Number(whatIfState.selectedPlayerId) ? 'selected' : ''}>
-                  ${p.name} ${appState.auth?.activePlayerId === p.id ? '(You)' : ''}
+                  ${p.name} ${appState.auth?.activePlayerId === p.id ? '(YOU)' : ''}
                 </option>
               `).join('')}
             </select>
@@ -1744,5 +1750,186 @@ export function renderWhatIfDashboardWidget(containerEl, appState, onOpenWhatIf)
   const btn = document.getElementById('dashOpenWhatIfBtn');
   if (btn && typeof onOpenWhatIf === 'function') {
     btn.addEventListener('click', onOpenWhatIf);
+  }
+}
+
+/**
+ * Guest League Standings Widget (Shows Premier League rankings table with actuals only, no predictions)
+ */
+let guestSortCol = 'rank';
+let guestSortDir = 'asc';
+
+export function renderGuestLeagueStandingsWidget(containerEl, appState) {
+  if (!containerEl) return;
+
+  const data = calculateLeagueStandings({
+    fixtures: appState.fixtures || {},
+    teams: appState.teams || {},
+    predictions: {},
+    playerId: null,
+    mode: 'completed',
+    startGw: 1,
+  });
+
+  const selectedTeams = (typeof appState.getSelectedTeams === 'function'
+    ? appState.getSelectedTeams()
+    : (appState.selectedTeams || []));
+
+  let tableRows = [...data.realTable];
+
+  // Apply sorting
+  tableRows.sort((a, b) => {
+    let valA = a[guestSortCol];
+    let valB = b[guestSortCol];
+    if (typeof valA === 'string') {
+      const cmp = valA.localeCompare(valB);
+      return guestSortDir === 'asc' ? cmp : -cmp;
+    }
+    if (valA === valB) {
+      return a.rank - b.rank;
+    }
+    return guestSortDir === 'asc' ? valA - valB : valB - valA;
+  });
+
+  const getSortIcon = (col) => {
+    if (guestSortCol === col) {
+      return `<span class="whatif-sort-icon" style="opacity: 1; color: var(--accent-cyan, #38bdf8);">${guestSortDir === 'asc' ? '▲' : '▼'}</span>`;
+    }
+    return `<span class="whatif-sort-icon" style="opacity: 0.35;">↕</span>`;
+  };
+
+  containerEl.innerHTML = `
+    <section class="glass-card guest-standings-section" style="margin-top: 0; margin-bottom: 24px; padding: 18px 20px;">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <h2 style="font-family: var(--font-title); font-size: var(--font-size-lg, 1.1875rem); font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 8px;">
+              <span>🏆</span> Premier League Standings
+            </h2>
+            <span class="status-live-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; font-weight: 700;">
+              Official Scores
+            </span>
+          </div>
+          <p style="color: var(--text-muted); font-size: var(--font-size-xs, 0.8125rem); margin: 4px 0 0 0;">
+            Official Premier League table standings based on completed match results
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <span class="meta-chip" style="font-size: 0.75rem;">⚽ 20 Clubs</span>
+          ${selectedTeams.length > 0 ? `<span class="meta-chip" style="color: var(--accent-cyan); border-color: var(--accent-cyan); font-size: 0.75rem;">🎯 Highlighting: ${selectedTeams.join(', ')}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="whatif-table guest-league-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th class="whatif-col-club sortable ${guestSortCol === 'name' ? 'sorted' : ''}" data-sort="name" style="width: 140px; cursor: pointer;" title="Click to sort by Club">
+                <span>Club</span> ${getSortIcon('name')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'rank' ? 'sorted' : ''}" data-sort="rank" style="width: 60px; cursor: pointer;" title="Click to sort by League Position">
+                <span class="whatif-header-actual">Pos</span> ${getSortIcon('rank')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'played' ? 'sorted' : ''}" data-sort="played" style="width: 36px; cursor: pointer;" title="Click to sort by Matches Played">
+                <span>P</span> ${getSortIcon('played')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'won' ? 'sorted' : ''}" data-sort="won" style="width: 36px; cursor: pointer;" title="Click to sort by Wins">
+                <span>W</span> ${getSortIcon('won')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'drawn' ? 'sorted' : ''}" data-sort="drawn" style="width: 36px; cursor: pointer;" title="Click to sort by Draws">
+                <span>D</span> ${getSortIcon('drawn')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'lost' ? 'sorted' : ''}" data-sort="lost" style="width: 36px; cursor: pointer;" title="Click to sort by Losses">
+                <span>L</span> ${getSortIcon('lost')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'goalsFor' ? 'sorted' : ''}" data-sort="goalsFor" style="width: 38px; cursor: pointer;" title="Click to sort by Goals For">
+                <span>GF</span> ${getSortIcon('goalsFor')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'goalsAgainst' ? 'sorted' : ''}" data-sort="goalsAgainst" style="width: 38px; cursor: pointer;" title="Click to sort by Goals Against">
+                <span>GA</span> ${getSortIcon('goalsAgainst')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'goalDiff' ? 'sorted' : ''}" data-sort="goalDiff" style="width: 42px; cursor: pointer;" title="Click to sort by Goal Difference">
+                <span>GD</span> ${getSortIcon('goalDiff')}
+              </th>
+              <th class="text-center sortable ${guestSortCol === 'points' ? 'sorted' : ''}" data-sort="points" style="width: 48px; cursor: pointer;" title="Click to sort by Points">
+                <span class="whatif-header-actual">Pts</span> ${getSortIcon('points')}
+              </th>
+              <th class="text-center" style="width: 120px;">
+                <span>Form</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows.map(t => {
+              const zone = getZoneDetails(t.rank);
+              const isSelected = selectedTeams.includes(t.name) || selectedTeams.includes(t.short);
+              return `
+                <tr class="whatif-row ${zone.className} ${isSelected ? 'selected' : ''}" data-team-name="${t.name}" style="${isSelected ? 'background: rgba(56, 189, 248, 0.12);' : ''}">
+                  <td class="whatif-col-club">
+                    <div class="whatif-team-cell">
+                      ${getCrestImg(t.code, t.name)}
+                      <span class="whatif-team-short-badge">${t.short}</span>
+                      <span class="whatif-team-fullname" title="${t.name}">${t.name}</span>
+                    </div>
+                  </td>
+                  <td class="whatif-pos-cell">
+                    ${renderRankCell(t.rank, true)}
+                  </td>
+                  <td class="text-center whatif-num">${t.played}</td>
+                  <td class="text-center whatif-num">${t.won}</td>
+                  <td class="text-center whatif-num">${t.drawn}</td>
+                  <td class="text-center whatif-num">${t.lost}</td>
+                  <td class="text-center whatif-num">${t.goalsFor}</td>
+                  <td class="text-center whatif-num">${t.goalsAgainst}</td>
+                  <td class="text-center whatif-num" style="${t.goalDiff > 0 ? 'color:#34d399;' : t.goalDiff < 0 ? 'color:#fb7185;' : ''}">
+                    ${t.goalDiff > 0 ? '+' : ''}${t.goalDiff}
+                  </td>
+                  <td class="text-center whatif-pts-actual" style="font-weight: 800; color: #34d399;">${t.points}</td>
+                  <td class="text-center" style="white-space: nowrap;">
+                    ${renderFormPills(t.formSummary)}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Zone Legend at bottom -->
+      <div class="whatif-table-legend" style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 0.78rem; color: var(--text-muted); padding: 10px 14px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border-glass);">
+        <span style="font-weight: 700; color: var(--text-main);">🏷️ Qualification / Status:</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #38bdf8; border-radius: 2px;"></span> 1–4 UEFA Champions League (UCL)</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #f59e0b; border-radius: 2px;"></span> 5 UEFA Europa League (UEL)</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #f43f5e; border-radius: 2px;"></span> 18–20 Relegation (REL)</span>
+        <span style="margin-left: auto; font-style: italic; color: var(--text-dim); font-size: 0.72rem;">💡 Click any column header to sort • Click a team to filter</span>
+      </div>
+    </section>
+  `;
+
+  // Attach sorting event listeners
+  const sortHeaders = containerEl.querySelectorAll('.guest-league-table th.sortable');
+  sortHeaders.forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (guestSortCol === col) {
+        guestSortDir = guestSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        guestSortCol = col;
+        guestSortDir = (col === 'name' || col === 'rank') ? 'asc' : 'desc';
+      }
+      renderGuestLeagueStandingsWidget(containerEl, appState);
+    });
+  });
+
+  // Attach team row click listener if toggleTeamFilter is available
+  if (typeof appState.toggleTeamFilter === 'function') {
+    containerEl.querySelectorAll('.guest-league-table tr.whatif-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const teamName = tr.dataset.teamName;
+        if (teamName) {
+          appState.toggleTeamFilter(teamName);
+        }
+      });
+    });
   }
 }

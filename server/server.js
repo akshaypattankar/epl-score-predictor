@@ -913,6 +913,9 @@ app.get('/api/admin/backups', requireAdmin, (req, res) => {
 app.get('/api/whatif/standings', (req, res) => {
   try {
     const sess = getSession(req);
+    if (!sess) {
+      return res.status(401).json({ error: 'Authentication required to view What-If prediction simulator' });
+    }
     const playerId = req.query.playerId || (sess ? sess.playerId : null);
     const mode = req.query.mode || 'completed';
     const startGw = req.query.startGw || 1;

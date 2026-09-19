@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "backup": "node server/backup.js",
     "backup:list": "node server/backup.js --list",
-    "dump-credentials": "node server/dump_credentials.js"
+    "dump-credentials": "node server/dump_credentials.js",
+    "package-notebooklm": "python3 scripts/package_for_notebooklm.py"
   },
   "dependencies": {
     "dexie": "^3.2.7",

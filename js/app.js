@@ -39,7 +39,7 @@ import {
 import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
 import { initRulesEditorModal, openRulesEditorModal, renderIconElement, generateLowestScenarioPreset } from './rulesEditor.js';
 import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
-import { renderWhatIfView, renderWhatIfDashboardWidget, resetWhatIfCache } from './whatIfStandings.js';
+import { renderWhatIfView, renderWhatIfDashboardWidget, renderGuestLeagueStandingsWidget, resetWhatIfCache } from './whatIfStandings.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
@@ -206,6 +206,26 @@ function hexToRgba(hex, alpha) {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Safely scroll an element into horizontal view inside its overflow-x container.
+ * NEVER calls element.scrollIntoView(), which forces the entire page window to scroll vertically.
+ */
+function scrollElementHorizontallyIntoView(container, element, smooth = false) {
+  if (!container || !element) return;
+  try {
+    const containerRect = container.getBoundingClientRect();
+    const elemRect = element.getBoundingClientRect();
+    if (containerRect.width === 0 || elemRect.width === 0) return;
+    const currentScrollLeft = container.scrollLeft;
+    const elemRelativeLeft = elemRect.left - containerRect.left + currentScrollLeft;
+    const targetScrollLeft = elemRelativeLeft - (containerRect.width / 2) + (elemRect.width / 2);
+    container.scrollTo({
+      left: Math.max(0, targetScrollLeft),
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+  } catch (_) { }
 }
 
 function darkenHex(hex, factor = 0.45) {
@@ -776,9 +796,9 @@ function renderAuthHeader() {
       whatIfBtn.style.display = 'inline-flex';
       whatIfBtn.classList.remove('is-hidden');
     }
-    if (groupBox) groupBox.style.display = 'block';
+    if (groupBox) groupBox.style.display = 'flex';
     if (adminPlayerBox) {
-      adminPlayerBox.style.display = 'block';
+      adminPlayerBox.style.display = 'flex';
       populateAdminPlayerDropdown();
     }
   } else if (state.auth.role === 'player') {
@@ -795,7 +815,7 @@ function renderAuthHeader() {
       whatIfBtn.style.display = 'inline-flex';
       whatIfBtn.classList.remove('is-hidden');
     }
-    if (groupBox) groupBox.style.display = 'block';
+    if (groupBox) groupBox.style.display = 'flex';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   } else {
     badge.className = 'auth-status-badge';
@@ -808,8 +828,8 @@ function renderAuthHeader() {
       mgmtBtn.classList.add('is-hidden');
     }
     if (whatIfBtn) {
-      whatIfBtn.style.display = 'inline-flex';
-      whatIfBtn.classList.remove('is-hidden');
+      whatIfBtn.style.display = 'none';
+      whatIfBtn.classList.add('is-hidden');
     }
     if (groupBox) groupBox.style.display = 'none';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
@@ -1699,29 +1719,76 @@ export function updateNextGameTick() {
 function renderDashboardComponents() {
   checkAutoGWTransition();
   renderMatrix();
-  renderLeaderboard();
-  renderSnapshot(calcLeaderboard());
-  renderTeamBreakdown();
-  renderCumulativeChart();
-  renderScoreHeatmaps();
-  renderModeIndicator();
-  renderNextGameIndicator();
+
+  const isGuest = state.auth.role === 'guest';
+  const snapshotEl = document.getElementById('leaderboardSnapshot');
+  const chartSection = document.getElementById('progressionChartSection') || document.querySelector('.chart-section');
+  const leaderboardSection = document.getElementById('playerLeaderboardSection') || document.querySelector('#leaderboardTable')?.closest('section');
+  const heatmapSection = document.getElementById('scoreHeatmapSection');
+  const guestStandingsContainer = document.getElementById('guestStandingsContainer');
   const whatIfContainer = document.getElementById('dashboardWhatIfContainer');
-  if (state.auth.role === 'admin') {
-    if (whatIfContainer) whatIfContainer.style.display = 'block';
-    renderWhatIfDashboardWidget(whatIfContainer, state, () => renderViewByName('whatif'));
-  } else {
+
+  if (isGuest) {
+    // Clean and simple guest view: hide player prediction sections and heatmaps
+    if (snapshotEl) snapshotEl.style.display = 'none';
+    if (chartSection) chartSection.style.display = 'none';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (heatmapSection) heatmapSection.style.display = 'none';
+
     if (whatIfContainer) {
       whatIfContainer.innerHTML = '';
       whatIfContainer.style.display = 'none';
     }
+
+    // Show the What-If table's league ranking table (actuals only, without predictions) at top of homepage
+    if (guestStandingsContainer) {
+      guestStandingsContainer.style.display = 'block';
+      renderGuestLeagueStandingsWidget(guestStandingsContainer, {
+        ...state,
+        getSelectedTeams,
+        toggleTeamFilter
+      });
+    }
+  } else {
+    if (guestStandingsContainer) {
+      guestStandingsContainer.innerHTML = '';
+      guestStandingsContainer.style.display = 'none';
+    }
+
+    // Logged-in view: show player predictions, charts, leaderboard, and heatmaps
+    if (snapshotEl) snapshotEl.style.display = '';
+    if (chartSection) chartSection.style.display = '';
+    if (leaderboardSection) leaderboardSection.style.display = '';
+    if (heatmapSection) heatmapSection.style.display = '';
+
+    renderLeaderboard();
+    renderSnapshot(calcLeaderboard());
+    renderCumulativeChart();
+    renderScoreHeatmaps();
+
+    if (state.auth.role === 'admin') {
+      if (whatIfContainer) whatIfContainer.style.display = 'block';
+      renderWhatIfDashboardWidget(whatIfContainer, state, () => renderViewByName('whatif'));
+    } else {
+      if (whatIfContainer) {
+        whatIfContainer.innerHTML = '';
+        whatIfContainer.style.display = 'none';
+      }
+    }
   }
+
+  renderTeamBreakdown();
+  renderModeIndicator();
+  renderNextGameIndicator();
   checkAndTriggerLivePolling();
 }
 
 // ─── View Navigation (SPA) ────────────────────────────────────────────────────
 function renderViewByName(targetView) {
   if (targetView === 'management' && state.auth.role !== 'admin') {
+    targetView = 'dashboard';
+  }
+  if (targetView === 'whatif' && state.auth.role === 'guest') {
     targetView = 'dashboard';
   }
   state.activeView = targetView;
@@ -1763,11 +1830,11 @@ function renderViewByName(targetView) {
     renderManagementPage();
   }
 
-  // Smoothly scroll active tab into view in nav strip on mobile
+  // Smoothly scroll active tab into view in nav strip on mobile without scrolling window
   if (activeBtn) {
     const navStrip = document.getElementById('navViewTabs');
     if (navStrip && navStrip.scrollWidth > navStrip.clientWidth) {
-      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      scrollElementHorizontallyIntoView(navStrip, activeBtn, false);
     }
   }
 }
@@ -1783,6 +1850,10 @@ function initNavigation() {
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
   whatIfBtn?.addEventListener('click', () => {
+    if (state.auth.role === 'guest') {
+      renderViewByName('dashboard');
+      return;
+    }
     renderViewByName('whatif');
   });
   scoringBtn?.addEventListener('click', () => renderViewByName('scoring'));
@@ -1798,45 +1869,92 @@ function initNavigation() {
   scoringBackBtn?.addEventListener('click', () => renderViewByName('dashboard'));
 }
 
-// ─── Group Dropdown ──────────────────────────────────────────────────────────
+// ─── Group Dropdown & Single-Line League Selection ───────────────────────────
+async function handleGroupSwitch(groupId) {
+  const group = state.groups.find(g => g.id === groupId);
+  if (!group) return;
+
+  state.activeGroup = group;
+  localStorage.setItem('epl_active_group_id', groupId);
+  await loadActiveGroupData(groupId);
+
+  const autoGW = getAutoActiveGW(group);
+  if (autoGW) {
+    state.activeGW = autoGW;
+    localStorage.setItem('epl_active_gw', autoGW);
+  }
+
+  populateGroupDropdown();
+  renderGWTabs();
+  renderDashboardComponents();
+}
+
 function populateGroupDropdown() {
   const select = document.getElementById('groupSelect');
-  if (!select) return;
+  const pillsContainer = document.getElementById('leaguePillsContainer');
 
   if (!state.groups || state.groups.length === 0) {
-    select.innerHTML = '<option value="">No Groups Available</option>';
-    select.disabled = true;
+    if (select) {
+      select.innerHTML = '<option value="">No Groups Available</option>';
+      select.disabled = true;
+    }
+    if (pillsContainer) {
+      pillsContainer.innerHTML = '<span class="league-empty-text" style="color:var(--text-muted); font-size:var(--font-size-xs, 0.8125rem); font-style:italic;">No Leagues</span>';
+    }
     return;
   }
-  select.disabled = false;
 
-  select.innerHTML = state.groups.map(g => {
-    return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>${g.name}</option>`;
-  }).join('');
+  if (select) {
+    select.disabled = false;
+    select.innerHTML = state.groups.map(g => {
+      return `<option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>${g.name}</option>`;
+    }).join('');
+  }
+
+  if (pillsContainer) {
+    pillsContainer.innerHTML = state.groups.map(g => {
+      const isActive = Boolean(state.activeGroup && state.activeGroup.id === g.id);
+      return `
+        <button type="button" 
+          class="league-pill ${isActive ? 'active' : ''}" 
+          data-group-id="${g.id}"
+          role="tab"
+          aria-selected="${isActive ? 'true' : 'false'}"
+          title="Switch to ${g.name}">
+          <span class="league-pill-name">${g.name}</span>
+        </button>
+      `;
+    }).join('');
+
+    const activePill = pillsContainer.querySelector('.league-pill.active');
+    if (activePill) {
+      scrollElementHorizontallyIntoView(pillsContainer, activePill, false);
+    }
+  }
 }
 
 function initGroupEvents() {
   const select = document.getElementById('groupSelect');
-  if (!select) return;
+  if (select) {
+    select.addEventListener('change', async (e) => {
+      const groupId = parseInt(e.target.value, 10);
+      if (!isNaN(groupId)) {
+        await handleGroupSwitch(groupId);
+      }
+    });
+  }
 
-  select.addEventListener('change', async (e) => {
-    const groupId = parseInt(e.target.value, 10);
-    const group = state.groups.find(g => g.id === groupId);
-    if (!group) return;
-
-    state.activeGroup = group;
-    localStorage.setItem('epl_active_group_id', groupId);
-    await loadActiveGroupData(groupId);
-
-    const autoGW = getAutoActiveGW(group);
-    if (autoGW) {
-      state.activeGW = autoGW;
-      localStorage.setItem('epl_active_gw', autoGW);
-    }
-
-    renderGWTabs();
-    renderDashboardComponents();
-  });
+  const pillsContainer = document.getElementById('leaguePillsContainer');
+  if (pillsContainer) {
+    pillsContainer.addEventListener('click', async (e) => {
+      const pill = e.target.closest('.league-pill');
+      if (!pill) return;
+      const groupId = parseInt(pill.dataset.groupId, 10);
+      if (isNaN(groupId)) return;
+      if (state.activeGroup && state.activeGroup.id === groupId) return;
+      await handleGroupSwitch(groupId);
+    });
+  }
 }
 
 // ─── Team Filter Multi-Select ────────────────────────────────────────────────
@@ -2194,9 +2312,7 @@ function renderGWTabs() {
 
     container.appendChild(btn);
     if (gw === activeNum) {
-      setTimeout(() => {
-        btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      }, 50);
+      scrollElementHorizontallyIntoView(container, btn, false);
     }
   }
 }
@@ -2308,7 +2424,7 @@ function renderSnapshot(lb) {
           <div class="rank-medal-badge rank-${r.rank}" style="background:${shades.badgeBg}; border-color:${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="Rank #${r.rank}">
             <span class="rank-medal-icon">${getRankBadgeHtml(r.rank, { size: 34, className: 'rank-badge-snapshot' })}</span>
           </div>
-          ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+          ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">YOU</span>` : ''}
         </div>
         <div class="snapshot-info">
           <div class="snapshot-header-row">
@@ -2419,8 +2535,14 @@ function getStatusLogoHtml(f, isGuest = false) {
 function getMatchStatusHtml(f, isGuest = false) {
   const scoreInfo = getMatchScoreInfo(f);
   if (scoreInfo.isFinished && scoreInfo.hasScore) {
+    if (isGuest) {
+      return `<span class="actual-score-badge" title="Official Final Score">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    }
     return `<span class="actual-score-badge pts-interactive actual-score-interactive" data-match="${f.id}" data-match-overview="true" role="button" tabindex="0" title="Click to view match prediction heatmap & group results">${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
   } else if (scoreInfo.isLive) {
+    if (isGuest) {
+      return `<span class="actual-score-badge live" title="Live Match Score"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
+    }
     return `<span class="actual-score-badge live pts-interactive actual-score-interactive" data-match="${f.id}" data-match-overview="true" role="button" tabindex="0" title="Click to view live prediction heatmap & group results"><span class="live-pulse-dot"></span>${scoreInfo.home}&nbsp;–&nbsp;${scoreInfo.away}</span>`;
   } else {
     return getStatusLogoHtml(f, isGuest);
@@ -2431,6 +2553,8 @@ function getMatchStatusHtml(f, isGuest = false) {
 function renderTeamBreakdown() {
   const card = document.getElementById('teamBreakdownCard');
   if (!card) return;
+
+  const isGuest = state.auth.role === 'guest';
 
   const selectedTeams = getSelectedTeams();
   if (selectedTeams.length === 0) {
@@ -2448,16 +2572,18 @@ function renderTeamBreakdown() {
       <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
         ${club?.stadium ? `<span class="meta-chip" title="Home Stadium">🏟️ ${club.stadium}</span>` : ''}
         ${club?.city ? `<span class="meta-chip" title="Club City">📍 ${club.city}</span>` : ''}
-        <span style="color:var(--text-muted); font-size:var(--font-size-xs, 0.8125rem);">Participant predictions & breakdown</span>
+        <span style="color:var(--text-muted); font-size:var(--font-size-xs, 0.8125rem);">${isGuest ? 'Official Premier League match schedule & results' : 'Participant predictions & breakdown'}</span>
       </span>
     `;
     const code = club?.code || Object.values(state.teams).find(t => t.name === team)?.code;
     document.getElementById('teamBadgeIcon').innerHTML = getCrestImg(code, team);
   } else {
     document.getElementById('teamBreakdownTitle').textContent = selectedTeams.length <= 3
-      ? `${selectedTeams.join(' & ')} Matches & Predictions`
-      : `${selectedTeams.length} Selected Teams Matches & Predictions`;
-    document.getElementById('teamBreakdownSubtitle').textContent = `Participant performance on matches involving: ${selectedTeams.join(', ')}`;
+      ? `${selectedTeams.join(' & ')} Matches & ${isGuest ? 'Results' : 'Predictions'}`
+      : `${selectedTeams.length} Selected Teams Matches & ${isGuest ? 'Results' : 'Predictions'}`;
+    document.getElementById('teamBreakdownSubtitle').textContent = isGuest
+      ? `Official match schedule & results involving: ${selectedTeams.join(', ')}`
+      : `Participant performance on matches involving: ${selectedTeams.join(', ')}`;
     const crestsHtml = `<div class="team-badge-stack">` +
       selectedTeams.slice(0, 3).map(t => {
         const c = Object.values(state.teams).find(tm => tm.name === t)?.code;
@@ -2468,7 +2594,6 @@ function renderTeamBreakdown() {
     document.getElementById('teamBadgeIcon').innerHTML = crestsHtml;
   }
 
-  const isGuest = state.auth.role === 'guest';
   const players = isGuest ? [] : state.players;
 
   const allTeamFixtures = [];
@@ -2490,11 +2615,12 @@ function renderTeamBreakdown() {
   // Render Participant Stats Grid
   const participantGrid = document.getElementById('teamParticipantGrid');
   if (isGuest) {
-    participantGrid.innerHTML = `
-      <div style="grid-column: 1/-1; padding: 12px; color: var(--text-muted); font-size:var(--font-size-sm, 0.875rem);">
-        🔒 Participant predictions and statistics are hidden for guest users.
-      </div>`;
+    if (participantGrid) {
+      participantGrid.style.display = 'none';
+      participantGrid.innerHTML = '';
+    }
   } else {
+    if (participantGrid) participantGrid.style.display = 'grid';
     participantGrid.innerHTML = players.map((p) => {
       let pts = 0, played = 0;
       const tierCounts = {};
@@ -2545,7 +2671,7 @@ function renderTeamBreakdown() {
             <div class="rank-medal-badge" style="background: ${shades.badgeBg}; border-color: ${shades.badgeBorder}; box-shadow: 0 0 10px ${shades.glow};" title="${p.name}">
               <span class="rank-medal-icon" style="font-size:var(--font-size-sm, 0.875rem); font-weight: 800; color: ${shades.primary}; font-family: var(--font-title);">${initials}</span>
             </div>
-            ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+            ${isYou ? `<span class="you-tag you-tag-under-avatar" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">YOU</span>` : ''}
           </div>
           <div class="snapshot-info">
             <div class="snapshot-header-row">
@@ -2577,7 +2703,7 @@ function renderTeamBreakdown() {
     const shades = getPlayerColorShades(p);
     return `<th style="text-align:center; color:${shades.primary}!important; background:${shades.bgSubtle}; border-bottom:2px solid ${shades.border}; white-space:nowrap;">
         <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:5px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
-        ${p.name}${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+        ${p.name}${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">YOU</span>` : ''}
       </th>`;
   }).join('')}
   `;
@@ -2728,10 +2854,17 @@ function renderMatrix() {
   }
 
   const subtitleText = isGuest
-    ? '📌 Premier League Fixture Schedule & Official Scores'
+    ? `📌 GW ${gw} Fixtures & Results${titleAddon}`
     : `📅 GW ${gw} Predictions${titleAddon}`;
 
   document.getElementById('matrixTitle').textContent = subtitleText;
+
+  const matrixSubEl = document.getElementById('matrixSubtitle');
+  if (matrixSubEl) {
+    matrixSubEl.textContent = isGuest
+      ? 'Official Premier League fixture schedule and match results'
+      : 'Enter your scores before kick-off - fields lock automatically';
+  }
 
   const completed = fixtures.filter(f => isMatchFinished(f)).length;
   const live = fixtures.filter(f => isMatchOngoing(f)).length;
@@ -2828,7 +2961,7 @@ function renderMatrix() {
       return `
             <th colspan="3" class="th-friend-group" style="color:${shades.primary}!important; border-bottom: 2px solid ${shades.border}; background:${shades.bgSubtle} !important;">
               <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shades.primary};margin-right:6px;vertical-align:middle;box-shadow:0 0 6px ${shades.glow};"></span>
-              <span class="player-header-name">${p.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">You</span>` : ''}
+              <span class="player-header-name">${p.name}</span>${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};">YOU</span>` : ''}
             </th>
           `;
     }).join('')}
@@ -3401,7 +3534,7 @@ function renderLeaderboard() {
             <span class="player-color-dot" style="display:inline-block;width:8px;height:8px;min-width:8px;border-radius:50%;background:${shades.primary};box-shadow:0 0 6px ${shades.glow};flex-shrink:0;"></span>
             <span class="lb-player-name" style="color:${shades.primary};font-weight:700;white-space:nowrap;">${r.name}</span>
             ${lateJoinerTag}
-            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};flex-shrink:0;">You</span>` : ''}
+            ${isYou ? `<span class="you-tag" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};flex-shrink:0;">YOU</span>` : ''}
           </div>
         </td>
         <td class="lb-mp-cell" title="${r.matchesPredicted} matches predicted">${r.matchesPredicted}</td>
@@ -3787,6 +3920,12 @@ function renderScoreHeatmaps() {
   const section = document.getElementById('scoreHeatmapSection');
   if (!section) return;
 
+  if (state.auth.role === 'guest') {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
   // Default selected player should be current logged in player
   if (!heatmapPlayerExplicitlyChanged) {
     heatmapPlayerScope = state.auth.activePlayerId ? String(state.auth.activePlayerId) : 'ALL';
@@ -3811,11 +3950,8 @@ function renderScoreHeatmaps() {
     }
   }
 
-  // Update Measure Select Dropdown
-  const measureSelect = document.getElementById('heatmapMeasureSelect');
-  if (measureSelect && measureSelect.value !== heatmapSelectedMeasure) {
-    measureSelect.value = heatmapSelectedMeasure;
-  }
+  // Update Measure Select & Buttons
+  updateHeatmapMeasureButtons();
 
   // Populate Player Controls (Pills if <= 4 players, dropdown if > 4 players)
   const players = state.players || [];
@@ -3830,7 +3966,7 @@ function renderScoreHeatmaps() {
       players.forEach(p => {
         const isYou = state.auth.activePlayerId === p.id;
         const isSelected = String(p.id) === String(currentVal);
-        optionsHtml += `<option value="${p.id}" ${isSelected ? 'selected' : ''}>${p.name}${isYou ? ' (You)' : ''}</option>`;
+        optionsHtml += `<option value="${p.id}" ${isSelected ? 'selected' : ''}>${p.name}${isYou ? ' (YOU)' : ''}</option>`;
       });
       playerSelect.innerHTML = optionsHtml;
       playerSelect.value = currentVal;
@@ -3877,7 +4013,7 @@ function renderScoreHeatmaps() {
             title="View Predictions for ${p.name}"
             aria-pressed="${isSelected ? 'true' : 'false'}">
             <span class="heatmap-player-pill-dot" style="background-color: ${pColor}; box-shadow: 0 0 6px ${pGlow};"></span>
-            <span class="heatmap-player-pill-name">${p.name}${isYou ? ' <span class="heatmap-pill-you">(You)</span>' : ''}</span>
+            <span class="heatmap-player-pill-name">${p.name}${isYou ? ' <span class="heatmap-pill-you">(YOU)</span>' : ''}</span>
           </button>
         `;
       });
@@ -3885,7 +4021,7 @@ function renderScoreHeatmaps() {
 
       const activePill = pillsContainer.querySelector('.heatmap-player-pill.active');
       if (activePill) {
-        activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        scrollElementHorizontallyIntoView(pillsContainer, activePill, false);
       }
     }
   }
@@ -4468,6 +4604,58 @@ function applyHeatmapMobileTabVisibility() {
   }
 }
 
+function updateHeatmapMeasureButtons() {
+  const isPoints = (heatmapSelectedMeasure || 'count').startsWith('points');
+  const isPct = (heatmapSelectedMeasure || 'count').endsWith('_pct');
+
+  const gamesBtn = document.getElementById('heatmapMetricGamesBtn');
+  const pointsBtn = document.getElementById('heatmapMetricPointsBtn');
+  const countBtn = document.getElementById('heatmapUnitCountBtn');
+  const pctBtn = document.getElementById('heatmapUnitPctBtn');
+
+  if (gamesBtn) {
+    gamesBtn.classList.toggle('active', !isPoints);
+    gamesBtn.setAttribute('aria-checked', !isPoints ? 'true' : 'false');
+  }
+  if (pointsBtn) {
+    pointsBtn.classList.toggle('active', isPoints);
+    pointsBtn.setAttribute('aria-checked', isPoints ? 'true' : 'false');
+  }
+  if (countBtn) {
+    countBtn.classList.toggle('active', !isPct);
+    countBtn.setAttribute('aria-checked', !isPct ? 'true' : 'false');
+  }
+  if (pctBtn) {
+    pctBtn.classList.toggle('active', isPct);
+    pctBtn.setAttribute('aria-checked', isPct ? 'true' : 'false');
+  }
+
+  const measureSelect = document.getElementById('heatmapMeasureSelect');
+  if (measureSelect && measureSelect.value !== heatmapSelectedMeasure) {
+    measureSelect.value = heatmapSelectedMeasure;
+  }
+}
+
+function setHeatmapMeasure(metric, unit) {
+  const currentMetric = (heatmapSelectedMeasure || 'count').startsWith('points') ? 'points' : 'games';
+  const currentUnit = (heatmapSelectedMeasure || 'count').endsWith('_pct') ? 'pct' : 'count';
+
+  const newMetric = metric !== undefined ? metric : currentMetric;
+  const newUnit = unit !== undefined ? unit : currentUnit;
+
+  let newMeasure = 'count';
+  if (newMetric === 'points' && newUnit === 'pct') newMeasure = 'points_pct';
+  else if (newMetric === 'points' && newUnit === 'count') newMeasure = 'points';
+  else if (newMetric === 'games' && newUnit === 'pct') newMeasure = 'count_pct';
+  else newMeasure = 'count';
+
+  if (heatmapSelectedMeasure !== newMeasure) {
+    heatmapSelectedMeasure = newMeasure;
+    updateHeatmapMeasureButtons();
+    renderScoreHeatmaps();
+  }
+}
+
 function initScoreHeatmapControls() {
   const actualBtn = document.getElementById('heatmapToggleActualBtn');
   const predBtn = document.getElementById('heatmapTogglePredictedBtn');
@@ -4484,13 +4672,26 @@ function initScoreHeatmapControls() {
     });
   }
 
+  const gamesBtn = document.getElementById('heatmapMetricGamesBtn');
+  const pointsBtn = document.getElementById('heatmapMetricPointsBtn');
+  const countBtn = document.getElementById('heatmapUnitCountBtn');
+  const pctBtn = document.getElementById('heatmapUnitPctBtn');
+
+  gamesBtn?.addEventListener('click', () => setHeatmapMeasure('games', undefined));
+  pointsBtn?.addEventListener('click', () => setHeatmapMeasure('points', undefined));
+  countBtn?.addEventListener('click', () => setHeatmapMeasure(undefined, 'count'));
+  pctBtn?.addEventListener('click', () => setHeatmapMeasure(undefined, 'pct'));
+
   const measureSelect = document.getElementById('heatmapMeasureSelect');
   if (measureSelect) {
     measureSelect.addEventListener('change', (e) => {
       heatmapSelectedMeasure = e.target.value;
+      updateHeatmapMeasureButtons();
       renderScoreHeatmaps();
     });
   }
+
+  updateHeatmapMeasureButtons();
 
   const playerSelect = document.getElementById('heatmapPlayerSelect');
   if (playerSelect) {
@@ -4718,6 +4919,48 @@ const isGWActiveOrFinished = (gw) => {
   return list.some(f => isMatchActiveOrFinished(f));
 };
 
+// ─── Single-Line Chart Gameweek Selection Strip ─────────────────────────────
+function renderChartGWStrip(activeGWNumbers) {
+  const container = document.getElementById('chartGwPillsStrip');
+  if (!container) return;
+
+  const currentGw = state.chartDrilldownGW;
+  const isOverview = currentGw === null;
+
+  let html = `
+    <button type="button" 
+      class="chart-gw-pill ${isOverview ? 'active' : ''}" 
+      data-gw="all" 
+      role="tab" 
+      aria-selected="${isOverview ? 'true' : 'false'}"
+      title="Season Overview across all Gameweeks">
+      🌐 All GWs
+    </button>
+  `;
+
+  activeGWNumbers.forEach(g => {
+    const isAct = currentGw === g;
+    const isFinished = isGWFinishedForGroup(g);
+    html += `
+      <button type="button" 
+        class="chart-gw-pill ${isAct ? 'active' : ''}${isFinished ? ' completed' : ''}" 
+        data-gw="${g}" 
+        role="tab" 
+        aria-selected="${isAct ? 'true' : 'false'}"
+        title="Isolate GW ${g} match-by-match chart">
+        GW ${g}${isFinished ? ' <span class="chart-gw-check">✓</span>' : ''}
+      </button>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  const activePill = container.querySelector('.chart-gw-pill.active');
+  if (activePill) {
+    scrollElementHorizontallyIntoView(container, activePill, false);
+  }
+}
+
 // ─── Main Entry Point: Leaderboard Chart ──────────────────────────────────────
 function renderCumulativeChart() {
   const wrapper = document.getElementById('chartWrapper');
@@ -4753,6 +4996,10 @@ function renderCumulativeChart() {
   // Check if we are in Isolated Gameweek Drilldown Mode
   const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
   const activeGWNumbers = state.gwNumbers.filter(g => Number(g) >= startGw);
+  renderChartGWStrip(activeGWNumbers);
+
+  const expandBtnGroup = document.getElementById('chartExpandBtnGroup') || document.querySelector('.chart-expand-btn-group');
+  const gwActionsGroup = document.getElementById('chartGwActionsGroup');
 
   if (state.chartDrilldownGW !== null && activeGWNumbers.includes(Number(state.chartDrilldownGW))) {
     const gw = Number(state.chartDrilldownGW);
@@ -4762,10 +5009,16 @@ function renderCumulativeChart() {
       drilldownBadge.innerHTML = `🔍 GW ${gw} Drilldown`;
     }
     if (drilldownNav) {
-      drilldownNav.style.display = 'inline-flex';
+      drilldownNav.style.display = 'none';
     }
     if (overviewNav) {
       overviewNav.style.display = 'none';
+    }
+    if (expandBtnGroup) {
+      expandBtnGroup.style.display = 'none';
+    }
+    if (gwActionsGroup) {
+      gwActionsGroup.style.display = 'none';
     }
     if (gwDrillSelect) {
       gwDrillSelect.innerHTML = activeGWNumbers.map(g => `
@@ -4779,12 +5032,14 @@ function renderCumulativeChart() {
     state.chartDrilldownGW = null;
     if (drilldownBadge) drilldownBadge.style.display = 'none';
     if (drilldownNav) drilldownNav.style.display = 'none';
-    if (overviewNav) overviewNav.style.display = 'inline-flex';
+    if (overviewNav) overviewNav.style.display = 'none';
 
     const expandable = isChartExpandable();
-    const expandBtnGroup = document.querySelector('.chart-expand-btn-group');
     if (expandBtnGroup) {
       expandBtnGroup.style.display = expandable ? 'inline-flex' : 'none';
+    }
+    if (gwActionsGroup) {
+      gwActionsGroup.style.display = expandable ? 'inline-flex' : 'none';
     }
 
     if (!expandable) {
@@ -4990,10 +5245,14 @@ function renderAllGameweeksChart() {
 
   legendContainer.innerHTML = sortedLegendPlayers.map(p => {
     const isYou = state.auth.activePlayerId === p.id;
+    const pColor = p.color || '#a855f7';
+    const borderCol = hexToRgba(pColor, isYou ? 0.65 : 0.35);
+    const bgCol = hexToRgba(pColor, isYou ? 0.18 : 0.06);
+    const glow = isYou ? `box-shadow: 0 0 10px ${hexToRgba(pColor, 0.35)};` : '';
     return `
-      <div class="chart-legend-chip ${isYou ? 'active' : ''}">
-        <span class="legend-dot" style="background: ${p.color};"></span>
-        <span>${p.name}${isYou ? ' (You)' : ''}</span>
+      <div class="chart-legend-chip ${isYou ? 'active' : ''}" style="border-color: ${borderCol}; background: ${bgCol}; ${glow}" title="${p.name}: ${p.total} points">
+        <span class="legend-dot" style="background: ${pColor}; box-shadow: 0 0 5px ${pColor};"></span>
+        <span class="legend-name">${p.name}${isYou ? ' (YOU)' : ''}</span>
         <span class="legend-pts">${p.total} pts</span>
       </div>
     `;
@@ -5519,7 +5778,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
                 <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
                   <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                   <span class="chart-tooltip-dot" style="background:${p.color};"></span>
-                  <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+                  <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (YOU)' : ''}</span>
                 </div>
                 <div class="chart-tooltip-scores">
                   <span class="chart-tooltip-cum-pts" title="Total Points">${p.cumulative} pts</span>
@@ -5542,7 +5801,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
                 <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
-                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (YOU)' : ''}</span>
               </div>
               <div class="chart-tooltip-scores">
                 <span class="chart-tooltip-cum-pts">${p.cumulative} pts</span>
@@ -5564,7 +5823,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
                 <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
-                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (YOU)' : ''}</span>
               </div>
               <div class="chart-tooltip-scores">
                 <span class="chart-tooltip-cum-pts">${p.cumulative} pts</span>
@@ -5766,10 +6025,14 @@ function renderGameweekMatchesChart(gw) {
 
   legendContainer.innerHTML = sortedLegendPlayers.map(p => {
     const isYou = state.auth.activePlayerId === p.id;
+    const pColor = p.color || '#a855f7';
+    const borderCol = hexToRgba(pColor, isYou ? 0.65 : 0.35);
+    const bgCol = hexToRgba(pColor, isYou ? 0.18 : 0.06);
+    const glow = isYou ? `box-shadow: 0 0 10px ${hexToRgba(pColor, 0.35)};` : '';
     return `
-      <div class="chart-legend-chip ${isYou ? 'active' : ''}">
-        <span class="legend-dot" style="background: ${p.color};"></span>
-        <span>${p.name}${isYou ? ' (You)' : ''}</span>
+      <div class="chart-legend-chip ${isYou ? 'active' : ''}" style="border-color: ${borderCol}; background: ${bgCol}; ${glow}" title="${p.name}: ${p.totalGw} points in GW ${gw}">
+        <span class="legend-dot" style="background: ${pColor}; box-shadow: 0 0 5px ${pColor};"></span>
+        <span class="legend-name">${p.name}${isYou ? ' (YOU)' : ''}</span>
         <span class="legend-pts">${p.totalGw} pts</span>
       </div>
     `;
@@ -6260,7 +6523,7 @@ function attachMatchTooltipHandlers(matchStandings, svgWidth) {
               <div class="chart-tooltip-player" style="display:flex; align-items:center; gap:6px;">
                 <span style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); font-weight:800; font-family:var(--font-title); min-width:18px;">#${p.rank || '–'}</span>
                 <span class="chart-tooltip-dot" style="background:${p.color};"></span>
-                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (You)' : ''}</span>
+                <span style="color:${p.color}; font-weight:600;">${p.name}${p.isYou ? ' (YOU)' : ''}</span>
               </div>
               <div class="chart-tooltip-scores">
                 <span class="chart-tooltip-cum-pts" title="GW Points up to this match">${p.gwCumulative} pts</span>
@@ -6631,7 +6894,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
         <div class="pts-tooltip-player-tag" style="border-color:${pColor}55; color:${pColor};">
           <span class="player-color-dot" style="background:${pColor}; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
           <span>${player.name}</span>
-          ${isYou ? '<span class="you-tag" style="margin-left:4px;">You</span>' : ''}
+          ${isYou ? '<span class="you-tag" style="margin-left:4px;">YOU</span>' : ''}
         </div>
       </div>
       ${renderTooltipHeaderActions('Close breakdown')}
@@ -6988,7 +7251,7 @@ function renderMatchOverviewTooltip(matchId) {
           <span class="match-player-dot" style="background:${pColor}; box-shadow:0 0 6px ${pColor}88;"></span>
           <div class="match-player-name-wrap">
             <span class="match-player-name" title="${player.name}">${player.name}</span>
-            ${isYou ? '<span class="you-tag">You</span>' : ''}
+            ${isYou ? '<span class="you-tag">YOU</span>' : ''}
           </div>
         </div>
 
@@ -7235,6 +7498,9 @@ function positionTooltipPopover(targetEl) {
 }
 
 function showPointsTooltip(targetEl) {
+  if (state.auth?.role === 'guest' && (targetEl.dataset.matchOverview === 'true' || targetEl.dataset.player)) {
+    return;
+  }
   if (!tooltipPopoverEl) initPointsTooltip();
 
   const matchId = targetEl.dataset.match ? parseInt(targetEl.dataset.match, 10) : null;
@@ -7491,8 +7757,19 @@ function renderScoringViewSummary() {
     }).join('');
   }
 
+  const simSection = document.getElementById('scoreSimulatorSection');
+  if (simSection) {
+    if (state.auth?.role === 'guest') {
+      simSection.style.display = 'none';
+    } else {
+      simSection.style.display = '';
+    }
+  }
+
   // Render Simulator and Scenarios Matrix
-  updateScoreSimulator();
+  if (state.auth?.role !== 'guest') {
+    updateScoreSimulator();
+  }
   renderComprehensiveScenariosMatrix();
 }
 
@@ -9624,6 +9901,16 @@ function initChartControls() {
     }
   });
 
+  const gwPillsStrip = document.getElementById('chartGwPillsStrip');
+  if (gwPillsStrip) {
+    gwPillsStrip.addEventListener('click', (e) => {
+      const pill = e.target.closest('.chart-gw-pill');
+      if (!pill) return;
+      const gwVal = pill.dataset.gw;
+      setChartDrilldown(gwVal === 'all' ? null : Number(gwVal));
+    });
+  }
+
   updateButtons();
 }
 
@@ -9640,6 +9927,12 @@ function startLockRefresh() {
 
 // ─── Init Application ────────────────────────────────────────────────────────
 async function init() {
+  if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+    window.history.scrollRestoration = 'manual';
+  }
+  if (typeof window !== 'undefined' && !window.location.hash) {
+    window.scrollTo(0, 0);
+  }
   startClock();
   initThemeSelector();
   initTimezoneSelector();

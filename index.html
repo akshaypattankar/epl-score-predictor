@@ -44,7 +44,7 @@
             <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" />
             <span class="nav-tab-text">DASHBOARD</span>
           </button>
-          <button class="nav-tab" id="navWhatIfBtn" title="What-If Standings Simulator">
+          <button class="nav-tab" id="navWhatIfBtn" style="display: none;" title="What-If Standings Simulator">
             <span class="nav-tab-icon" class="nav-tab-icon">🔮</span>
             <span class="nav-tab-text">WHAT-IF</span>
           </button>
@@ -124,20 +124,35 @@
         <button class="btn btn-primary btn-sm" id="bannerLoginBtn">🔒 Log In</button>
       </div>
 
-      <!-- DASHBOARD WORKSPACE TOOLBAR -->
-      <div class="dashboard-toolbar glass-card" id="dashboardToolbar">
-        <div class="toolbar-left">
-          <!-- Group Selector (Hidden for Guests) -->
-          <div class="toolbar-item" id="groupSelectBox" style="display: none;">
-            <label for="groupSelect" class="toolbar-label">👥 League:</label>
-            <select id="groupSelect" class="control-dropdown group-dropdown">
-              <!-- Populated dynamically -->
+      <!-- DASHBOARD WORKSPACE TOOLBAR (SEPARATE PURPOSE-BUILT CONTAINERS) -->
+      <div class="dashboard-toolbar dashboard-toolbar-container" id="dashboardToolbar">
+        <!-- 1. LEAGUE SCOPE CONTAINER (Hidden for Guests) -->
+        <div class="toolbar-card league-scope-card glass-card" id="groupSelectBox" style="display: none;">
+          <div class="toolbar-card-header">
+            <span class="toolbar-card-label toolbar-label" id="leagueSelectLabel">
+              <span class="toolbar-card-icon">👥</span>
+              <span class="toolbar-card-title">League</span>
+            </span>
+          </div>
+          <div class="toolbar-card-body">
+            <div class="league-pills-container" id="leaguePillsContainer" role="tablist" aria-label="Select League">
+              <!-- Populated dynamically as single-line pills -->
+            </div>
+            <select id="groupSelect" class="control-dropdown group-dropdown" style="display: none;">
+              <!-- Hidden fallback for programmatic compatibility -->
             </select>
           </div>
+        </div>
 
-          <!-- Team Multi-Select with Crests -->
-          <div class="toolbar-item team-filter-item" id="teamFilterContainer">
-            <label class="toolbar-label" id="teamFilterLabel">⚽ Team:</label>
+        <!-- 2. TEAM FILTER CONTAINER -->
+        <div class="toolbar-card team-filter-card glass-card" id="teamFilterContainer">
+          <div class="toolbar-card-header">
+            <label class="toolbar-card-label toolbar-label" id="teamFilterLabel" for="teamMultiSelectBtn">
+              <span class="toolbar-card-icon">⚽</span>
+              <span class="toolbar-card-title">Team Filter</span>
+            </label>
+          </div>
+          <div class="toolbar-card-body">
             <div class="team-multiselect" id="teamMultiSelect">
               <button class="team-multiselect-btn" id="teamMultiSelectBtn" type="button" aria-haspopup="listbox"
                 aria-expanded="false" aria-labelledby="teamFilterLabel">
@@ -179,20 +194,31 @@
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Admin Player Switcher (Only visible in Admin mode) -->
-          <div class="toolbar-item" id="adminPlayerBox" style="display: none;">
-            <label for="adminPlayerSelect" class="toolbar-label">👤 Play As:</label>
+        <!-- 3. ADMIN PLAYER SWITCHER CONTAINER (Only visible in Admin mode) -->
+        <div class="toolbar-card admin-player-card glass-card" id="adminPlayerBox" style="display: none;">
+          <div class="toolbar-card-header">
+            <label for="adminPlayerSelect" class="toolbar-card-label toolbar-label">
+              <span class="toolbar-card-icon">👑</span>
+              <span class="toolbar-card-title">Play As</span>
+            </label>
+          </div>
+          <div class="toolbar-card-body">
             <select id="adminPlayerSelect" class="control-dropdown admin-player-dropdown" title="Participate as a user">
               <!-- Populated dynamically -->
             </select>
           </div>
         </div>
 
-        <div class="toolbar-right" id="dashboardToolbarMeta">
-          <!-- Dynamic info chips like scope, filter, etc. -->
+        <!-- 4. NEXT GAME SCOPE & LIVE INDICATOR CONTAINER -->
+        <div class="toolbar-card next-game-card glass-card toolbar-right" id="dashboardToolbarMeta">
+          <!-- Populated dynamically with live matches and next game schedule scope -->
         </div>
       </div>
+
+      <!-- GUEST LEAGUE STANDINGS CONTAINER (Shown for guests at the top of homepage) -->
+      <div id="guestStandingsContainer" style="display: none; margin-top: 20px;"></div>
 
       <!-- Gameweek Navigation Strip with Arrow Steppers -->
       <div class="gw-nav-strip glass-card" id="gwNavStrip">
@@ -277,7 +303,7 @@
       </section>
 
       <!-- CUMULATIVE PROGRESSION CHART -->
-      <section class="glass-card chart-section" style="margin-top: 24px;">
+      <section class="glass-card chart-section" id="progressionChartSection" style="margin-top: 24px;">
         <!-- Header -->
         <div class="section-header">
           <div>
@@ -291,55 +317,63 @@
 
         <!-- Section 1: Chart Controls & Mode Selection -->
         <div class="chart-controls-panel" id="chartControlsPanel">
-          <div class="chart-control-group">
-            <span class="chart-control-label">📊 Chart Mode</span>
-            <div class="chart-type-toggle">
-              <button type="button" class="chart-mode-btn active" id="chartModeRibbonBtn" title="Ribbon Chart (Rank & point flows across matchdays)">
-                🎀 Ribbon
-              </button>
-              <button type="button" class="chart-mode-btn" id="chartModeStepBtn" title="Step line chart (discrete gameweek jumps)">
-                🪜 Step Line
-              </button>
-              <button type="button" class="chart-mode-btn" id="chartModeLinearBtn" title="Linear continuous slope">
-                📈 Linear
-              </button>
+          <!-- Top Row: Mode Toggle & Gameweek Actions -->
+          <div class="chart-controls-header-row">
+            <div class="chart-control-group chart-mode-control-group">
+              <span class="chart-control-label">📊 Chart Mode</span>
+              <div class="chart-type-toggle">
+                <button type="button" class="chart-mode-btn active" id="chartModeRibbonBtn" title="Ribbon Chart (Rank & point flows across matchdays)">
+                  🎀 Ribbon
+                </button>
+                <button type="button" class="chart-mode-btn" id="chartModeStepBtn" title="Step line chart (discrete gameweek jumps)">
+                  🪜 Step Line
+                </button>
+                <button type="button" class="chart-mode-btn" id="chartModeLinearBtn" title="Linear continuous slope">
+                  📈 Linear
+                </button>
+              </div>
+            </div>
+
+            <div class="chart-control-group chart-expand-control-group" id="chartGwActionsGroup">
+              <div class="chart-gw-header-row">
+                <span class="chart-control-label">📅 Gameweeks</span>
+                <!-- Season Overview Navigation: Expand / Collapse All -->
+                <div class="chart-expand-btn-group" id="chartExpandBtnGroup">
+                  <button type="button" class="chart-expand-toggle-btn" id="chartExpandToCurrentBtn" title="Expand latest 3 Gameweeks (upcoming and last 2 completed)">
+                    ➕ Latest 3 GWs
+                  </button>
+                  <button type="button" class="chart-expand-toggle-btn" id="chartExpandAllBtn" title="Expand all 38 Gameweeks across the season">
+                    ⚡ Expand All
+                  </button>
+                  <button type="button" class="chart-collapse-toggle-btn" id="chartCollapseAllBtn" title="Collapse all Gameweeks to GW numbers">
+                    ➖ Collapse All
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="chart-control-group">
-            <span class="chart-control-label">📅 Gameweeks</span>
-            <!-- Drilldown Isolated Navigation (Shown only when in single-GW drilldown) -->
-            <div id="chartDrilldownNav" class="chart-drilldown-nav" style="display: none;">
-              <button type="button" class="btn btn-sm btn-outline chart-back-btn" id="chartBackToAllGWsBtn" title="Back to season overview across all gameweeks">
-                ← Season Overview
-              </button>
-              <select id="chartGwDrilldownSelect" class="control-dropdown chart-gw-dropdown" title="Select Gameweek to view in isolated drill down">
-              </select>
+          <!-- Bottom Row: Single-Line Gameweek Drilldown Selection Strip (Full Width) -->
+          <div class="chart-gw-strip-wrapper" id="chartGwStripWrapper">
+            <div class="chart-gw-pills-strip" id="chartGwPillsStrip" role="tablist" aria-label="Select Gameweek or Overview">
+              <!-- Rendered dynamically: All GWs / Overview + GW 1..38 -->
             </div>
+          </div>
 
-            <!-- Season Overview Navigation: Expand to Current / Expand All / Collapse All & Drilldown -->
-            <div id="chartOverviewNav" class="chart-overview-nav">
-              <div class="chart-expand-btn-group">
-                <button type="button" class="chart-expand-toggle-btn" id="chartExpandToCurrentBtn" title="Expand latest 3 Gameweeks (upcoming and last 2 completed)">
-                  ➕ Latest 3 GWs
-                </button>
-                <button type="button" class="chart-expand-toggle-btn" id="chartExpandAllBtn" title="Expand all 38 Gameweeks across the season">
-                  ⚡ Expand All
-                </button>
-                <button type="button" class="chart-collapse-toggle-btn" id="chartCollapseAllBtn" title="Collapse all Gameweeks to GW numbers">
-                  ➖ Collapse All
-                </button>
-              </div>
-              <select id="chartDrilldownModeSelect" class="control-dropdown chart-drill-dropdown" title="Drill down to isolate a single Gameweek">
-              </select>
-            </div>
+          <!-- Hidden for backwards compatibility -->
+          <div id="chartDrilldownNav" style="display: none;">
+            <button type="button" id="chartBackToAllGWsBtn" style="display: none;"></button>
+            <select id="chartGwDrilldownSelect" style="display: none;"></select>
+          </div>
+          <div id="chartOverviewNav" style="display: none;">
+            <select id="chartDrilldownModeSelect" style="display: none;"></select>
           </div>
         </div>
 
         <!-- Section 2: Standings & Player Legends -->
         <div class="chart-legend-panel" id="chartLegendPanel">
           <div class="chart-legend-header">
-            <span class="chart-control-label">👥 Player Legend</span>
+            <span class="chart-control-label">👥 <span class="legend-header-full">Player Legend</span><span class="legend-header-short">Legend</span></span>
           </div>
           <div class="chart-legend-container" id="chartLegend">
             <!-- Player color legend chips rendered by JS -->
@@ -353,7 +387,7 @@
       </section>
 
       <!-- LEADERBOARD -->
-      <section class="glass-card" style="margin-top: 24px;">
+      <section class="glass-card" id="playerLeaderboardSection" style="margin-top: 24px;">
         <div class="section-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
           <div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -375,7 +409,7 @@
       </section>
 
       <!-- SCORE DISTRIBUTION HEATMAPS (ACTUAL VS PREDICTED) -->
-      <section class="glass-card heatmap-section-card" id="scoreHeatmapSection" style="margin-top: 24px;">
+      <section class="glass-card heatmap-section-card" id="scoreHeatmapSection" style="margin-top: 24px; display: none;">
         <div class="section-header heatmap-section-header">
           <div>
             <div class="heatmap-title-row">
@@ -393,14 +427,34 @@
                 ⚽ Actual Results
               </button>
             </div>
-            <!-- Measure Selector -->
-            <div class="heatmap-player-filter-wrapper" id="heatmapMeasureFilterWrapper">
-              <label for="heatmapMeasureSelect" class="heatmap-filter-label">Measure:</label>
-              <select id="heatmapMeasureSelect" class="form-select heatmap-select" aria-label="Select metric for heatmaps">
-                <option value="count">🔢 Game Count</option>
-                <option value="count_pct">📊 Game Share %</option>
-                <option value="points">🏆 Points Earned</option>
-                <option value="points_pct">📈 Points Share %</option>
+            <!-- Measure Selector (Buttons in Two Categories: Metric & Unit) -->
+            <div class="heatmap-measure-controls-group" id="heatmapMeasureFilterWrapper">
+              <!-- Category 1: Metric (Games vs Points Earned) -->
+              <div class="heatmap-segmented-group" id="heatmapMetricTypeGroup" role="radiogroup" aria-label="Metric Type">
+                <button type="button" class="heatmap-measure-btn active" id="heatmapMetricGamesBtn" data-metric="games" role="radio" aria-checked="true" title="Analyze by Games / Predictions">
+                  ⚽ Games
+                </button>
+                <button type="button" class="heatmap-measure-btn" id="heatmapMetricPointsBtn" data-metric="points" role="radio" aria-checked="false" title="Analyze by Points Earned">
+                  🏆 Points Earned
+                </button>
+              </div>
+
+              <!-- Category 2: Display Unit (Count vs Percentage Share) -->
+              <div class="heatmap-segmented-group" id="heatmapUnitTypeGroup" role="radiogroup" aria-label="Display Format">
+                <button type="button" class="heatmap-measure-btn active" id="heatmapUnitCountBtn" data-unit="count" role="radio" aria-checked="true" title="Display raw count">
+                  # Count
+                </button>
+                <button type="button" class="heatmap-measure-btn" id="heatmapUnitPctBtn" data-unit="pct" role="radio" aria-checked="false" title="Display percentage share (%)">
+                  % Share
+                </button>
+              </div>
+
+              <!-- Hidden select element for backwards compatibility -->
+              <select id="heatmapMeasureSelect" style="display: none;">
+                <option value="count">Game Count</option>
+                <option value="count_pct">Game Share %</option>
+                <option value="points">Points Earned</option>
+                <option value="points_pct">Points Share %</option>
               </select>
             </div>
             <!-- Player Filter for Predictions -->
@@ -531,7 +585,7 @@
       </div>
 
       <!-- INTERACTIVE SCORE SIMULATOR HEATMAP -->
-      <section class="glass-card score-simulator-section" id="scoreSimulatorSection" style="margin-top: 24px;">
+      <section class="glass-card score-simulator-section" id="scoreSimulatorSection" style="margin-top: 24px; display: none;">
         <div class="section-header heatmap-section-header" style="margin-bottom: 20px;">
           <div>
             <div class="heatmap-title-row">
