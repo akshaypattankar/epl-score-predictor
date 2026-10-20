@@ -17,11 +17,45 @@
 
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <meta name="theme-color" content="#37003c" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EPL Predictor" />
+  <meta name="application-name" content="EPL Predictor" />
+  <meta name="msapplication-TileColor" content="#37003c" />
+  <meta name="msapplication-TileImage" content="/icons/icon-192.png" />
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!-- Favicons and Touch Icons -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
 </head>
 
 <body>
 
   <div class="app-container">
+
+    <!-- Offline Status Indicator Banner -->
+    <div class="pwa-offline-banner" id="pwaOfflineBanner" style="display: none;" role="status" aria-live="polite">
+      <span class="pwa-offline-icon">⚡</span>
+      <span class="pwa-offline-text">You are currently offline. Viewing cached predictions and fixtures.</span>
+    </div>
+
+    <!-- PWA Update Toast -->
+    <div class="pwa-update-toast" id="pwaUpdateToast" style="display: none;" role="alert">
+      <span class="pwa-update-msg">🔄 A new update is available.</span>
+      <button class="btn btn-xs btn-primary pwa-update-btn" id="pwaReloadBtn">Update</button>
+      <button class="pwa-toast-dismiss" id="pwaDismissUpdateBtn" aria-label="Dismiss">✕</button>
+    </div>
 
     <!-- ── APP HEADER ─────────────────────────────────────── -->
     <header class="app-header glass-card">
@@ -44,8 +78,8 @@
             <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" />
             <span class="nav-tab-text">DASHBOARD</span>
           </button>
-          <button class="nav-tab" id="navWhatIfBtn" style="display: none;" title="What-If Standings Simulator">
-            <span class="nav-tab-icon" class="nav-tab-icon">🔮</span>
+          <button class="nav-tab is-hidden" id="navWhatIfBtn" style="display: none !important;" title="What-If Standings Simulator" disabled aria-hidden="true">
+            <span class="nav-tab-icon">🔮</span>
             <span class="nav-tab-text">WHAT-IF</span>
           </button>
           <button class="nav-tab" id="navScoringBtn" title="Scoring Rules Explainer">
@@ -98,6 +132,12 @@
             <button class="btn btn-sm btn-primary" id="authLoginBtn">🔒 Log In</button>
             <button class="btn btn-sm" id="authLogoutBtn" style="display:none;">🚪 Log Out</button>
           </div>
+
+          <!-- PWA Install Button -->
+          <button class="btn btn-sm btn-pwa-install" id="pwaInstallHeaderBtn" style="display: none;" title="Install EPL Predictor App">
+            <span class="pwa-install-icon">📲</span>
+            <span class="pwa-install-label">Install App</span>
+          </button>
 
           <!-- Live Clock -->
           <div class="utc-clock" id="utcClock">--:-- UTC</div>
@@ -1513,11 +1553,45 @@
     </div>
   </div>
 
+  <!-- PWA / iOS Install Guide Modal -->
+  <div class="modal-overlay" id="pwaInstallModal" style="display: none;">
+    <div class="modal-card pwa-install-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-badge-icon">📲</span>
+          <div>
+            <h3 class="modal-title">Install EPL Predictor</h3>
+            <p class="modal-subtitle">Add to Home Screen for fast, standalone experience</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closePwaInstallModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body pwa-install-modal-body">
+        <div class="pwa-install-app-preview">
+          <img src="/icons/icon-192-maskable.png" alt="EPL Predictor" class="pwa-install-preview-icon" />
+          <div class="pwa-install-preview-info">
+            <div class="pwa-install-preview-title">EPL Score Predictor</div>
+            <div class="pwa-install-preview-sub">2026/27 Premier League Dashboard</div>
+          </div>
+        </div>
+        <div class="pwa-install-steps" id="pwaInstallSteps">
+          <!-- Dynamically populated -->
+        </div>
+        <div class="modal-footer pwa-install-modal-footer" style="margin-top: 16px;">
+          <button type="button" class="btn btn-primary" id="pwaModalInstallActionBtn" style="width: 100%;">Install App</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Global Floating Save / Notification Toast -->
   <div class="save-toast" id="saveToast" aria-live="polite" role="status">
     <span class="save-toast-icon">☁️</span>
     <span class="save-toast-msg" id="saveToastMsg">Saved to Server</span>
   </div>
+
+  <!-- PWA Lifecycle Module -->
+  <script type="module" src="js/pwa.js"></script>
 
   <!-- Main JS -->
   <script type="module" src="js/app.js"></script>

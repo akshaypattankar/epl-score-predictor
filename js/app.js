@@ -793,8 +793,9 @@ function renderAuthHeader() {
       mgmtBtn.classList.remove('is-hidden');
     }
     if (whatIfBtn) {
-      whatIfBtn.style.display = 'inline-flex';
-      whatIfBtn.classList.remove('is-hidden');
+      whatIfBtn.style.display = 'none';
+      whatIfBtn.classList.add('is-hidden');
+      whatIfBtn.disabled = true;
     }
     if (groupBox) groupBox.style.display = 'flex';
     if (adminPlayerBox) {
@@ -812,8 +813,9 @@ function renderAuthHeader() {
       mgmtBtn.classList.add('is-hidden');
     }
     if (whatIfBtn) {
-      whatIfBtn.style.display = 'inline-flex';
-      whatIfBtn.classList.remove('is-hidden');
+      whatIfBtn.style.display = 'none';
+      whatIfBtn.classList.add('is-hidden');
+      whatIfBtn.disabled = true;
     }
     if (groupBox) groupBox.style.display = 'flex';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
@@ -830,6 +832,7 @@ function renderAuthHeader() {
     if (whatIfBtn) {
       whatIfBtn.style.display = 'none';
       whatIfBtn.classList.add('is-hidden');
+      whatIfBtn.disabled = true;
     }
     if (groupBox) groupBox.style.display = 'none';
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
@@ -1766,14 +1769,9 @@ function renderDashboardComponents() {
     renderCumulativeChart();
     renderScoreHeatmaps();
 
-    if (state.auth.role === 'admin') {
-      if (whatIfContainer) whatIfContainer.style.display = 'block';
-      renderWhatIfDashboardWidget(whatIfContainer, state, () => renderViewByName('whatif'));
-    } else {
-      if (whatIfContainer) {
-        whatIfContainer.innerHTML = '';
-        whatIfContainer.style.display = 'none';
-      }
+    if (whatIfContainer) {
+      whatIfContainer.innerHTML = '';
+      whatIfContainer.style.display = 'none';
     }
   }
 
@@ -1788,7 +1786,7 @@ function renderViewByName(targetView) {
   if (targetView === 'management' && state.auth.role !== 'admin') {
     targetView = 'dashboard';
   }
-  if (targetView === 'whatif' && state.auth.role === 'guest') {
+  if (targetView === 'whatif') {
     targetView = 'dashboard';
   }
   state.activeView = targetView;
@@ -1849,12 +1847,9 @@ function initNavigation() {
   const scoringBackBtn = document.getElementById('scoringBackToDashboardBtn');
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
-  whatIfBtn?.addEventListener('click', () => {
-    if (state.auth.role === 'guest') {
-      renderViewByName('dashboard');
-      return;
-    }
-    renderViewByName('whatif');
+  whatIfBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    renderViewByName('dashboard');
   });
   scoringBtn?.addEventListener('click', () => renderViewByName('scoring'));
   mgmtBtn?.addEventListener('click', () => {
@@ -2410,7 +2405,7 @@ function renderSnapshot(lb) {
 
     const tierChipsHtml = activeTiers.length > 0
       ? `<div class="snapshot-tier-counts">
-          ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon} <strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
+          ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon}<strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
         </div>`
       : '';
 
@@ -2659,7 +2654,7 @@ function renderTeamBreakdown() {
 
       const tierChipsHtml = activeTiers.length > 0
         ? `<div class="snapshot-tier-counts">
-            ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon} <strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
+            ${activeTiers.map(t => `<span class="snapshot-tier-chip active ${t.cls}" style="background:${shades.chipBg}; border-color:${shades.chipBorder}; color:${shades.primary};" title="${t.title}: ${t.count}">${t.icon}<strong style="color:${shades.primary};">${t.count}</strong></span>`).join('')}
           </div>`
         : '';
 
