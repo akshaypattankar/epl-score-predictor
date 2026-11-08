@@ -1,3 +1,4 @@
+import { svgIcon } from './icons.js';
 // whatIfStandings.js - Premier League Standings Simulator & "What-If" Scenario Tester
 import { getCrestImg, CLUB_DIRECTORY, FALLBACK_TEAMS, apiFetchWhatIfStandings } from './api.js';
 
@@ -799,7 +800,7 @@ export function renderWhatIfView(appState) {
     <div class="whatif-page-header flex justify-between items-center flex-wrap gap-2" style="margin-bottom: 8px;">
       <div>
         <h2 style="font-family: var(--font-title); font-size: 1.4rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px; margin: 0;">
-          <span style="font-size: 1.4rem;">🔮</span> "What If" League Standings Simulator
+          <span style="font-size: 1.4rem;">${svgIcon('sparkles', 22)}</span> "What If" League Standings Simulator
         </h2>
         <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 2px; margin-bottom: 0;">
           Explore how the 2026/27 Premier League table shifts based on <strong>${playerName}</strong>'s score predictions vs actual results.
@@ -809,10 +810,10 @@ export function renderWhatIfView(appState) {
       <!-- Quick Export / Action Buttons -->
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <button type="button" class="btn btn-secondary btn-back-dashboard" id="whatIfBackToDashboardBtn" title="Return to Match Predictions Dashboard" style="font-size: 0.8rem; padding: 5px 10px;">
-          📊 ← Dashboard
+          ${svgIcon('arrowLeft', 14)} Dashboard
         </button>
         <button class="btn btn-secondary" id="exportWhatIfCsvBtn" title="Download standings comparison as CSV" style="font-size: 0.8rem; padding: 5px 10px;">
-          📥 Export CSV
+          ${svgIcon('download', 14)} Export CSV
         </button>
       </div>
     </div>
@@ -825,7 +826,7 @@ export function renderWhatIfView(appState) {
         <div class="whatif-toolbar-left" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <!-- Player Switcher -->
           <div class="whatif-control-item" style="display: flex; align-items: center; gap: 8px;">
-            <label for="whatIfPlayerSelect" class="toolbar-label">👤 Predictor:</label>
+            <label for="whatIfPlayerSelect" class="toolbar-label">${svgIcon('user', 14)} Predictor:</label>
             <select id="whatIfPlayerSelect" class="control-dropdown" style="font-weight: 700;">
               ${availablePlayers.map(p => `
                 <option value="${p.id}" ${p.id === Number(whatIfState.selectedPlayerId) ? 'selected' : ''}>
@@ -843,26 +844,26 @@ export function renderWhatIfView(appState) {
 
           <!-- Scope: Completed Matches vs Full Season -->
           <div class="whatif-control-item">
-            <label class="toolbar-label">⚡ Scope:</label>
+            <label class="toolbar-label">${svgIcon('zap', 14)} Scope:</label>
             <div class="whatif-btn-group">
               <button type="button" class="whatif-btn-option ${whatIfState.mode === 'completed' ? 'active' : ''}" id="whatIfModeCompletedBtn" title="Compare completed matches: Predicted vs Actual">
-                ⚡ Completed Matches
+                ${svgIcon('zap', 12)} Completed Matches
               </button>
               <button type="button" class="whatif-btn-option ${whatIfState.mode === 'all' ? 'active' : ''}" id="whatIfModeAllBtn" title="Project full season standings using all predictions">
-                🔮 Full Season (All 38 GWs)
+                ${svgIcon('sparkles', 12)} Full Season (All 38 GWs)
               </button>
             </div>
           </div>
 
           <!-- View: Comparison vs Side-by-Side -->
           <div class="whatif-control-item">
-            <label class="toolbar-label">📊 View:</label>
+            <label class="toolbar-label">${svgIcon('chartBar', 14)} View:</label>
             <div class="whatif-btn-group">
               <button type="button" class="whatif-btn-option ${whatIfState.layout === 'comparison' ? 'active' : ''}" id="whatIfLayoutCompBtn" title="Unified comparison table: Predicted vs Actual">
-                📊 Comparison
+                ${svgIcon('chartBar', 12)} Comparison
               </button>
               <button type="button" class="whatif-btn-option ${whatIfState.layout === 'split' ? 'active' : ''}" id="whatIfLayoutSplitBtn" title="Side-by-side view: Predicted Standings vs Actual Standings">
-                👥 Side-by-Side
+                ${svgIcon('users', 12)} Side-by-Side
               </button>
             </div>
           </div>
@@ -872,7 +873,7 @@ export function renderWhatIfView(appState) {
           <!-- Search filter -->
           <div style="position: relative;">
             <input type="text" id="whatIfSearchInput" class="form-input" placeholder="Filter clubs..." value="${whatIfState.searchQuery}" style="padding: 6px 10px 6px 28px; font-size: 0.84rem; width: 170px;" />
-            <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 0.8rem;">🔍</span>
+            <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-dim);">${svgIcon('search', 14)}</span>
           </div>
         </div>
       </div>
@@ -880,23 +881,23 @@ export function renderWhatIfView(appState) {
       <!-- Quick Filter Row: All, Top 6, Bottom 6, Top 4, Bottom 3 -->
       <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
         <span class="toolbar-label" style="font-weight: 700; color: var(--text-muted); font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
-          🎯 Quick Filter:
+          ${svgIcon('target', 14)} Quick Filter:
         </span>
         <div class="whatif-btn-group" id="whatIfFilterGroup">
           <button type="button" class="whatif-btn-option ${whatIfState.filter === 'all' ? 'active' : ''}" data-filter="all" title="Show all 20 Premier League clubs">
-            🌐 All Clubs (${totalClubs})
+            ${svgIcon('globe', 12)} All Clubs (${totalClubs})
           </button>
           <button type="button" class="whatif-btn-option ${whatIfState.filter === 'top6' ? 'active' : ''}" data-filter="top6" title="Filter to Top 6 clubs (European qualification contenders)">
-            🔝 Top 6
+            ${svgIcon('trendingUp', 12)} Top 6
           </button>
           <button type="button" class="whatif-btn-option ${whatIfState.filter === 'bottom6' ? 'active' : ''}" data-filter="bottom6" title="Filter to Bottom 6 clubs (Relegation battle zone)">
-            🔻 Bottom 6
+            ${svgIcon('trendingDown', 12)} Bottom 6
           </button>
           <button type="button" class="whatif-btn-option ${whatIfState.filter === 'top4' ? 'active' : ''}" data-filter="top4" title="Filter to Top 4 clubs (UEFA Champions League spots)">
-            🏆 Top 4 (UCL)
+            ${svgIcon('trophy', 12)} Top 4 (UCL)
           </button>
           <button type="button" class="whatif-btn-option ${whatIfState.filter === 'bottom3' ? 'active' : ''}" data-filter="bottom3" title="Filter to Bottom 3 clubs (Drop zone)">
-            ⚠️ Relegation (18–20)
+            ${svgIcon('alert', 12)} Relegation (18–20)
           </button>
         </div>
         <span class="whatif-filter-pill-count">
@@ -942,7 +943,7 @@ export function renderWhatIfView(appState) {
 
       <!-- 1. Largest Prediction Gap (Predicted vs Actual) -->
       <div class="whatif-insight-card" style="border: 1px solid rgba(244, 63, 94, 0.35); background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(0, 0, 0, 0.2) 100%);">
-        <div class="whatif-card-icon-box" style="background: rgba(244, 63, 94, 0.18); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4);">💥</div>
+        <div class="whatif-card-icon-box" style="background: rgba(244, 63, 94, 0.18); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4);">${svgIcon('zap', 20)}</div>
         <div class="whatif-insight-info">
           <span class="whatif-insight-label" title="Club with the highest gap between predicted and actual points">Largest Prediction Gap</span>
           <div class="whatif-insight-value">
@@ -965,7 +966,7 @@ export function renderWhatIfView(appState) {
 
       <!-- 2. Predicted Leader vs Actual Leader -->
       <div class="whatif-insight-card">
-        <div class="whatif-card-icon-box gold">👑</div>
+        <div class="whatif-card-icon-box gold">${svgIcon('crown', 20)}</div>
         <div class="whatif-insight-info">
           <span class="whatif-insight-label">Predicted Leader</span>
           <div class="whatif-insight-value">
@@ -985,7 +986,7 @@ export function renderWhatIfView(appState) {
 
       <!-- 3. Biggest Climber -->
       <div class="whatif-insight-card">
-        <div class="whatif-card-icon-box green">🚀</div>
+        <div class="whatif-card-icon-box green">${svgIcon('trendingUp', 20)}</div>
         <div class="whatif-insight-info">
           <span class="whatif-insight-label">Biggest Climber</span>
           <div class="whatif-insight-value">
@@ -1005,7 +1006,7 @@ export function renderWhatIfView(appState) {
 
       <!-- 4. Biggest Faller -->
       <div class="whatif-insight-card">
-        <div class="whatif-card-icon-box rose">📉</div>
+        <div class="whatif-card-icon-box rose">${svgIcon('trendingDown', 20)}</div>
         <div class="whatif-insight-info">
           <span class="whatif-insight-label">Biggest Faller</span>
           <div class="whatif-insight-value">
@@ -1025,7 +1026,7 @@ export function renderWhatIfView(appState) {
 
       <!-- 5. Coverage & Prediction Accuracy -->
       <div class="whatif-insight-card">
-        <div class="whatif-card-icon-box purple">🎯</div>
+        <div class="whatif-card-icon-box purple">${svgIcon('target', 20)}</div>
         <div class="whatif-insight-info">
           <span class="whatif-insight-label">Prediction Coverage</span>
           <div class="whatif-insight-value">
@@ -1045,7 +1046,7 @@ export function renderWhatIfView(appState) {
       <div class="whatif-accuracy-breakdown-panel glass-card" id="whatIfAccuracyDrawer" style="margin-bottom: 12px; padding: 14px 16px; border: 1px solid ${accuracyScore.tierColor}55; background: linear-gradient(180deg, rgba(22,22,38,0.9) 0%, rgba(12,12,22,0.95) 100%);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-size: 1.15rem;">🎯</span>
+            <span>${svgIcon('target', 18)}</span>
             <span style="font-weight: 800; font-size: 0.95rem; color: var(--text-main);">Prediction Accuracy Score (PAS) Breakdown — ${playerName}</span>
             <span class="whatif-tier-pill" style="border-color: ${accuracyScore.tierColor}; color: ${accuracyScore.tierColor}; background: ${accuracyScore.tierColor}20; font-size: 0.72rem;">
               ${accuracyScore.tierIcon} ${accuracyScore.tier} (${accuracyScore.score}/100)
@@ -1058,7 +1059,7 @@ export function renderWhatIfView(appState) {
           <!-- Pillar 1: Match Score Precision -->
           <div class="whatif-breakdown-pillar" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-sm); padding: 10px 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.82rem; color: #38bdf8;">🎯 Match Score Precision (${accuracyScore.components?.matchPrecision?.weight || '50%'})</span>
+              <span style="font-weight: 700; font-size: 0.82rem; color: #38bdf8;">${svgIcon('target', 14)} Match Score Precision (${accuracyScore.components?.matchPrecision?.weight || '50%'})</span>
               <span style="font-weight: 800; font-size: 0.9rem; color: #38bdf8;">${accuracyScore.components?.matchPrecision?.score ?? 0}%</span>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
@@ -1074,7 +1075,7 @@ export function renderWhatIfView(appState) {
           <!-- Pillar 2: Table Rank Proximity -->
           <div class="whatif-breakdown-pillar" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-sm); padding: 10px 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.82rem; color: #a78bfa;">📐 Table Rank Proximity (${accuracyScore.components?.rankProximity?.weight || '35%'})</span>
+              <span style="font-weight: 700; font-size: 0.82rem; color: #a78bfa;">${svgIcon('compass', 14)} Table Rank Proximity (${accuracyScore.components?.rankProximity?.weight || '35%'})</span>
               <span style="font-weight: 800; font-size: 0.9rem; color: #a78bfa;">${accuracyScore.components?.rankProximity?.score ?? 0}%</span>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
@@ -1090,7 +1091,7 @@ export function renderWhatIfView(appState) {
           <!-- Pillar 3: Points Calibration -->
           <div class="whatif-breakdown-pillar" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-sm); padding: 10px 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.82rem; color: #34d399;">⚖️ Points Calibration (${accuracyScore.components?.pointsCalibration?.weight || '15%'})</span>
+              <span style="font-weight: 700; font-size: 0.82rem; color: #34d399;">${svgIcon('scale', 14)} Points Calibration (${accuracyScore.components?.pointsCalibration?.weight || '15%'})</span>
               <span style="font-weight: 800; font-size: 0.9rem; color: #34d399;">${accuracyScore.components?.pointsCalibration?.score ?? 0}%</span>
             </div>
             <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
@@ -1117,11 +1118,11 @@ export function renderWhatIfView(appState) {
   // Zone Legend at bottom
   html += `
     <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 0.8rem; color: var(--text-muted); padding: 12px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border-glass);">
-      <span style="font-weight: 700; color: var(--text-main);">🏷️ Zones:</span>
+      <span style="font-weight: 700; color: var(--text-main);">${svgIcon('tag', 14)} Zones:</span>
       <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 12px; background: #38bdf8; border-radius: 2px;"></span> 1–4 UEFA Champions League</span>
       <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 12px; background: #f59e0b; border-radius: 2px;"></span> 5 UEFA Europa League</span>
       <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 12px; background: #f43f5e; border-radius: 2px;"></span> 18–20 Relegation</span>
-      <span style="margin-left: auto; font-style: italic; color: var(--text-dim);">💡 Click any column header to sort • Click any team row to inspect match predictions</span>
+      <span style="margin-left: auto; font-style: italic; color: var(--text-dim);">${svgIcon('info', 12)} Click any column header to sort • Click any team row to inspect match predictions</span>
     </div>
   `;
 
@@ -1136,9 +1137,9 @@ export function renderWhatIfView(appState) {
  */
 function getSortIndicator(col) {
   if (whatIfState.sortCol === col) {
-    return `<span class="whatif-sort-icon">${whatIfState.sortDir === 'asc' ? '▲' : '▼'}</span>`;
+    return `<span class="whatif-sort-icon">${whatIfState.sortDir === 'asc' ? svgIcon('chevronUp', 12) : svgIcon('chevronDown', 12)}</span>`;
   }
-  return `<span class="whatif-sort-icon">↕</span>`;
+  return `<span class="whatif-sort-icon" style="opacity: 0.4;">${svgIcon('chevronDown', 11)}</span>`;
 }
 
 /**
@@ -1312,7 +1313,7 @@ function renderTeamDrilldownDrawerHtml(teamRow, playerName) {
                 const oppShort = m.isHome ? (m.awayShort || '') : (m.homeShort || '');
                 const myScore = m.isHome ? m.homeScore : m.awayScore;
                 const oppScore = m.isHome ? m.awayScore : m.homeScore;
-                const venueTag = m.isHome ? '🏠 Home' : '✈️ Away';
+                const venueTag = m.isHome ? `${svgIcon('home', 12)} Home` : `${svgIcon('plane', 12)} Away`;
                 const resultColor = m.result === 'W' ? '#34d399' : m.result === 'D' ? '#fbbf24' : '#fb7185';
                 const resultText = m.result === 'W' ? 'Won (+3 pts)' : m.result === 'D' ? 'Drawn (+1 pt)' : 'Lost (0 pts)';
 
@@ -1333,7 +1334,7 @@ function renderTeamDrilldownDrawerHtml(teamRow, playerName) {
                       </div>
                     </div>
                     <div style="font-size: 0.72rem; color: var(--text-dim); display: flex; justify-content: space-between;">
-                      <span>${m.isPrediction ? '🎯 Predicted by ' + playerName : '⚡ Actual Result'}</span>
+                      <span>${m.isPrediction ? svgIcon('target', 12) + ' Predicted by ' + playerName : svgIcon('zap', 12) + ' Actual Result'}</span>
                       ${m.actualHomeScore !== null && m.actualHomeScore !== undefined ? `<span>Actual: ${m.isHome ? m.actualHomeScore : m.actualAwayScore}-${m.isHome ? m.actualAwayScore : m.actualHomeScore}</span>` : ''}
                     </div>
                   </div>
@@ -1358,7 +1359,7 @@ function renderSideBySideTableHtml(simTable, realTable, playerName) {
       <div class="whatif-split-card">
         <div class="whatif-split-header">
           <h3>
-            <span>🔮</span> ${playerName}'s Predicted Standings
+            ${svgIcon('sparkles', 16)} ${playerName}'s Predicted Standings
           </h3>
           <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
             Predicted Standings
@@ -1414,7 +1415,7 @@ function renderSideBySideTableHtml(simTable, realTable, playerName) {
       <div class="whatif-split-card">
         <div class="whatif-split-header">
           <h3>
-            <span>⚡</span> Actual Standings
+            ${svgIcon('zap', 16)} Actual Standings
           </h3>
           <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px;">
             Actual Standings
@@ -1701,14 +1702,14 @@ export function renderWhatIfDashboardWidget(containerEl, appState, onOpenWhatIf)
       <div class="section-header" style="margin-bottom: 12px;">
         <div>
           <h3 style="font-family: var(--font-title); font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-            <span>🔮</span> "What If" Standings Preview: ${activePlayer.name}'s Predictions
+            ${svgIcon('sparkles', 16)} "What If" Standings Preview: ${activePlayer.name}'s Predictions
           </h3>
           <p style="color: var(--text-muted); font-size: 0.82rem; margin: 0;">
             See how the Premier League table shifts based on ${activePlayer.name}'s predictions vs actual results.
           </p>
         </div>
         <button type="button" class="btn btn-primary btn-sm" id="dashOpenWhatIfBtn" style="font-size: 0.82rem; padding: 7px 14px;">
-          🔮 Full What-If Simulator →
+          ${svgIcon('sparkles', 14)} Full What-If Simulator →
         </button>
       </div>
 
@@ -1735,12 +1736,12 @@ export function renderWhatIfDashboardWidget(containerEl, appState, onOpenWhatIf)
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
         ${climber ? `
           <div style="flex: 1; min-width: 240px; font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(16, 185, 129, 0.08); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.2);">
-            <span>🚀 <strong>Biggest Jump:</strong> ${climber.name} (${climber.short}) ranks #${climber.simRank} (${climber.rankDiff > 0 ? '+' : ''}${climber.rankDiff} spots higher than actual rank)</span>
+            <span>${svgIcon('trendingUp', 14)} <strong>Biggest Jump:</strong> ${climber.name} (${climber.short}) ranks #${climber.simRank} (${climber.rankDiff > 0 ? '+' : ''}${climber.rankDiff} spots higher than actual rank)</span>
           </div>
         ` : ''}
         ${mostDiff ? `
           <div style="flex: 1; min-width: 240px; font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(168, 85, 247, 0.08); border-radius: 6px; border: 1px solid rgba(168, 85, 247, 0.25);">
-            <span>💥 <strong>Most Divergent:</strong> ${mostDiff.name} (${mostDiff.short}) has ${mostDiff.ptsDiff > 0 ? '+' : ''}${mostDiff.ptsDiff} pts difference (Pred ${mostDiff.simPts} vs Actual ${mostDiff.realPts})</span>
+            <span>${svgIcon('zap', 14)} <strong>Most Divergent:</strong> ${mostDiff.name} (${mostDiff.short}) has ${mostDiff.ptsDiff > 0 ? '+' : ''}${mostDiff.ptsDiff} pts difference (Pred ${mostDiff.simPts} vs Actual ${mostDiff.realPts})</span>
           </div>
         ` : ''}
       </div>
@@ -1793,9 +1794,9 @@ export function renderGuestLeagueStandingsWidget(containerEl, appState) {
 
   const getSortIcon = (col) => {
     if (guestSortCol === col) {
-      return `<span class="whatif-sort-icon" style="opacity: 1; color: var(--accent-cyan, #38bdf8);">${guestSortDir === 'asc' ? '▲' : '▼'}</span>`;
+      return `<span class="whatif-sort-icon" style="opacity: 1; color: var(--accent-cyan, #38bdf8);">${guestSortDir === 'asc' ? svgIcon('chevronUp', 12) : svgIcon('chevronDown', 12)}</span>`;
     }
-    return `<span class="whatif-sort-icon" style="opacity: 0.35;">↕</span>`;
+    return `<span class="whatif-sort-icon" style="opacity: 0.35;">${svgIcon('chevronDown', 11)}</span>`;
   };
 
   containerEl.innerHTML = `
@@ -1804,7 +1805,7 @@ export function renderGuestLeagueStandingsWidget(containerEl, appState) {
         <div>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <h2 style="font-family: var(--font-title); font-size: var(--font-size-lg, 1.1875rem); font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 8px;">
-              <span>🏆</span> Premier League Standings
+              ${svgIcon('trophy', 16)} Premier League Standings
             </h2>
             <span class="status-live-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; font-weight: 700;">
               Official Scores
@@ -1815,8 +1816,8 @@ export function renderGuestLeagueStandingsWidget(containerEl, appState) {
           </p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <span class="meta-chip" style="font-size: 0.75rem;">⚽ 20 Clubs</span>
-          ${selectedTeams.length > 0 ? `<span class="meta-chip" style="color: var(--accent-cyan); border-color: var(--accent-cyan); font-size: 0.75rem;">🎯 Highlighting: ${selectedTeams.join(', ')}</span>` : ''}
+          <span class="meta-chip" style="font-size: 0.75rem;">${svgIcon('ball', 12)} 20 Clubs</span>
+          ${selectedTeams.length > 0 ? `<span class="meta-chip" style="color: var(--accent-cyan); border-color: var(--accent-cyan); font-size: 0.75rem;">${svgIcon('target', 12)} Highlighting: ${selectedTeams.join(', ')}</span>` : ''}
         </div>
       </div>
 
@@ -1897,11 +1898,11 @@ export function renderGuestLeagueStandingsWidget(containerEl, appState) {
 
       <!-- Zone Legend at bottom -->
       <div class="whatif-table-legend" style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 0.78rem; color: var(--text-muted); padding: 10px 14px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border-glass);">
-        <span style="font-weight: 700; color: var(--text-main);">🏷️ Qualification / Status:</span>
+        <span style="font-weight: 700; color: var(--text-main);">${svgIcon('tag', 14)} Qualification / Status:</span>
         <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #38bdf8; border-radius: 2px;"></span> 1–4 UEFA Champions League (UCL)</span>
         <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #f59e0b; border-radius: 2px;"></span> 5 UEFA Europa League (UEL)</span>
         <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; background: #f43f5e; border-radius: 2px;"></span> 18–20 Relegation (REL)</span>
-        <span style="margin-left: auto; font-style: italic; color: var(--text-dim); font-size: 0.72rem;">💡 Click any column header to sort • Click a team to filter</span>
+        <span style="margin-left: auto; font-style: italic; color: var(--text-dim); font-size: 0.72rem;">${svgIcon('info', 12)} Click any column header to sort • Click a team to filter</span>
       </div>
     </section>
   `;

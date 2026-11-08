@@ -1,3 +1,4 @@
+import { svgIcon } from './icons.js';
 // rulesEditor.js - Modular Scoring Rules & Tiers Editor with Streamlined Freeform Input & Dynamic SVG Asset Support
 
 import { SCORING_TIERS, SCORING_BONUSES, updateScoringRulesState } from './scoring.js';
@@ -160,25 +161,25 @@ function renderModalContent() {
     <div class="rules-editor-header-bar">
       <div class="rules-editor-tabs">
         <button type="button" class="rules-tab-btn ${_activeCategoryTab === 'tiers' ? 'active' : ''}" data-tab="tiers">
-          <span>🏆 Base Tiers</span>
+          <span>${svgIcon('trophy', 14)} Base Tiers</span>
           <span class="rules-tab-badge">${tiersCount}</span>
         </button>
         <button type="button" class="rules-tab-btn ${_activeCategoryTab === 'bonuses' ? 'active' : ''}" data-tab="bonuses">
-          <span>🔥 Bonus Rules</span>
+          <span>${svgIcon('flame', 14)} Bonus Rules</span>
           <span class="rules-tab-badge">${bonusesCount}</span>
         </button>
         <button type="button" class="rules-tab-btn ${_activeCategoryTab === 'all' ? 'active' : ''}" data-tab="all">
-          <span>📋 All Rules</span>
+          <span>${svgIcon('table', 14)} All Rules</span>
           <span class="rules-tab-badge">${tiersCount + bonusesCount}</span>
         </button>
       </div>
 
       <div class="rules-editor-quick-actions">
         <button type="button" class="btn btn-sm rules-add-btn" data-add-rule="tier">
-          <span>➕</span> Add Tier
+          ${svgIcon('plus', 14)} Add Tier
         </button>
         <button type="button" class="btn btn-sm rules-add-btn rules-add-bonus-btn" data-add-rule="bonus">
-          <span>➕</span> Add Bonus
+          ${svgIcon('plus', 14)} Add Bonus
         </button>
       </div>
     </div>
@@ -206,10 +207,10 @@ function renderRulesCardsHtml() {
   if (list.length === 0) {
     return `
       <div class="rules-empty-state">
-        <div style="font-size:2.5rem; margin-bottom:8px;">🔍</div>
+        <div style="margin-bottom:8px;">${svgIcon('search', 36)}</div>
         <p>No rules found in this category.</p>
         <button type="button" class="btn btn-sm btn-primary rules-add-btn" data-add-rule="${_activeCategoryTab === 'bonuses' ? 'bonus' : 'tier'}" style="margin-top:12px;">
-          ➕ Add ${_activeCategoryTab === 'bonuses' ? 'Bonus Rule' : 'Tier'}
+          ${svgIcon('plus', 14)} Add ${_activeCategoryTab === 'bonuses' ? 'Bonus Rule' : 'Tier'}
         </button>
       </div>
     `;
@@ -274,7 +275,7 @@ function buildSingleRuleCard(rule, idx) {
         <div class="rule-card-actions">
           <button type="button" class="btn-icon rule-remove-btn" data-remove-type="${rule.rule_type}" data-remove-id="${rule.id}"
             title="${canRemove ? 'Delete this rule' : 'At least one tier is required'}" ${!canRemove ? 'disabled' : ''}>
-            🗑️
+            ${svgIcon('trash', 14)}
           </button>
         </div>
       </div>
@@ -282,14 +283,14 @@ function buildSingleRuleCard(rule, idx) {
       <!-- Icon Section: Segmented Switch + Freeform Direct Input -->
       <div class="rule-card-icon-section">
         <div class="rule-icon-switcher-header">
-          <span class="rule-section-label">🎨 Rule Icon</span>
+          <span class="rule-section-label">${svgIcon('image', 14)} Rule Icon</span>
           
           <div class="icon-type-segmented-control">
             <button type="button" class="icon-segment-btn ${!isSvg ? 'active' : ''}" data-icon-type="emoji">
-              <span>😊</span> Text Emoji
+              <span>${svgIcon('sparkles', 13)}</span> Text Emoji
             </button>
             <button type="button" class="icon-segment-btn ${isSvg ? 'active' : ''}" data-icon-type="svg">
-              <span>🖼️</span> SVG Asset
+              <span>${svgIcon('image', 13)}</span> SVG Asset
             </button>
           </div>
         </div>
@@ -346,7 +347,7 @@ function buildSingleRuleCard(rule, idx) {
 
       <!-- Condition Rules (Toggles & Thresholds) -->
       <div class="rule-card-conditions-section">
-        <span class="rule-section-label">⚙️ Condition Criteria</span>
+        <span class="rule-section-label">${svgIcon('settings', 14)} Condition Criteria</span>
         <div class="rule-conditions-grid">
           
           <!-- Min Goals Condition -->
@@ -354,7 +355,7 @@ function buildSingleRuleCard(rule, idx) {
             <div class="condition-box-header">
               <label class="condition-toggle-label">
                 <input type="checkbox" class="rule-editor-field" data-field="min_goals_enabled" ${minGoalsEnabled ? 'checked' : ''} />
-                <span>⚽ Match Goals Threshold</span>
+                <span>${svgIcon('ball', 14)} Match Goals Threshold</span>
               </label>
               <span class="condition-status-pill ${minGoalsEnabled ? 'on' : 'off'}">${minGoalsEnabled ? 'Active' : 'Disabled'}</span>
             </div>
@@ -381,7 +382,7 @@ function buildSingleRuleCard(rule, idx) {
             <div class="condition-box-header">
               <label class="condition-toggle-label">
                 <input type="checkbox" class="rule-editor-field" data-field="goal_diff_enabled" ${goalDiffEnabled ? 'checked' : ''} />
-                <span>🎯 Goal Difference Margin</span>
+                <span>${svgIcon('target', 14)} Goal Difference Margin</span>
               </label>
               <span class="condition-status-pill ${goalDiffEnabled ? 'on' : 'off'}">${goalDiffEnabled ? 'Active' : 'Disabled'}</span>
             </div>
@@ -404,9 +405,9 @@ function buildSingleRuleCard(rule, idx) {
       <!-- Explanations & Examples Section -->
       <div class="rule-card-descriptions-section">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-          <span class="rule-section-label" style="margin-bottom:0;">📝 Description & Example Preset</span>
+          <span class="rule-section-label" style="margin-bottom:0;">${svgIcon('fileText', 14)} Description & Example Preset</span>
           <button type="button" class="btn btn-xs rule-auto-preset-btn" data-rule-type="${rule.rule_type}" data-rule-id="${rule.id}" title="Calculate lowest possible scoreline scenario preset based on active filters" style="background:rgba(99,102,241,0.15); color:#a5b4fc; border:1px solid rgba(99,102,241,0.3); border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer;">
-            ⚡ Auto-Preset (Lowest Score Scenario)
+            ${svgIcon('zap', 13)} Auto-Preset (Lowest Score Scenario)
           </button>
         </div>
         
@@ -437,7 +438,7 @@ function buildSingleRuleCard(rule, idx) {
       <!-- Live Preview Container inside Card -->
       <div class="rule-card-preview-section">
         <div class="preview-section-header">
-          <span class="preview-tag">👁️ Live Display Preview</span>
+          <span class="preview-tag">${svgIcon('eye', 13)} Live Display Preview</span>
         </div>
         <div class="preview-cards-wrapper">
           <div class="scoring-rule-card ${isTier ? `tier-${rule.id}` : 'bonus-1'}" style="padding:12px; max-width:280px; margin:0 auto; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm);">
@@ -810,7 +811,7 @@ export async function saveScoringRules() {
   const saveBtn = document.getElementById('saveScoringRulesBtn');
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '⏳ Saving Rules…';
+    saveBtn.innerHTML = `${svgIcon('clock', 14)} Saving Rules…`;
   }
 
   try {
@@ -828,7 +829,7 @@ export async function saveScoringRules() {
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.innerHTML = '💾 Save Scoring Rules';
+      saveBtn.innerHTML = `${svgIcon('save', 14)} Save Scoring Rules`;
     }
   }
 }
@@ -843,14 +844,14 @@ export async function resetScoringRules() {
   // First click: Request confirmation on the button
   if (!resetBtn.dataset.confirming) {
     resetBtn.dataset.confirming = 'true';
-    resetBtn.innerHTML = '⚠️ Click again to confirm reset';
+    resetBtn.innerHTML = `${svgIcon('alert', 14)} Click again to confirm reset`;
     resetBtn.style.background = 'rgba(239,68,68,0.3)';
     resetBtn.style.color = '#ffffff';
 
     if (_resetConfirmTimeout) clearTimeout(_resetConfirmTimeout);
     _resetConfirmTimeout = setTimeout(() => {
       resetBtn.removeAttribute('data-confirming');
-      resetBtn.innerHTML = '🔄 Reset to Default Rules';
+      resetBtn.innerHTML = `${svgIcon('refresh', 14)} Reset to Default Rules`;
       resetBtn.style.background = 'rgba(239,68,68,0.12)';
       resetBtn.style.color = '#f87171';
     }, 4500);
@@ -861,7 +862,7 @@ export async function resetScoringRules() {
   if (_resetConfirmTimeout) clearTimeout(_resetConfirmTimeout);
   resetBtn.removeAttribute('data-confirming');
   resetBtn.disabled = true;
-  resetBtn.innerHTML = '⏳ Resetting…';
+  resetBtn.innerHTML = `${svgIcon('clock', 14)} Resetting…`;
 
   try {
     const result = await apiResetScoringRules();
@@ -877,7 +878,7 @@ export async function resetScoringRules() {
     showError(err.message || 'Failed to reset scoring rules.');
   } finally {
     resetBtn.disabled = false;
-    resetBtn.innerHTML = '🔄 Reset to Default Rules';
+    resetBtn.innerHTML = `${svgIcon('refresh', 14)} Reset to Default Rules`;
     resetBtn.style.background = 'rgba(239,68,68,0.12)';
     resetBtn.style.color = '#f87171';
   }

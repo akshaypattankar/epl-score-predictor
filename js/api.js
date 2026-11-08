@@ -293,7 +293,7 @@ export async function fetchTeams() {
 }
 
 export function getCrestImg(code, name = '') {
-  if (!code) return `<span class="team-crest-emoji">⚽</span>`;
+  if (!code) return `<span class="team-crest-emoji"><svg class="ui-svg-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="12 7 15 9.5 14 13.5 10 13.5 9 9.5 12 7"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="15" y1="9.5" x2="19.5" y2="8"/><line x1="14" y1="13.5" x2="17" y2="18"/><line x1="10" y1="13.5" x2="7" y2="18"/><line x1="9" y1="9.5" x2="4.5" y2="8"/></svg></span>`;
   const localPng = `assets/team_crests/png_crests/${code}.png`;
   const localSvg = `assets/team_crests/svg_crests/${code}.svg`;
   return `<img class="team-crest-img" src="${localPng}" alt="${name}" onerror="this.onerror=null; this.src='${localSvg}';" />`;

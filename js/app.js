@@ -1,3 +1,4 @@
+import { svgIcon } from './icons.js';
 // app.js - EPL Score Predictor Main Application with Auth, Guest Privacy, Polished Themes & Team-Restricted Groups
 import {
   fetchFixtures,
@@ -92,6 +93,16 @@ import {
   getPlayerColorShades,
   getRankBadgeHtml
 } from './colors.js';
+
+export function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 /**
  * Safely scroll an element into horizontal view inside its overflow-x container.
@@ -413,21 +424,21 @@ export function getGroupScopeSegments(group) {
 // Helper: generate friendly human-readable summary of a group's scope configuration
 export function getGroupScopeSummary(group) {
   if (!group || !group.teams_filter || group.teams_filter === 'ALL') {
-    return '⚽ Scope: All Teams';
+    return 'Scope: All Teams';
   }
 
   let parsed;
   try {
     parsed = typeof group.teams_filter === 'string' ? JSON.parse(group.teams_filter) : group.teams_filter;
   } catch (e) {
-    return '⚽ Scope: All Teams';
+    return 'Scope: All Teams';
   }
 
   if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].from_gw !== undefined) {
     if (parsed.length === 1) {
       const s = parsed[0];
       const tLabel = (s.teams === 'ALL' || !s.teams) ? 'All Teams' : `${s.teams.length} Teams`;
-      return `🎯 Scope: ${tLabel}`;
+      return `Scope: ${tLabel}`;
     }
     const parts = parsed.map((s, idx) => {
       const gwLabel = (s.to_gw && s.to_gw < 38)
@@ -438,14 +449,14 @@ export function getGroupScopeSummary(group) {
         : `${s.teams.length} Teams`;
       return `${gwLabel} (${tLabel})`;
     });
-    return `🎯 Scope: ${parts.join(' ➔ ')}`;
+    return `Scope: ${parts.join(' ➔ ')}`;
   }
 
   if (Array.isArray(parsed) && parsed.length > 0) {
-    return `🎯 Scope: ${parsed.length} Teams (${parsed.slice(0, 3).join(', ')}${parsed.length > 3 ? '...' : ''})`;
+    return `Scope: ${parsed.length} Teams (${parsed.slice(0, 3).join(', ')}${parsed.length > 3 ? '...' : ''})`;
   }
 
-  return '⚽ Scope: All Teams';
+  return 'Scope: All Teams';
 }
 
 // Helper: check if team matches any team in list (handles aliases like Man Utd vs Man United)
@@ -524,6 +535,18 @@ function isGWFinishedForGroup(gw, group = state.activeGroup) {
   const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group, gwNum);
   if (scopedFixtures.length === 0) return false;
   return scopedFixtures.every(f => isMatchFinished(f));
+}
+
+// Helper: check if any in-scope fixture for a group in a Gameweek is live/ongoing
+function isGWLiveForGroup(gw, group = state.activeGroup) {
+  const gwNum = Number(gw);
+  if (!state.fixtures || !state.fixtures[gwNum]) return false;
+  const rawGwFixtures = state.fixtures[gwNum] || [];
+  const scopedFixtures = filterFixturesByGroup(rawGwFixtures, group, gwNum);
+  if (scopedFixtures.length === 0) return false;
+  const finishedCount = scopedFixtures.filter(f => isMatchFinished(f)).length;
+  const liveCount = scopedFixtures.filter(f => isMatchOngoing(f)).length;
+  return liveCount > 0 || (finishedCount > 0 && finishedCount < scopedFixtures.length);
 }
 
 // Helper: determine auto active GW (advances 48h before next kickoff if current GW in-scope games are finished)
@@ -639,10 +662,10 @@ function renderAuthHeader() {
 
   if (state.auth.role === 'admin') {
     badge.className = 'auth-status-badge admin';
-    const playingText = state.auth.activePlayerId ? ` • 👤 ${state.auth.activePlayerName}` : '';
-    badge.textContent = `👑 Admin${playingText}`;
+    const playingText = state.auth.activePlayerId ? ` • ${svgIcon('user', 14)} ${state.auth.activePlayerName}` : '';
+    badge.innerHTML = `${svgIcon('crown', 14)} Admin${playingText}`;
     loginBtn.style.display = 'none';
-    logoutBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'inline-flex';
     if (guestBanner) guestBanner.style.display = 'none';
     if (mgmtBtn) {
       mgmtBtn.style.display = 'inline-flex';
@@ -660,9 +683,9 @@ function renderAuthHeader() {
     }
   } else if (state.auth.role === 'player') {
     badge.className = 'auth-status-badge player';
-    badge.textContent = `👤 Logged in: ${state.auth.activePlayerName}`;
+    badge.innerHTML = `${svgIcon('user', 14)} Logged in: ${state.auth.activePlayerName}`;
     loginBtn.style.display = 'none';
-    logoutBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'inline-flex';
     if (guestBanner) guestBanner.style.display = 'none';
     if (mgmtBtn) {
       mgmtBtn.style.display = 'none';
@@ -677,8 +700,8 @@ function renderAuthHeader() {
     if (adminPlayerBox) adminPlayerBox.style.display = 'none';
   } else {
     badge.className = 'auth-status-badge';
-    badge.textContent = '👤 Guest (View Only)';
-    loginBtn.style.display = 'inline-block';
+    badge.innerHTML = `${svgIcon('user', 14)} Guest (View Only)`;
+    loginBtn.style.display = 'inline-flex';
     logoutBtn.style.display = 'none';
     if (guestBanner && state.activeView === 'dashboard') guestBanner.style.display = 'flex';
     if (mgmtBtn) {
@@ -702,9 +725,9 @@ function populateAdminPlayerDropdown() {
   const playersList = state.masterPlayers.length > 0 ? state.masterPlayers : state.players;
   const currentId = state.auth.activePlayerId;
 
-  let options = `<option value="" ${!currentId ? 'selected' : ''}>👑 Playing as: None (Admin Only)</option>`;
+  let options = `<option value="" ${!currentId ? 'selected' : ''}>Playing as: None (Admin Only)</option>`;
   options += playersList.map(p =>
-    `<option value="${p.id}" ${currentId === p.id ? 'selected' : ''}>⚽ Playing as: ${p.name}</option>`
+    `<option value="${p.id}" ${currentId === p.id ? 'selected' : ''}>Playing as: ${p.name}</option>`
   ).join('');
 
   select.innerHTML = options;
@@ -937,7 +960,7 @@ function updateTimezoneOptionsOffsets() {
     const tz = opt.value;
     const offsetStr = getGmtOffsetString(tz, now);
     if (tz === 'UTC') {
-      opt.textContent = `🌐 UTC (${offsetStr})`;
+      opt.textContent = `UTC (${offsetStr})`;
     } else if (/\(GMT\s*[+-]?\d+(\.\d+)?H\)/i.test(opt.textContent)) {
       opt.textContent = opt.textContent.replace(/\(GMT\s*[+-]?\d+(\.\d+)?H\)/i, `(${offsetStr})`);
     } else if (/\(([^,)]+),\s*GMT\s*[+-]?\d+(\.\d+)?H\)/i.test(opt.textContent)) {
@@ -1461,7 +1484,7 @@ export function renderNextGameIndicator() {
   if (!data) {
     container.innerHTML = `
       <div class="next-game-widget is-loading" title="Calculating next match schedule...">
-        <span class="next-game-icon-pulse">⏱️</span>
+        <span class="next-game-icon-pulse">${svgIcon('clock', 16)}</span>
         <span class="next-game-status-text">Loading match schedule…</span>
       </div>
     `;
@@ -1471,7 +1494,7 @@ export function renderNextGameIndicator() {
   if (data.allFinished) {
     container.innerHTML = `
       <div class="next-game-widget is-finished" title="All Premier League matches for this season are completed">
-        <span class="next-game-icon">🏆</span>
+        <span class="next-game-icon">${svgIcon('trophy', 16)}</span>
         <span class="next-game-status-text">Season Completed • All matches played</span>
       </div>
     `;
@@ -1531,7 +1554,7 @@ export function renderNextGameIndicator() {
         <div class="next-game-row next-game-row-top">
           <div class="next-game-meta-group">
             <span class="next-game-tag">
-              <span class="next-game-icon-pulse">⏱️</span>
+              <span class="next-game-icon-pulse">${svgIcon('clock', 16)}</span>
               <span class="next-game-tag-text">NEXT GAME</span>
             </span>
             <span class="next-game-gw-badge">GW ${f.event}</span>
@@ -1658,7 +1681,12 @@ function renderViewByName(targetView) {
   const scoringView = document.getElementById('scoringView');
   const mgmtView = document.getElementById('managementView');
 
-  [dashBtn, wagersBtn, whatIfBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
+  [dashBtn, wagersBtn, whatIfBtn, scoringBtn, mgmtBtn].forEach(btn => {
+    if (btn) {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-selected', 'false');
+    }
+  });
   [dashView, wagersView, whatIfView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
 
   renderAuthHeader();
@@ -1666,26 +1694,31 @@ function renderViewByName(targetView) {
   let activeBtn = dashBtn;
   if (targetView === 'dashboard') {
     dashBtn?.classList.add('active');
+    dashBtn?.setAttribute('aria-selected', 'true');
     activeBtn = dashBtn;
     if (dashView) dashView.style.display = 'block';
     renderDashboardComponents();
   } else if (targetView === 'wagers') {
     wagersBtn?.classList.add('active');
+    wagersBtn?.setAttribute('aria-selected', 'true');
     activeBtn = wagersBtn;
     if (wagersView) wagersView.style.display = 'block';
     renderWagersView(state);
   } else if (targetView === 'whatif') {
     whatIfBtn?.classList.add('active');
+    whatIfBtn?.setAttribute('aria-selected', 'true');
     activeBtn = whatIfBtn;
     if (whatIfView) whatIfView.style.display = 'block';
     renderWhatIfView(state);
   } else if (targetView === 'scoring') {
     scoringBtn?.classList.add('active');
+    scoringBtn?.setAttribute('aria-selected', 'true');
     activeBtn = scoringBtn;
     if (scoringView) scoringView.style.display = 'block';
     renderScoringViewSummary();
   } else if (targetView === 'management') {
     mgmtBtn?.classList.add('active');
+    mgmtBtn?.setAttribute('aria-selected', 'true');
     activeBtn = mgmtBtn;
     if (mgmtView) mgmtView.style.display = 'block';
     renderManagementPage();
@@ -1886,9 +1919,9 @@ function populateTeamFilter() {
     const scopeTag = !isInScope ? '<span class="team-option-scope-tag" title="Outside active group scope">Out of Scope</span>' : '';
     const details = getClubDetails(t.name) || t;
     const short = details.short || details.shortName || t.short || t.name.slice(0, 3).toUpperCase();
-    const venueSub = details.stadium ? `<span class="team-option-venue-sub" title="Stadium: ${details.stadium}, ${details.city}">🏟️ ${details.stadium}${details.city ? ` · 📍 ${details.city}` : ''}</span>` : '';
+    const venueSub = details.stadium ? `<span class="team-option-venue-sub" title="Stadium: ${details.stadium}, ${details.city}">${svgIcon('stadium', 12)} ${details.stadium}${details.city ? ` · ${svgIcon('mapPin', 12)} ${details.city}` : ''}</span>` : '';
     return `
-      <div class="team-option-item ${isSelected ? 'selected' : ''}" data-team="${t.name}" role="option" aria-selected="${isSelected}" title="${t.name} (${short}) · 🏟️ ${details.stadium || 'Stadium'}, ${details.city || 'City'}">
+      <div class="team-option-item ${isSelected ? 'selected' : ''}" data-team="${t.name}" role="option" aria-selected="${isSelected}" title="${t.name} (${short}) · Stadium: ${details.stadium || 'N/A'}, City: ${details.city || 'N/A'}">
         <div class="team-option-row">
           <span class="team-option-checkbox-custom"></span>
           <span class="team-option-crest">${getCrestImg(t.code, t.name)}</span>
@@ -1923,7 +1956,7 @@ function updateTeamMultiSelectUI() {
 
   if (count === 0) {
     displayEl.innerHTML = `
-      <span class="team-filter-all-icon">⚽</span>
+      <span class="team-filter-all-icon">${svgIcon('ball', 14)}</span>
       <span class="team-filter-text">All Teams (20)</span>
     `;
     btn?.classList.remove('active');
@@ -2142,34 +2175,96 @@ function renderGWTabs() {
 
   const activeNum = Number(state.activeGW);
   const startGw = (state.activeGroup && state.activeGroup.start_gw) ? Number(state.activeGroup.start_gw) : 1;
+  const validGWs = (state.gwNumbers || []).filter(g => Number(g) >= startGw);
+  const idx = validGWs.indexOf(activeNum);
+
+  // Update Prev / Next arrow buttons states & tooltips
+  const prevBtn = document.getElementById('gwPrevBtn');
+  const nextBtn = document.getElementById('gwNextBtn');
+  if (prevBtn) {
+    const hasPrev = idx > 0;
+    prevBtn.disabled = !hasPrev;
+    prevBtn.title = hasPrev ? `Previous Gameweek (GW ${validGWs[idx - 1]})` : 'First Gameweek in Scope';
+  }
+  if (nextBtn) {
+    const hasNext = idx !== -1 && idx < validGWs.length - 1;
+    nextBtn.disabled = !hasNext;
+    nextBtn.title = hasNext ? `Next Gameweek (GW ${validGWs[idx + 1]})` : 'Last Gameweek';
+  }
+
+  // Active / Live / Completed metrics
+  const completedGWs = validGWs.filter(g => isGWFinishedForGroup(g));
+  const liveGW = validGWs.find(g => isGWLiveForGroup(g));
+  const autoGW = getAutoActiveGW();
+  const targetLiveOrActiveGw = liveGW ? liveGW : (autoGW || validGWs[0]);
 
   const label = document.getElementById('gwCurrentLabel');
   if (label && state.activeGW) {
-    label.textContent = `GW ${activeNum} of ${state.gwNumbers.length}`;
+    const completedText = `${completedGWs.length}/${validGWs.length} finished`;
+    const liveText = liveGW ? ` • GW ${liveGW} live now` : '';
+    label.textContent = `Viewing GW ${activeNum} of ${validGWs.length} (${completedText}${liveText})`;
+  }
+
+  // Dynamic quick action: "Jump to Active GW" (when viewing another gameweek)
+  const navActions = document.getElementById('gwNavActions');
+  if (navActions) {
+    if (targetLiveOrActiveGw && Number(targetLiveOrActiveGw) !== activeNum) {
+      navActions.innerHTML = `
+        <button type="button" class="btn btn-sm gw-jump-live-btn" id="btnDashJumpToLive" title="Jump to Active GW ${targetLiveOrActiveGw}">
+          ${svgIcon('activity', 13)}
+          <span>Jump to Active (GW ${targetLiveOrActiveGw})</span>
+        </button>
+      `;
+      document.getElementById('btnDashJumpToLive')?.addEventListener('click', () => {
+        state.activeGW = targetLiveOrActiveGw;
+        localStorage.setItem('epl_active_gw', targetLiveOrActiveGw);
+        renderGWTabs();
+        renderMatrix();
+        if (hasActiveTeamFilter()) renderTeamBreakdown();
+      });
+    } else {
+      navActions.innerHTML = '';
+    }
   }
 
   for (const gw of state.gwNumbers) {
     const isFinished = isGWFinishedForGroup(gw);
+    const isLive = isGWLiveForGroup(gw);
     const isBeforeStartGw = gw < startGw;
+    const isSelected = gw === activeNum;
+
     const btn = document.createElement('button');
-    btn.className = `gw-tab${gw === activeNum ? ' active' : ''}${isFinished && !isBeforeStartGw ? ' completed' : ''}${isBeforeStartGw ? ' disabled' : ''}`;
-    btn.innerHTML = (isFinished && !isBeforeStartGw) ? `GW ${gw} <span class="gw-tab-check">✓</span>` : `GW ${gw}`;
+    btn.type = 'button';
+    btn.className = `gw-pill-btn gw-tab ${isSelected ? 'selected active' : ''} ${isLive ? 'pill-live' : ''} ${isFinished && !isBeforeStartGw ? 'pill-completed completed' : ''} ${isBeforeStartGw ? 'disabled' : ''}`;
     btn.id = `gwTab_${gw}`;
-    
+    btn.setAttribute('data-gw', gw);
+    btn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+
+    btn.innerHTML = `
+      <span class="pill-gw-num">GW ${gw}</span>
+      ${isLive ? `<span class="pill-dot-live" title="Live Now"></span>` : ''}
+      ${isFinished && !isBeforeStartGw ? `<span class="pill-check" title="Completed">${svgIcon('checkCircle', 11)}</span>` : ''}
+    `;
+
     if (isBeforeStartGw) {
       btn.disabled = true;
       btn.setAttribute('aria-disabled', 'true');
       btn.setAttribute('title', `GW ${gw} is not active for this league (League starts in GW ${startGw})`);
-    } else if (isFinished) {
-      btn.setAttribute('title', `GW ${gw} (All scoped games finished)`);
-    }
+    } else {
+      if (isLive) {
+        btn.setAttribute('title', `GW ${gw} (Live matches in progress)`);
+      } else if (isFinished) {
+        btn.setAttribute('title', `GW ${gw} (All scoped matches finished)`);
+      } else {
+        btn.setAttribute('title', `GW ${gw} (Upcoming)`);
+      }
 
-    if (!isBeforeStartGw) {
       btn.addEventListener('click', () => {
         state.activeGW = gw;
         localStorage.setItem('epl_active_gw', gw);
         renderGWTabs();
         renderMatrix();
+        if (hasActiveTeamFilter()) renderTeamBreakdown();
       });
     }
 
@@ -2194,6 +2289,7 @@ function initGWSkipControls() {
       localStorage.setItem('epl_active_gw', state.activeGW);
       renderGWTabs();
       renderMatrix();
+      if (hasActiveTeamFilter()) renderTeamBreakdown();
     }
   });
 
@@ -2210,6 +2306,7 @@ function initGWSkipControls() {
       localStorage.setItem('epl_active_gw', state.activeGW);
       renderGWTabs();
       renderMatrix();
+      if (hasActiveTeamFilter()) renderTeamBreakdown();
     }
   });
 }
@@ -2223,7 +2320,7 @@ function renderSnapshot(lb) {
   if (state.auth.role === 'guest') {
     container.innerHTML = `
       <div class="glass-card" style="grid-column: 1/-1; text-align:center; padding: 18px; color: var(--text-muted);">
-        🔒 <strong>Leaderboard Snapshot Hidden for Guests:</strong> Log in with a 6-character player passcode to view rankings!
+        ${svgIcon('lock', 14)} <strong>Leaderboard Snapshot Hidden for Guests:</strong> Log in with a 6-character player passcode to view rankings!
       </div>`;
     return;
   }
@@ -2409,8 +2506,8 @@ function renderTeamBreakdown() {
     document.getElementById('teamBreakdownTitle').innerHTML = `${club?.fullName || team} <span class="team-title-short" style="color:var(--accent-cyan); font-size:var(--font-size-sm, 0.875rem); font-weight:700;">(${club?.shortName || club?.short || ''})</span>`;
     document.getElementById('teamBreakdownSubtitle').innerHTML = `
       <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
-        ${club?.stadium ? `<span class="meta-chip" title="Home Stadium">🏟️ ${club.stadium}</span>` : ''}
-        ${club?.city ? `<span class="meta-chip" title="Club City">📍 ${club.city}</span>` : ''}
+        ${club?.stadium ? `<span class="meta-chip" title="Home Stadium">${svgIcon('stadium', 12)} ${club.stadium}</span>` : ''}
+        ${club?.city ? `<span class="meta-chip" title="Club City">${svgIcon('mapPin', 12)} ${club.city}</span>` : ''}
         <span style="color:var(--text-muted); font-size:var(--font-size-xs, 0.8125rem);">${isGuest ? 'Official Premier League match schedule & results' : 'Participant predictions & breakdown'}</span>
       </span>
     `;
@@ -2611,8 +2708,8 @@ function renderTeamBreakdown() {
       }
     }).join('');
 
-    const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
-    const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
+    const homeTitle = `${f.home_name} (${f.home_short || ''}) - Venue: ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
+    const awayTitle = `${f.away_name} (${f.away_short || ''}) - Venue: ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
 
     return `
       <tr class="${!isMatchInScope ? 'row-out-of-scope' : ''}">
@@ -2638,7 +2735,7 @@ function renderTeamBreakdown() {
             </div>
             <div class="match-meta-line">
               <span class="match-ko">${formatKO(f.kickoff_time, true)}</span>
-              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">${svgIcon('stadium', 12)} ${f.home_stadium}</span>` : ''}
             </div>
           </div>
         </td>
@@ -2693,10 +2790,13 @@ function renderMatrix() {
   }
 
   const subtitleText = isGuest
-    ? `📌 GW ${gw} Fixtures & Results${titleAddon}`
-    : `📅 GW ${gw} Predictions${titleAddon}`;
+    ? `GW ${gw} Fixtures & Results${titleAddon}`
+    : `GW ${gw} Predictions${titleAddon}`;
 
-  document.getElementById('matrixTitle').textContent = subtitleText;
+  const matrixTitleEl = document.getElementById('matrixTitle');
+  if (matrixTitleEl) {
+    matrixTitleEl.innerHTML = `${svgIcon('calendar', 18, 'section-header-svg')} ${escapeHtml(subtitleText)}`;
+  }
 
   const matrixSubEl = document.getElementById('matrixSubtitle');
   if (matrixSubEl) {
@@ -2710,23 +2810,23 @@ function renderMatrix() {
   const yetToPlay = fixtures.filter(f => !isMatchFinished(f) && !isMatchOngoing(f)).length;
 
   const scopeChip = (!isGuest && groupFilter)
-    ? `<span class="meta-chip" style="color:var(--accent-gold);border-color:var(--accent-gold)">🎯 Scope: ${groupFilter.length} Teams</span>`
-    : (!isGuest ? `<span class="meta-chip">⚽ All Teams Scope</span>` : '');
+    ? `<span class="meta-chip" style="color:var(--accent-gold);border-color:var(--accent-gold)">${svgIcon('target', 12)} Scope: ${groupFilter.length} Teams</span>`
+    : (!isGuest ? `<span class="meta-chip">${svgIcon('ball', 12)} All Teams Scope</span>` : '');
 
   let filterChip = '';
   if (selectedTeams.length === 1) {
     const details = getClubDetails(selectedTeams[0]);
-    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]} (${details?.shortName || ''})</span>`;
+    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">${svgIcon('ball', 12)} Team: ${selectedTeams[0]} (${details?.shortName || ''})</span>`;
   } else if (selectedTeams.length > 1) {
-    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`;
+    filterChip = `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">${svgIcon('ball', 12)} Teams: ${selectedTeams.length}</span>`;
   }
 
   const adminChip = state.auth.role === 'admin'
-    ? `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)" title="Admin Override Active: You can edit predictions for any player & completed matches">👑 Admin Edits Enabled</span>`
+    ? `<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)" title="Admin Override Active: You can edit predictions for any player & completed matches">${svgIcon('crown', 12)} Admin Edits Enabled</span>`
     : '';
 
   const liveChip = live > 0
-    ? `<span class="meta-chip" style="color:#ff5572;border-color:rgba(255,85,114,0.4);">⚡ ${live} live</span>`
+    ? `<span class="meta-chip" style="color:#ff5572;border-color:rgba(255,85,114,0.4);">${svgIcon('zap', 12)} ${live} live</span>`
     : '';
 
   document.getElementById('matrixMeta').innerHTML = `
@@ -2734,8 +2834,8 @@ function renderMatrix() {
     ${scopeChip}
     ${filterChip}
     ${liveChip}
-    <span class="meta-chip">✅ ${completed} completed</span>
-    <span class="meta-chip">⏳ ${yetToPlay} yet to play</span>
+    <span class="meta-chip">${svgIcon('check', 12)} ${completed} completed</span>
+    <span class="meta-chip">${svgIcon('clock', 12)} ${yetToPlay} yet to play</span>
   `;
 
   const totalGroupPlayers = isGuest ? [] : [...state.players];
@@ -2758,12 +2858,12 @@ function renderMatrix() {
       const otherCount = totalGroupPlayers.length - 1;
       if (state.matrixShowOtherPlayers) {
         toggleBtn.className = 'btn-matrix-toggle showing-all';
-        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">👥</span><span class="matrix-toggle-text">All Players (${totalGroupPlayers.length})</span>`;
+        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">${svgIcon('users', 14)}</span><span class="matrix-toggle-text">All Players (${totalGroupPlayers.length})</span>`;
         toggleBtn.title = `Currently showing all ${totalGroupPlayers.length} players. Click to hide other players.`;
         toggleBtn.setAttribute('aria-pressed', 'false');
       } else {
         toggleBtn.className = 'btn-matrix-toggle showing-me';
-        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">👤</span><span class="matrix-toggle-text">Only Me <span class="matrix-toggle-pill">+${otherCount} hidden</span></span>`;
+        toggleBtn.innerHTML = `<span class="matrix-toggle-icon">${svgIcon('user', 14)}</span><span class="matrix-toggle-text">Only Me <span class="matrix-toggle-pill">+${otherCount} hidden</span></span>`;
         toggleBtn.title = `Currently hiding ${otherCount} other player${otherCount === 1 ? '' : 's'}. Click to show all players.`;
         toggleBtn.setAttribute('aria-pressed', 'true');
       }
@@ -2809,7 +2909,7 @@ function renderMatrix() {
         ${players.map(() => `
           <th class="col-sub-h" title="Home score prediction">H</th>
           <th class="col-sub-a" title="Away score prediction">A</th>
-          <th class="col-sub-pts" title="Points scored">Pts <span class="pts-info-help" data-rules-help="true" title="Click or tap to view scoring rules">ℹ️</span></th>
+          <th class="col-sub-pts" title="Points scored">Pts <span class="pts-info-help" data-rules-help="true" title="Click or tap to view scoring rules">${svgIcon('info', 13)}</span></th>
         `).join('')}
       </tr>
     `;
@@ -2844,8 +2944,8 @@ function renderMatrix() {
 
     const statusHtml = getMatchStatusHtml(f, isGuest);
 
-    const homeTitle = `${f.home_name} (${f.home_short || ''}) - 🏟️ ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
-    const awayTitle = `${f.away_name} (${f.away_short || ''}) - 🏟️ ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
+    const homeTitle = `${f.home_name} (${f.home_short || ''}) - Venue: ${f.home_stadium || 'Stadium'}${f.home_city ? ', ' + f.home_city : ''}`;
+    const awayTitle = `${f.away_name} (${f.away_short || ''}) - Venue: ${f.away_stadium || 'Stadium'}${f.away_city ? ', ' + f.away_city : ''}`;
 
     if (isGuest) {
       return `
@@ -2870,7 +2970,7 @@ function renderMatrix() {
                 </span>
               </div>
               <div class="match-meta-line">
-                ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+                ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">${svgIcon('stadium', 12)} ${f.home_stadium}</span>` : ''}
               </div>
             </div>
           </td>
@@ -2977,7 +3077,7 @@ function renderMatrix() {
             </div>
             <div class="match-meta-line">
               <span class="match-ko">${formatKO(f.kickoff_time, true)}</span>
-              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">🏟️ ${f.home_stadium}</span>` : ''}
+              ${f.home_stadium ? `<span class="match-venue" title="Venue: ${f.home_stadium}, ${f.home_city}">${svgIcon('stadium', 12)} ${f.home_stadium}</span>` : ''}
             </div>
           </div>
         </td>
@@ -3240,12 +3340,12 @@ function showSaveToast(msg = 'Saved to server', type = 'success') {
   toast.className = 'save-toast';
   if (type === 'error') {
     toast.classList.add('error');
-    if (toastIcon) toastIcon.textContent = '❌';
+    if (toastIcon) toastIcon.innerHTML = svgIcon('cross', 16);
   } else if (type === 'info') {
     toast.classList.add('info');
-    if (toastIcon) toastIcon.textContent = 'ℹ️';
+    if (toastIcon) toastIcon.innerHTML = svgIcon('info', 16);
   } else {
-    if (toastIcon) toastIcon.textContent = '☁️';
+    if (toastIcon) toastIcon.innerHTML = svgIcon('cloud', 16);
   }
 
   if (toastMsg) {
@@ -3292,14 +3392,14 @@ function renderLeaderboard() {
   if (leaderboardMeta) {
     const metaChips = [];
     if (startGw > 1) {
-      metaChips.push(`<span class="meta-chip" style="color:var(--accent-purple);border-color:var(--accent-purple)">🚩 Active: GW ${startGw}+</span>`);
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-purple);border-color:var(--accent-purple)">${svgIcon('flag', 12)} Active: GW ${startGw}+</span>`);
     }
     if (selectedTeams.length === 1) {
       const details = getClubDetails(selectedTeams[0]);
       const shortLabel = details?.short || details?.shortName || '';
-      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Team: ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}</span>`);
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">${svgIcon('ball', 12)} Team: ${selectedTeams[0]}${shortLabel ? ` (${shortLabel})` : ''}</span>`);
     } else if (selectedTeams.length > 1) {
-      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">⚽ Teams: ${selectedTeams.length}</span>`);
+      metaChips.push(`<span class="meta-chip" style="color:var(--accent-cyan);border-color:var(--accent-cyan)">${svgIcon('ball', 12)} Teams: ${selectedTeams.length}</span>`);
     }
     leaderboardMeta.innerHTML = metaChips.join(' ');
   }
@@ -3337,7 +3437,7 @@ function renderLeaderboard() {
     tbody.innerHTML = `
       <tr>
         <td colspan="${4 + SCORING_TIERS.length}" style="text-align:center; padding: 30px; color: var(--text-muted);">
-          🔒 <strong>Leaderboard Table Hidden for Guests:</strong> Log in with a 6-character player passcode or admin password to view rankings and point totals.
+          ${svgIcon('lock', 14)} <strong>Leaderboard Table Hidden for Guests:</strong> Log in with a 6-character player passcode or admin password to view rankings and point totals.
         </td>
       </tr>`;
     return;
@@ -3362,7 +3462,7 @@ function renderLeaderboard() {
     // Late joiner tag if first predicted GW is later than group start GW
     const isLateJoiner = r.firstPredictedGW && r.firstPredictedGW > startGw;
     const lateJoinerTag = isLateJoiner
-      ? `<span class="late-joiner-chip" title="First predicted in Gameweek ${r.firstPredictedGW} (${r.matchesPredicted} matches played)">🚩 GW${r.firstPredictedGW}</span>`
+      ? `<span class="late-joiner-chip" title="First predicted in Gameweek ${r.firstPredictedGW} (${r.matchesPredicted} matches played)">${svgIcon('flag', 11)} GW${r.firstPredictedGW}</span>`
       : '';
 
     return `
@@ -3801,7 +3901,7 @@ function renderScoreHeatmaps() {
   if (players.length > 4 || players.length === 0) {
     if (playerSelect) {
       playerSelect.style.display = '';
-      let optionsHtml = `<option value="ALL" ${currentVal === 'ALL' ? 'selected' : ''}>👥 All Players (Aggregate)</option>`;
+      let optionsHtml = `<option value="ALL" ${currentVal === 'ALL' ? 'selected' : ''}>All Players (Aggregate)</option>`;
       players.forEach(p => {
         const isYou = state.auth.activePlayerId === p.id;
         const isSelected = String(p.id) === String(currentVal);
@@ -3829,7 +3929,7 @@ function renderScoreHeatmaps() {
           style="--pill-color: #a855f7; --pill-border: rgba(168, 85, 247, 0.35); --pill-bg: rgba(168, 85, 247, 0.08); --pill-hover-bg: rgba(168, 85, 247, 0.16); --pill-active-bg: linear-gradient(135deg, #a855f7, #6366f1); --pill-glow: rgba(168, 85, 247, 0.45); --pill-light-bg: rgba(168, 85, 247, 0.07); --pill-light-border: rgba(168, 85, 247, 0.3);"
           title="View Aggregate Predictions of All Players"
           aria-pressed="${isAllActive ? 'true' : 'false'}">
-          <span class="heatmap-player-pill-icon">👥</span>
+          <span class="heatmap-player-pill-icon">${svgIcon('users', 14)}</span>
           <span class="heatmap-player-pill-name">All</span>
         </button>
       `;
@@ -4149,7 +4249,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
       <div class="heatmap-highlight-grid">
         <div class="heatmap-top-highlight-card card-top-earner">
           <div class="heatmap-highlight-top">
-            <span class="heatmap-highlight-badge badge-earner">⭐ ${topLabel}</span>
+            <span class="heatmap-highlight-badge badge-earner">${svgIcon('sparkles', 12)} ${topLabel}</span>
             <span class="heatmap-highlight-score badge-score-earner">${topVal}</span>
           </div>
           <div class="heatmap-highlight-desc">
@@ -4161,7 +4261,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
 
         <div class="heatmap-top-highlight-card card-most-missed">
           <div class="heatmap-highlight-top">
-            <span class="heatmap-highlight-badge badge-missed">⚠️ ${missedLabel}</span>
+            <span class="heatmap-highlight-badge badge-missed">${svgIcon('alert', 12)} ${missedLabel}</span>
             <span class="heatmap-highlight-score badge-score-missed">${missedVal}</span>
           </div>
           <div class="heatmap-highlight-desc">
@@ -4176,21 +4276,21 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
       <div class="heatmap-outcome-section">
         <div class="heatmap-outcome-header">
           <span>Outcome Breakdown</span>
-          <span class="heatmap-outcome-legend">🏠 Home Win + 🤝 Drawn + ✈️ Away Win = 100%</span>
+          <span class="heatmap-outcome-legend">${svgIcon('home', 12)} Home Win + ${svgIcon('handshake', 12)} Drawn + ${svgIcon('plane', 12)} Away Win = 100%</span>
         </div>
 
         <!-- Stacked 100% Distribution Bar -->
         <div class="heatmap-stacked-bar">
-          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="🏠 ${kpiHwLabel}: ${kpiHwVal} (${homeWins} of ${countTotal} ${itemLabel})"></div>
-          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="🤝 ${kpiDrLabel}: ${kpiDrVal} (${draws} of ${countTotal} ${itemLabel})"></div>
-          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="✈️ ${kpiAwLabel}: ${kpiAwVal} (${awayWins} of ${countTotal} ${itemLabel})"></div>
+          <div class="heatmap-stacked-seg seg-home" style="width: ${kpiHwBar}%;" title="Home ${kpiHwLabel}: ${kpiHwVal} (${homeWins} of ${countTotal} ${itemLabel})"></div>
+          <div class="heatmap-stacked-seg seg-draw" style="width: ${kpiDrBar}%;" title="Draw ${kpiDrLabel}: ${kpiDrVal} (${draws} of ${countTotal} ${itemLabel})"></div>
+          <div class="heatmap-stacked-seg seg-away" style="width: ${kpiAwBar}%;" title="Away ${kpiAwLabel}: ${kpiAwVal} (${awayWins} of ${countTotal} ${itemLabel})"></div>
         </div>
 
         <!-- 3 Proportional Outcome Cards -->
         <div class="heatmap-outcome-cards">
           <div class="heatmap-outcome-card card-home">
             <div class="heatmap-outcome-card-top">
-              <span>🏠 ${kpiHwLabel}</span>
+              <span>${svgIcon('home', 12)} ${kpiHwLabel}</span>
               <span class="heatmap-outcome-axis-hint">(H > A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiHwVal}</div>
@@ -4199,7 +4299,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
 
           <div class="heatmap-outcome-card card-draw">
             <div class="heatmap-outcome-card-top">
-              <span>🤝 ${kpiDrLabel}</span>
+              <span>${svgIcon('handshake', 12)} ${kpiDrLabel}</span>
               <span class="heatmap-outcome-axis-hint">(H = A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiDrVal}</div>
@@ -4208,7 +4308,7 @@ function renderSingleHeatmapGrid({ type, containerId, summaryId, data, cardId, t
 
           <div class="heatmap-outcome-card card-away">
             <div class="heatmap-outcome-card-top">
-              <span>✈️ ${kpiAwLabel}</span>
+              <span>${svgIcon('plane', 12)} ${kpiAwLabel}</span>
               <span class="heatmap-outcome-axis-hint">(H < A)</span>
             </div>
             <div class="heatmap-outcome-val">${kpiAwVal}</div>
@@ -4241,7 +4341,7 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
     const cellSamples = samples[a]?.[h] || [];
 
     const outcomeClass = h > a ? 'outcome-home' : h < a ? 'outcome-away' : 'outcome-draw';
-    const outcomeLabel = h > a ? '🏠 Home Win' : h < a ? '✈️ Away Win' : '🤝 Drawn';
+    const outcomeLabel = h > a ? `${svgIcon('home', 12)} Home Win` : h < a ? `${svgIcon('plane', 12)} Away Win` : `${svgIcon('handshake', 12)} Drawn`;
 
     let samplesSectionHtml = '';
     if (cellSamples.length > 0) {
@@ -4249,7 +4349,7 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
         samplesSectionHtml = `
           <div class="heatmap-tt-samples-box">
             <div class="heatmap-tt-samples-header">
-              <span>🏟️ Recent Match Examples</span>
+              <span>${svgIcon('stadium', 14)} Recent Match Examples</span>
               <span class="heatmap-tt-samples-count">${cellSamples.length} fixture${cellSamples.length === 1 ? '' : 's'}</span>
             </div>
             <div class="heatmap-tt-match-list">
@@ -4275,7 +4375,7 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
         samplesSectionHtml = `
           <div class="heatmap-tt-samples-box">
             <div class="heatmap-tt-samples-header">
-              <span>🎯 Prediction Matches</span>
+              <span>${svgIcon('target', 14)} Prediction Matches</span>
               <span class="heatmap-tt-samples-count">${cellSamples.length} sample${cellSamples.length === 1 ? '' : 's'}</span>
             </div>
             <div class="heatmap-tt-match-list">
@@ -4327,7 +4427,7 @@ function attachHeatmapCellTooltips(container, samples, type, itemLabel = 'matche
           <span class="heatmap-tt-score-val">${h} - ${a}</span>
           <span class="heatmap-tt-outcome-badge ${outcomeClass}">${outcomeLabel}</span>
         </div>
-        <span class="heatmap-tt-type-pill">${type === 'actual' ? '⚽ Actual' : '🎯 Predicted'}</span>
+        <span class="heatmap-tt-type-pill">${type === 'actual' ? `${svgIcon('ball', 12)} Actual` : `${svgIcon('target', 12)} Predicted`}</span>
       </div>
 
       <div class="heatmap-tt-metrics-grid">
@@ -4773,21 +4873,24 @@ function renderChartGWStrip(activeGWNumbers) {
       role="tab" 
       aria-selected="${isOverview ? 'true' : 'false'}"
       title="Season Overview across all Gameweeks">
-      🌐 All GWs
+      All GWs
     </button>
   `;
 
   activeGWNumbers.forEach(g => {
     const isAct = currentGw === g;
     const isFinished = isGWFinishedForGroup(g);
+    const isLive = isGWLiveForGroup(g);
     html += `
       <button type="button" 
-        class="chart-gw-pill ${isAct ? 'active' : ''}${isFinished ? ' completed' : ''}" 
+        class="chart-gw-pill ${isAct ? 'active' : ''}${isLive ? ' pill-live' : ''}${isFinished ? ' completed' : ''}" 
         data-gw="${g}" 
         role="tab" 
         aria-selected="${isAct ? 'true' : 'false'}"
         title="Isolate GW ${g} match-by-match chart">
-        GW ${g}${isFinished ? ' <span class="chart-gw-check">✓</span>' : ''}
+        GW ${g}
+        ${isLive ? `<span class="pill-dot-live" title="Live Now"></span>` : ''}
+        ${isFinished ? `<span class="pill-check chart-gw-check" title="Completed">${svgIcon('checkCircle', 11)}</span>` : ''}
       </button>
     `;
   });
@@ -4825,7 +4928,7 @@ function renderCumulativeChart() {
     if (chartSubtitle) chartSubtitle.textContent = 'Cumulative total points tracked across all completed gameweeks';
     wrapper.innerHTML = `
       <div style="text-align:center; padding:40px; color:var(--text-muted);">
-        🔒 <strong>Points Progression Chart Hidden for Guests:</strong> Log in with a player passcode to view cumulative charts.
+        ${svgIcon('lock', 14)} <strong>Points Progression Chart Hidden for Guests:</strong> Log in with a player passcode to view cumulative charts.
       </div>`;
     legendContainer.innerHTML = '';
     return;
@@ -4845,7 +4948,7 @@ function renderCumulativeChart() {
 
     if (drilldownBadge) {
       drilldownBadge.style.display = 'inline-flex';
-      drilldownBadge.innerHTML = `🔍 GW ${gw} Drilldown`;
+      drilldownBadge.innerHTML = `${svgIcon('search', 12)} GW ${gw} Drilldown`;
     }
     if (drilldownNav) {
       drilldownNav.style.display = 'none';
@@ -4889,9 +4992,9 @@ function renderCumulativeChart() {
 
     if (drilldownModeSelect) {
       drilldownModeSelect.innerHTML = `
-        <option value="none" selected>🔍 Drill Down: Off</option>
+        <option value="none" selected>Drill Down: Off</option>
         ${activeGWNumbers.map(g => `
-          <option value="${g}">🔍 Drill Down: GW ${g}</option>
+          <option value="${g}">Drill Down: GW ${g}</option>
         `).join('')}
       `;
     }
@@ -5592,7 +5695,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
 
       tooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span>⚽ GW ${it.gw} · Match ${it.matchIdx + 1} of ${it.totalMatchesInGw}</span>
+          <span>${svgIcon('ball', 13)} GW ${it.gw} · Match ${it.matchIdx + 1} of ${it.totalMatchesInGw}</span>
         </div>
         <div class="chart-tooltip-matchup">
           <span class="tooltip-team-badge" title="${f.home_name}">
@@ -5627,12 +5730,12 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             `;
       }).join('')}
         </div>
-        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click match to collapse GW ${it.gw}</div>` : ''}
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">${svgIcon('play', 10)} Click match to collapse GW ${it.gw}</div>` : ''}
       `;
     } else if (!data.isPlayed) {
       tooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span>📅 GW ${it.gw} (Upcoming)</span>
+          <span>${svgIcon('calendar', 13)} GW ${it.gw} (Upcoming)</span>
         </div>
         <div class="chart-tooltip-list">
           ${data.players.map(p => `
@@ -5649,12 +5752,12 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             </div>
           `).join('')}
         </div>
-        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>` : ''}
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">${svgIcon('play', 10)} Click to expand GW ${it.gw} matches inline</div>` : ''}
       `;
     } else {
       tooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span>📅 GW ${it.gw} Standings</span>
+          <span>${svgIcon('calendar', 13)} GW ${it.gw} Standings</span>
         </div>
         <div class="chart-tooltip-list">
           ${data.players.map(p => `
@@ -5671,7 +5774,7 @@ function attachAllGwTooltipHandlers(itemStandings, svgWidth) {
             </div>
           `).join('')}
         </div>
-        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">👆 Click to expand GW ${it.gw} matches inline</div>` : ''}
+        ${isChartExpandable() ? `<div class="chart-tooltip-drilldown-hint">${svgIcon('play', 10)} Click to expand GW ${it.gw} matches inline</div>` : ''}
       `;
     }
 
@@ -5956,7 +6059,7 @@ function renderGameweekMatchesChart(gw) {
         <image href="${awayCrestUrl}" x="${x + 4}" y="${crestY}" width="${crestSize}" height="${crestSize}" preserveAspectRatio="xMidYMid meet" />
 
         <!-- Team Short Code Matchup: MCI v ARS (with clean live dot if live) -->
-        <text x="${x}" y="${textY}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-muted)'}" font-size="${isMobile ? '8.5' : '9.5'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${isLive ? '<tspan fill="#ef4444" font-size="9">🔴 </tspan>' : ''}${homeShort} v ${awayShort}</text>
+        <text x="${x}" y="${textY}" fill="${isPlayed ? 'var(--text-main)' : 'var(--text-muted)'}" font-size="${isMobile ? '8.5' : '9.5'}" font-weight="700" text-anchor="middle" font-family="var(--font-title)">${isLive ? '<tspan fill="#ef4444" font-size="10">● </tspan>' : ''}${homeShort} v ${awayShort}</text>
       </g>
     `;
   });
@@ -6337,7 +6440,7 @@ function attachMatchTooltipHandlers(matchStandings, svgWidth) {
 
     tooltip.innerHTML = `
       <div class="chart-tooltip-header">
-        <span>⚽ GW ${data.gw} · Match ${matchIdx + 1} of ${totalMatches}</span>
+        <span>${svgIcon('ball', 13)} GW ${data.gw} · Match ${matchIdx + 1} of ${totalMatches}</span>
       </div>
       <div class="chart-tooltip-matchup">
         <span class="tooltip-team-badge" title="${f.home_name}">
@@ -6461,7 +6564,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       <div class="pts-tooltip-header">
         <div class="pts-tooltip-header-left">
           <div class="pts-tooltip-title-wrap">
-            <div class="pts-tooltip-icon-badge rules-guide">📖</div>
+            <div class="pts-tooltip-icon-badge rules-guide">${svgIcon('fileText', 16)}</div>
             <div class="pts-tooltip-title-meta">
               <div class="pts-tooltip-title-row">
                 <span class="pts-tooltip-tier-name">Scoring Engine Rules</span>
@@ -6475,7 +6578,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
 
       <div class="pts-rules-section" style="border-top:none; padding-top:0;">
         <div class="pts-rules-title">
-          <span>🏆 Base Points</span>
+          <span>${svgIcon('trophy', 14)} Base Points</span>
           <span class="pts-rules-sub">Highest achieved tier awarded</span>
         </div>
         <div class="pts-rules-list">
@@ -6495,7 +6598,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
         </div>
 
         <div class="pts-rules-title" style="margin-top:16px;">
-          <span>🔥 Additive Bonus Points</span>
+          <span>${svgIcon('flame', 14)} Additive Bonus Points</span>
           <span class="pts-rules-sub">Stackable on correct outcomes</span>
         </div>
         <div class="pts-rules-list">
@@ -6570,7 +6673,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
     for (const b of breakdown.bonuses) {
       items.push(`<span class="pts-formula-item bonus">${renderIconElement(b.icon, b.icon_type, 16)} ${b.name} (+${b.pts} pt)</span>`);
     }
-    const cardTitle = isLive ? '⚡ Live Score Breakdown (Match in progress)' : '⚡ How This Score Was Achieved';
+    const cardTitle = isLive ? `${svgIcon('zap', 14)} Live Score Breakdown (Match in progress)` : `${svgIcon('zap', 14)} How This Score Was Achieved`;
     const totalColor = isLive ? '#ff5572' : 'var(--accent-green)';
     formulaHtml = `
       <div class="pts-breakdown-card ${isLive ? 'live-breakdown' : ''}">
@@ -6582,14 +6685,14 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   } else if (breakdown.status === 'no_prediction') {
     formulaHtml = `
       <div class="pts-breakdown-card no-pred">
-        <div class="pts-breakdown-card-title" style="color:var(--accent-rose);">⚠️ Prediction Status</div>
+        <div class="pts-breakdown-card-title" style="color:var(--accent-rose);">${svgIcon('alert', 14)} Prediction Status</div>
         <div class="pts-breakdown-explanation" style="color:var(--text-main);">No score prediction was entered by ${player.name} for this match (0 points awarded).</div>
       </div>
     `;
   } else {
     formulaHtml = `
       <div class="pts-breakdown-card upcoming">
-        <div class="pts-breakdown-card-title">⏳ Match Upcoming</div>
+        <div class="pts-breakdown-card-title">${svgIcon('clock', 14)} Match Upcoming</div>
         <div class="pts-breakdown-explanation">Prediction submitted: <strong style="color:var(--text-main); font-family:var(--font-title);">${breakdown.predScore || 'None'}</strong>. Points will be automatically computed dynamically as the match kicks off and progresses.</div>
       </div>
     `;
@@ -6726,7 +6829,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   }
   miniGridHtml += `
     <div class="mini-hm-legend-item">
-      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">🔥</span>
+      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">${svgIcon('flame', 10)}</span>
       <span>Bonus Active</span>
     </div>
   `;
@@ -6743,7 +6846,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
           ${awayCrest}
           ${gwText ? `<span style="color:var(--accent-purple); font-size:var(--font-size-2xs, 0.75rem); font-weight:700;">(${gwText})</span>` : ''}
         </div>
-        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
+        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">${svgIcon('stadium', 12)} ${fixture.home_stadium}${fixture.home_city ? ` · ${svgIcon('mapPin', 12)} ${fixture.home_city}` : ''}</div>` : ''}
         <div class="pts-tooltip-player-tag" style="border-color:${pColor}55; color:${pColor};">
           <span class="player-color-dot" style="background:${pColor}; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
           <span>${player.name}</span>
@@ -6775,7 +6878,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
 
     <div class="pts-rules-section">
       <div class="pts-rules-title">
-        <span>📖 Scoring Tiers</span>
+        <span>${svgIcon('fileText', 14)} Scoring Tiers</span>
         <span class="pts-rules-sub">Highest achieved tier awarded</span>
       </div>
       <div class="pts-rules-list">
@@ -6798,7 +6901,7 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
       </div>
 
       <div class="pts-rules-title" style="margin-top:14px;">
-        <span>🔥 Bonus Rules</span>
+        <span>${svgIcon('flame', 14)} Bonus Rules</span>
         <span class="pts-rules-sub">Additive bonus points</span>
       </div>
       <div class="pts-rules-list">
@@ -6857,7 +6960,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
 
     <div class="pts-requirement-card tier-${tier.tier}">
       <div class="pts-requirement-header">
-        <span class="pts-requirement-icon">📋</span>
+        <span class="pts-requirement-icon">${svgIcon('table', 14)}</span>
         <span class="pts-requirement-title">Tier Requirement</span>
       </div>
       <div class="pts-requirement-desc">${tier.desc}</div>
@@ -6866,7 +6969,7 @@ function renderTierHelpTooltip(tierNumber, playerName = null, count = null) {
 
     <div class="pts-rules-section">
       <div class="pts-rules-title">
-        <span>📊 All Scoring Tiers Comparison</span>
+        <span>${svgIcon('chartBar', 14)} All Scoring Tiers Comparison</span>
         <span class="pts-rules-sub">Highest match tier awarded</span>
       </div>
       <div class="pts-rules-list">
@@ -7089,7 +7192,7 @@ function renderMatchOverviewTooltip(matchId) {
   }
   miniGridHtml += `
     <div class="mini-hm-legend-item">
-      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">🔥</span>
+      <span class="mini-cell-bonus-pip" style="position:static; display:inline-flex; padding:1px 3px;">${svgIcon('flame', 10)}</span>
       <span>Bonus Active</span>
     </div>
   `;
@@ -7175,7 +7278,7 @@ function renderMatchOverviewTooltip(matchId) {
           ${awayCrest}
           ${gwText ? `<span style="color:var(--accent-purple); font-size:var(--font-size-2xs, 0.75rem); font-weight:700;">(${gwText})</span>` : ''}
         </div>
-        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">🏟️ ${fixture.home_stadium}${fixture.home_city ? ` · 📍 ${fixture.home_city}` : ''}</div>` : ''}
+        ${fixture?.home_stadium ? `<div class="pts-tooltip-venue-line" style="font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim); margin-top:2px;">${svgIcon('stadium', 12)} ${fixture.home_stadium}${fixture.home_city ? ` · ${svgIcon('mapPin', 12)} ${fixture.home_city}` : ''}</div>` : ''}
         <div class="pts-tooltip-match-status-wrap" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
           ${isLive ? `
             <span class="pts-match-status-badge live">
@@ -7226,7 +7329,7 @@ function renderMatchOverviewTooltip(matchId) {
 
     <div class="pts-rules-section match-players-section">
       <div class="pts-rules-title">
-        <span>👥 Group Player Predictions (${predCount}/${players.length})</span>
+        <span>${svgIcon('users', 14)} Group Player Predictions (${predCount}/${players.length})</span>
         <span class="pts-rules-sub">Ranked by points</span>
       </div>
       <div class="match-players-list">
@@ -7501,7 +7604,7 @@ function renderTeamSelectionGrid() {
     const teamObj = Object.values(state.teams).find(t => t.name === name);
     const code = teamObj?.code;
     const details = getClubDetails(name) || teamObj;
-    const title = `${name} (${details?.shortName || ''}) - 🏟️ ${details?.stadium || 'Stadium'}, ${details?.city || 'City'}`;
+    const title = `${name} (${details?.shortName || ''}) - Stadium: ${details?.stadium || 'Stadium'}, ${details?.city || 'City'}`;
     return `
       <label class="team-filter-chip" title="${title}">
         <input type="checkbox" value="${name}" class="mgmt-team-checkbox">
@@ -7571,14 +7674,36 @@ function renderScoringViewSummary() {
 
       return `
         <div class="glass-card scoring-rule-card tier-${t.tier}">
-          <div class="rule-icon" style="font-size:var(--font-size-2xl, 1.625rem); line-height: 1;">${renderIconElement(t.icon, t.icon_type, 36)}</div>
-          <div class="rule-title">Tier ${t.tier} — ${t.name}</div>
-          <div class="rule-pts">${t.pts} ${t.pts === 1 ? 'Pt' : 'Pts'}</div>
+          <!-- Top Bar: Tier Chip + Points Pill -->
+          <div class="rule-card-top-bar">
+            <div class="rule-tier-chip tier-${t.tier}">
+              <span class="rule-tier-number">TIER ${t.tier}</span>
+            </div>
+            <div class="rule-pts-pill tier-${t.tier}">
+              <span class="pts-number">${t.pts}</span>
+              <span class="pts-unit">${t.pts === 1 ? 'POINT' : 'POINTS'}</span>
+            </div>
+          </div>
+
+          <!-- Main Identity Row: Icon + Name -->
+          <div class="rule-identity-row">
+            <div class="rule-icon-box tier-${t.tier}">
+              ${renderIconElement(t.icon, t.icon_type, 32)}
+            </div>
+            <div class="rule-title-group">
+              <h4 class="rule-title">${t.name}</h4>
+              <span class="rule-condition-type">${t.shortDesc || ''}</span>
+            </div>
+          </div>
+
+          <!-- Description Body -->
           <p class="rule-desc">${t.desc || t.shortDesc || ''}</p>
+
+          <!-- Example Matchup Verification Box -->
           <div class="rule-example-box">
             <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim);">(Lowest score threshold)</span></span>
+              <span class="example-label">MATCHUP VERIFICATION</span>
+              <span class="example-subtext">Lowest qualifying scoreline</span>
             </div>
             <div class="rule-example-body">
               ${renderExampleChipsFromString(exDisplay)}
@@ -7605,15 +7730,37 @@ function renderScoringViewSummary() {
       const exDisplay = b.example || exPreset.exampleStr;
 
       return `
-        <div class="glass-card scoring-rule-card bonus-${idx + 1}">
-          <div class="rule-icon" style="font-size:var(--font-size-2xl, 1.625rem);">${renderIconElement(b.icon, b.icon_type, 36)}</div>
-          <div class="rule-title">${b.name}</div>
-          <div class="rule-pts">+${b.pts} ${b.pts === 1 ? 'Pt' : 'Pts'}</div>
+        <div class="glass-card scoring-rule-card bonus-card bonus-${idx + 1}">
+          <!-- Top Bar: Additive Tag + Stacking Points Pill -->
+          <div class="rule-card-top-bar">
+            <div class="rule-tier-chip bonus-chip">
+              <span class="rule-tier-number">STACKABLE BONUS</span>
+            </div>
+            <div class="rule-pts-pill bonus-pts-pill">
+              <span class="pts-number">+${b.pts}</span>
+              <span class="pts-unit">${b.pts === 1 ? 'POINT' : 'POINTS'}</span>
+            </div>
+          </div>
+
+          <!-- Main Identity Row: Icon + Name -->
+          <div class="rule-identity-row">
+            <div class="rule-icon-box bonus-icon-box">
+              ${renderIconElement(b.icon, b.icon_type, 32)}
+            </div>
+            <div class="rule-title-group">
+              <h4 class="rule-title">${b.name}</h4>
+              <span class="rule-condition-type">${b.shortDesc || 'Additive Match Multiplier'}</span>
+            </div>
+          </div>
+
+          <!-- Description Body -->
           <p class="rule-desc">${b.desc || b.shortDesc || ''}</p>
+
+          <!-- Example Matchup Widget -->
           <div class="rule-example-box">
             <div class="rule-example-header">
-              <span class="rule-example-icon">💡</span>
-              <span class="rule-example-title">Example Scenario <span style="font-weight:400; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-dim);">(Lowest score threshold)</span></span>
+              <span class="example-label">STACKING TRIGGER EXAMPLE</span>
+              <span class="example-subtext">Adds directly to base tier score</span>
             </div>
             <div class="rule-example-body">
               ${renderExampleChipsFromString(exDisplay)}
@@ -7706,40 +7853,44 @@ function renderComprehensiveScenariosMatrix() {
     const totalGoals = actH + actA;
 
     const highScoringHtml = res.highScoringBonus > 0
-      ? `<span class="pts-pill p-bonus">+${res.highScoringBonus}</span>`
+      ? `<span class="pts-pill p-bonus font-mono font-bold">+${res.highScoringBonus}</span>`
       : `<span style="color:var(--text-dim);">—</span>`;
 
     const drawBonusHtml = res.drawBonus > 0
-      ? `<span class="pts-pill p-bonus">+${res.drawBonus}</span>`
+      ? `<span class="pts-pill p-bonus font-mono font-bold">+${res.drawBonus}</span>`
       : `<span style="color:var(--text-dim);">—</span>`;
 
     return `
       <tr>
         <td>
-          <div style="font-weight:700; font-size:var(--font-size-base, 0.9375rem); color:var(--text-main);">${actH} – ${actA}</div>
-          <div style="color:var(--text-muted); font-size:var(--font-size-2xs, 0.75rem);">Total ${totalGoals} goals</div>
+          <div class="scenario-score-cell">
+            <span class="scenario-score-pill actual-pill font-mono">${actH} – ${actA}</span>
+            <div class="scenario-score-sub">${totalGoals} match goals</div>
+          </div>
         </td>
         <td>
-          <div style="font-weight:700; font-size:var(--font-size-base, 0.9375rem); color:var(--accent-cyan);">${predH} – ${predA}</div>
-          <div style="color:var(--text-muted); font-size:var(--font-size-2xs, 0.75rem);">${note}</div>
+          <div class="scenario-score-cell">
+            <span class="scenario-score-pill pred-pill font-mono">${predH} – ${predA}</span>
+            <div class="scenario-score-sub">${note}</div>
+          </div>
         </td>
         <td>
-          <span class="pts-badge ${tierObj.badgeClass}" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:var(--font-size-xs, 0.8125rem); padding:4px 10px;">
+          <span class="pts-badge ${tierObj.badgeClass} scenario-tier-badge" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:var(--font-size-xs, 0.8125rem); padding:4px 10px;">
             ${renderIconElement(tierObj.icon, tierObj.icon_type, 18)}
             <span>${tierObj.name}</span>
           </span>
         </td>
-        <td style="text-align:center; font-weight:700; font-size:var(--font-size-sm, 0.875rem); color:var(--text-main);">
+        <td class="text-center font-mono font-bold" style="font-size:var(--font-size-sm, 0.875rem); color:var(--text-main);">
           ${res.base} ${res.base === 1 ? 'Pt' : 'Pts'}
         </td>
-        <td style="text-align:center;">
+        <td class="text-center font-mono font-bold">
           ${highScoringHtml}
         </td>
-        <td style="text-align:center;">
+        <td class="text-center font-mono font-bold">
           ${drawBonusHtml}
         </td>
-        <td style="text-align:center;">
-          <strong style="color:var(--accent-green); font-size:var(--font-size-lg, 1.1875rem); font-family:var(--font-title);">${total} ${total === 1 ? 'Pt' : 'Pts'}</strong>
+        <td class="text-center">
+          <span class="scenario-total-pill font-mono">${total} ${total === 1 ? 'Pt' : 'Pts'}</span>
         </td>
       </tr>
     `;
@@ -7811,6 +7962,17 @@ function initScoreSimulator() {
     }
   });
 
+  // Scoreline Presets
+  document.querySelectorAll('.sim-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const h = parseInt(btn.dataset.h, 10);
+      const a = parseInt(btn.dataset.a, 10);
+      document.querySelectorAll('.sim-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      setSimulatorReferenceScore(h, a);
+    });
+  });
+
   updateScoreSimulator();
 }
 
@@ -7827,6 +7989,13 @@ function setSimulatorReferenceScore(h, a) {
   const refAwayEl = document.getElementById('simRefAway');
   if (refHomeEl) refHomeEl.value = h;
   if (refAwayEl) refAwayEl.value = a;
+
+  // Sync active preset button highlight if matches
+  document.querySelectorAll('.sim-preset-btn').forEach(b => {
+    const bh = parseInt(b.dataset.h, 10);
+    const ba = parseInt(b.dataset.a, 10);
+    b.classList.toggle('active', bh === h && ba === a);
+  });
 
   const tooltip = document.getElementById('simCellTooltip');
   if (tooltip) tooltip.style.display = 'none';
@@ -7993,7 +8162,7 @@ function updateScoreSimulator() {
       <div class="heatmap-highlight-grid">
         <div class="heatmap-top-highlight-card card-top-earner">
           <div class="heatmap-highlight-top">
-            <span class="heatmap-highlight-badge badge-earner">⭐ MAX ACHIEVABLE</span>
+            <span class="heatmap-highlight-badge badge-earner">${svgIcon('sparkles', 12)} MAX ACHIEVABLE</span>
             <span class="heatmap-highlight-score badge-score-earner">${maxPoints} pts</span>
           </div>
           <div class="heatmap-highlight-desc">Exact score match (${refH}–${refA})</div>
@@ -8001,7 +8170,7 @@ function updateScoreSimulator() {
 
         <div class="heatmap-top-highlight-card card-most-missed">
           <div class="heatmap-highlight-top">
-            <span class="heatmap-highlight-badge badge-missed">🎯 POINTS REACH</span>
+            <span class="heatmap-highlight-badge badge-missed">${svgIcon('target', 12)} POINTS REACH</span>
             <span class="heatmap-highlight-score badge-score-missed">${coveragePct}%</span>
           </div>
           <div class="heatmap-highlight-desc">${pointsEarningCount} of ${totalScorelines} scorelines earn points (avg ${avgPts}p)</div>
@@ -8016,15 +8185,15 @@ function updateScoreSimulator() {
         </div>
 
         <div class="heatmap-stacked-bar">
-          <div class="heatmap-stacked-seg seg-home" style="width: ${hwPct}%;" title="🏠 Home Wins: ${hwPoints} pts (${hwPct}%)"></div>
-          <div class="heatmap-stacked-seg seg-draw" style="width: ${drPct}%;" title="🤝 Draws: ${drPoints} pts (${drPct}%)"></div>
-          <div class="heatmap-stacked-seg seg-away" style="width: ${awPct}%;" title="✈️ Away Wins: ${awPoints} pts (${awPct}%)"></div>
+          <div class="heatmap-stacked-seg seg-home" style="width: ${hwPct}%;" title="Home Wins: ${hwPoints} pts (${hwPct}%)"></div>
+          <div class="heatmap-stacked-seg seg-draw" style="width: ${drPct}%;" title="Draws: ${drPoints} pts (${drPct}%)"></div>
+          <div class="heatmap-stacked-seg seg-away" style="width: ${awPct}%;" title="Away Wins: ${awPoints} pts (${awPct}%)"></div>
         </div>
 
         <div class="heatmap-outcome-cards">
           <div class="heatmap-outcome-card card-home">
             <div class="heatmap-outcome-card-top">
-              <span>🏠 Home Win Preds</span>
+              <span>${svgIcon('home', 13)} Home Win Preds</span>
             </div>
             <div class="heatmap-outcome-val">${hwPoints} pts</div>
             <div class="heatmap-outcome-sub">${hwPct}% of points pool (${hwCount} cells)</div>
@@ -8032,7 +8201,7 @@ function updateScoreSimulator() {
 
           <div class="heatmap-outcome-card card-draw">
             <div class="heatmap-outcome-card-top">
-              <span>🤝 Draw Preds</span>
+              <span>${svgIcon('handshake', 13)} Draw Preds</span>
             </div>
             <div class="heatmap-outcome-val">${drPoints} pts</div>
             <div class="heatmap-outcome-sub">${drPct}% of points pool (${drCount} cells)</div>
@@ -8040,7 +8209,7 @@ function updateScoreSimulator() {
 
           <div class="heatmap-outcome-card card-away">
             <div class="heatmap-outcome-card-top">
-              <span>✈️ Away Win Preds</span>
+              <span>${svgIcon('plane', 13)} Away Win Preds</span>
             </div>
             <div class="heatmap-outcome-val">${awPoints} pts</div>
             <div class="heatmap-outcome-sub">${awPct}% of points pool (${awCount} cells)</div>
@@ -8089,7 +8258,7 @@ function renderSimulatorInspector(inspH, inspA, refH, refA) {
   container.innerHTML = `
     <div class="sim-inspector-header">
       <div class="sim-inspector-title-wrap">
-        <span class="sim-inspector-tag">${isPinned ? '📌 Selected Scoreline' : '👁️ Hover Preview'}</span>
+        <span class="sim-inspector-tag">${isPinned ? `${svgIcon('pin', 12)} Selected Scoreline` : `${svgIcon('eye', 12)} Hover Preview`}</span>
         <h4 class="sim-inspector-score">${inspH} – ${inspA}</h4>
       </div>
       <div class="sim-total-pts-badge ${hasBonus ? 'pts-badge-gold has-bonus-border' : `tier-${tierObj.tier}`}">
@@ -8104,13 +8273,13 @@ function renderSimulatorInspector(inspH, inspA, refH, refA) {
         <span class="sim-matchup-item">Actual: <strong>${refH}–${refA}</strong></span>
         <span class="sim-matchup-vs">vs</span>
         <span class="sim-matchup-item">Prediction: <strong>${inspH}–${inspA}</strong></span>
-        ${isExactRef ? '<span class="sim-matchup-star">🎯 Entered Reference Prediction</span>' : ''}
+        ${isExactRef ? `<span class="sim-matchup-star">${svgIcon('target', 12)} Entered Reference Prediction</span>` : ''}
       </div>
 
       <!-- Action Button: Set as Reference Score -->
       ${!isExactRef ? `
         <button type="button" class="btn btn-secondary sim-set-ref-btn" id="simSetRefBtn">
-          <span>⚽</span> Set ${inspH}–${inspA} as Reference Score
+          ${svgIcon('ball', 14)} Set ${inspH}–${inspA} as Reference Score
         </button>
       ` : ''}
 
@@ -8145,7 +8314,7 @@ function renderSimulatorInspector(inspH, inspA, refH, refA) {
     </div>
 
     <div class="sim-inspector-footer">
-      <span>💡 Single-click cell to inspect | Double-click to set as reference</span>
+      <span>${svgIcon('lightbulb', 13)} Single-click cell to inspect | Double-click to set as reference</span>
     </div>
   `;
 
@@ -8327,7 +8496,7 @@ function openCreatePlayerModal() {
         return `
           <label class="mgmt-group-checkbox-item ${isChecked ? 'checked' : ''}">
             <input type="checkbox" value="${g.id}" class="modal-newplayer-group-cb form-checkbox" ${isChecked ? 'checked' : ''} />
-            <span style="font-weight:600;">🏆 ${g.name}</span>
+            <span style="font-weight:600;">${svgIcon('trophy', 16)} ${escapeHtml(g.name)}</span>
           </label>
         `;
       }).join('');
@@ -8394,10 +8563,10 @@ function initManagementEvents() {
       const btn = document.getElementById('copyCreatedPasscodeBtn');
       if (btn) {
         const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<span>✅</span> Copied!';
+        btn.innerHTML = `<span>${svgIcon('check', 14)}</span> Copied!`;
         setTimeout(() => { btn.innerHTML = oldHtml; }, 1500);
       }
-      showSaveToast(`📋 Passcode ${code} copied!`);
+      showSaveToast(`Passcode ${code} copied!`);
     }).catch(() => {});
   });
 
@@ -8408,10 +8577,10 @@ function initManagementEvents() {
       const btn = document.getElementById('passcodeModalCopyBtn');
       if (btn) {
         const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<span>✅</span> Copied!';
+        btn.innerHTML = `<span>${svgIcon('check', 14)}</span> Copied!`;
         setTimeout(() => { btn.innerHTML = oldHtml; }, 1500);
       }
-      showSaveToast(`📋 Passcode ${code} copied!`);
+      showSaveToast(`Passcode ${code} copied!`);
     }).catch(() => {});
   });
 
@@ -8494,7 +8663,7 @@ function initManagementEvents() {
       state.groups.push(newGroup);
       state.activeGroup = newGroup;
       closeCreateGroupModal();
-      showSaveToast(`🏆 Group "${name}" created!`);
+      showSaveToast(`Group "${name}" created!`);
 
       await reloadMasterData();
       await loadActiveGroupData(newGroup.id);
@@ -8540,7 +8709,7 @@ function initManagementEvents() {
       if (form) form.style.display = 'none';
       if (successView) successView.style.display = 'block';
 
-      showSaveToast(`👤 Player "${name}" added!`);
+      showSaveToast(`Player "${name}" added!`);
       await reloadMasterData();
       if (state.activeGroup) await loadActiveGroupData(state.activeGroup.id);
       renderManagementPage();
@@ -8589,7 +8758,7 @@ function initManagementEvents() {
     const btn = document.getElementById('mgmtRefreshActivityBtn');
     if (btn) {
       btn.disabled = true;
-      btn.textContent = '🔄 Refreshing…';
+      btn.innerHTML = `${svgIcon('refresh', 14)} Refreshing…`;
     }
     try {
       await reloadMasterData();
@@ -8600,7 +8769,7 @@ function initManagementEvents() {
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = '🔄 Refresh Timestamps';
+        btn.innerHTML = `${svgIcon('refresh', 14)} Refresh Timestamps`;
       }
     }
   });
@@ -8772,15 +8941,15 @@ function initPasSettingsEvents() {
 
       saveBtn.disabled = true;
       const oldHtml = saveBtn.innerHTML;
-      saveBtn.innerHTML = '<span>⏳</span> Saving...';
+      saveBtn.innerHTML = `<span>${svgIcon('clock', 14)}</span> Saving...`;
 
       try {
         await apiSavePasSettings({ match, rank, points, rho, mars });
         resetWhatIfCache();
-        showPasFeedback('✅ PAS weightages saved to database! Changes apply immediately across all player evaluations.', 'success');
+        showPasFeedback('PAS weightages saved to database! Changes apply immediately across all player evaluations.', 'success');
         await renderPasSettingsSection();
       } catch (err) {
-        showPasFeedback(`❌ Failed to save weightages: ${err.message}`, 'error');
+        showPasFeedback(`Failed to save weightages: ${err.message}`, 'error');
       } finally {
         saveBtn.disabled = false;
         saveBtn.innerHTML = oldHtml;
@@ -8798,7 +8967,7 @@ function initPasSettingsEvents() {
 
       resetBtn.disabled = true;
       const oldHtml = resetBtn.innerHTML;
-      resetBtn.innerHTML = '<span>⏳</span> Resetting...';
+      resetBtn.innerHTML = `<span>${svgIcon('clock', 14)}</span> Resetting...`;
 
       try {
         await apiResetPasSettings();
@@ -8806,7 +8975,7 @@ function initPasSettingsEvents() {
         showPasFeedback('↺ Weightages reset to defaults / environment variables.', 'info');
         await renderPasSettingsSection();
       } catch (err) {
-        showPasFeedback(`❌ Failed to reset weightages: ${err.message}`, 'error');
+        showPasFeedback(`Failed to reset weightages: ${err.message}`, 'error');
       } finally {
         resetBtn.disabled = false;
         resetBtn.innerHTML = oldHtml;
@@ -8941,7 +9110,7 @@ function initNotificationsModalEvents() {
       try {
         await navigator.clipboard.writeText(topic);
         const originalText = copyBtn.innerHTML;
-        copyBtn.innerHTML = '<span>✅</span> Copied!';
+        copyBtn.innerHTML = `<span>${svgIcon('check', 14)}</span> Copied!`;
         setTimeout(() => { copyBtn.innerHTML = originalText; }, 2000);
       } catch (err) {
         showSaveToast(`Topic: ${topic}`, 'info');
@@ -8965,12 +9134,12 @@ function initNotificationsModalEvents() {
       await apiSendTestNotification(topic, groupId, testType);
       if (statusEl) {
         statusEl.className = 'ntfy-test-status success';
-        statusEl.textContent = '✅ Alert sent! Check your ntfy app.';
+        statusEl.textContent = 'Alert sent! Check your ntfy app.';
       }
     } catch (err) {
       if (statusEl) {
         statusEl.className = 'ntfy-test-status error';
-        statusEl.textContent = `❌ ${err.message || 'Failed to send'}`;
+        statusEl.textContent = `${err.message || 'Failed to send'}`;
       }
     }
   };
@@ -9002,13 +9171,13 @@ function initNotificationsModalEvents() {
         await apiUpdatePlayerNtfyTopic(topicVal);
         if (statusEl) {
           statusEl.style.color = 'var(--accent-green)';
-          statusEl.textContent = topicVal ? '✅ Personal topic saved!' : 'Cleared personal topic';
+          statusEl.textContent = topicVal ? 'Personal topic saved!' : 'Cleared personal topic';
           setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
       } catch (err) {
         if (statusEl) {
           statusEl.style.color = 'var(--accent-rose)';
-          statusEl.textContent = `❌ ${err.message || 'Failed to save'}`;
+          statusEl.textContent = `${err.message || 'Failed to save'}`;
         }
       }
     });
@@ -9038,12 +9207,12 @@ function initNotificationsModalEvents() {
         await apiSendTestNotification(topicVal);
         if (statusEl) {
           statusEl.style.color = 'var(--accent-green)';
-          statusEl.textContent = '✅ Test notification sent!';
+          statusEl.textContent = 'Test notification sent!';
         }
       } catch (err) {
         if (statusEl) {
           statusEl.style.color = 'var(--accent-rose)';
-          statusEl.textContent = `❌ ${err.message || 'Failed to send'}`;
+          statusEl.textContent = `${err.message || 'Failed to send'}`;
         }
       }
     });
@@ -9095,13 +9264,13 @@ async function renderManagementNtfySettings() {
         <td style="text-align: center;">
           <div style="display: inline-flex; gap: 4px; justify-content: center;">
             <a href="${g.subscribe_url || `https://ntfy.sh/${g.ntfy_topic}`}" target="_blank" rel="noopener" class="btn btn-xs btn-secondary" title="Subscribe in browser / app">
-              📲 Open
+              ${svgIcon('download', 14)} Open
             </a>
             <button type="button" class="btn btn-xs btn-secondary mgmt-test-group-ntfy-btn" data-group-id="${g.id}" data-topic="${g.ntfy_topic}" title="Send test alert to this group">
-              🔔 Test
+              ${svgIcon('bell', 14)} Test
             </button>
             <button type="button" class="btn btn-xs btn-secondary mgmt-regen-group-ntfy-btn" data-group-id="${g.id}" data-name="${g.name}" title="Regenerate topic name">
-              🔄
+              ${svgIcon('refresh', 14)}
             </button>
           </div>
         </td>
@@ -9114,7 +9283,7 @@ async function renderManagementNtfySettings() {
         const gid = btn.dataset.groupId;
         btn.disabled = true;
         const oldText = btn.textContent;
-        btn.textContent = '⏳';
+        btn.innerHTML = `${svgIcon('clock', 14)}`;
         try {
           await apiSendTestNotification(topic, gid);
           showSaveToast('Test notification sent!', 'success');
@@ -9174,7 +9343,7 @@ function initManagementNtfyEvents() {
   if (remindNowBtn) {
     remindNowBtn.addEventListener('click', async () => {
       remindNowBtn.disabled = true;
-      remindNowBtn.textContent = '⏳ Sending...';
+      remindNowBtn.innerHTML = `${svgIcon('clock', 14)} Sending...`;
       try {
         const res = await apiTriggerPredictionReminder();
         showSaveToast(`Reminders sent: ${res.sent_count || 0} alert(s)`, 'success');
@@ -9182,7 +9351,7 @@ function initManagementNtfyEvents() {
         showSaveToast(err.message || 'Failed to trigger reminders', 'error');
       } finally {
         remindNowBtn.disabled = false;
-        remindNowBtn.textContent = '⏰ Remind Predictions Now';
+        remindNowBtn.innerHTML = `${svgIcon('clock', 14)} Remind Predictions Now`;
       }
     });
   }
@@ -9264,7 +9433,7 @@ function renderGroupsGrid() {
   if (!grid) return;
 
   if (state.groups.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1; color:var(--text-muted); padding:28px 16px; text-align:center; background:rgba(255,255,255,0.02); border:1px dashed var(--border-glass); border-radius:var(--radius-md);">No league groups created yet. Click "➕ New League Group" above to create your first mini-league!</div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1; color:var(--text-muted); padding:28px 16px; text-align:center; background:rgba(255,255,255,0.02); border:1px dashed var(--border-glass); border-radius:var(--radius-md);">No league groups created yet. Click "New League Group" above to create your first mini-league!</div>`;
     return;
   }
 
@@ -9282,21 +9451,21 @@ function renderGroupsGrid() {
           <div class="mgmt-group-title-col">
             <div class="mgmt-group-name-row">
               <h4 class="mgmt-group-title" title="${safeName}">${safeName}</h4>
-              <button type="button" class="btn-icon rename-group-btn" data-id="${g.id}" title="Rename Group" aria-label="Rename Group">✏️</button>
+              <button type="button" class="btn-icon rename-group-btn" data-id="${g.id}" title="Rename Group" aria-label="Rename Group">${svgIcon('edit', 14)}</button>
             </div>
             <span class="mgmt-group-id-badge" title="Group ID #${g.id}">ID #${g.id}</span>
           </div>
-          <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group" aria-label="Delete Group">🗑️</button>
+          <button class="btn-icon delete-group-btn" data-id="${g.id}" title="Delete Group" aria-label="Delete Group">${svgIcon('trash', 14)}</button>
         </div>
 
         <div class="mgmt-group-body">
           <div class="mgmt-group-info-row">
-            <span class="mgmt-group-info-label">👥 Members:</span>
+            <span class="mgmt-group-info-label">${svgIcon('users', 13)} Members:</span>
             <span class="mgmt-group-info-value">${groupPlayers.length} ${groupPlayers.length === 1 ? 'player' : 'players'}</span>
           </div>
 
           <div class="mgmt-group-info-row">
-            <span class="mgmt-group-info-label">🚩 Starts From:</span>
+            <span class="mgmt-group-info-label">${svgIcon('flag', 13)} Starts From:</span>
             <select class="control-dropdown mgmt-group-start-gw-select" data-id="${g.id}" title="Starting Gameweek for points calculation in this group">
               ${Array.from({ length: 38 }, (_, i) => i + 1).map(num => `<option value="${num}" ${num === startGw ? 'selected' : ''}>GW ${num}${num === 1 ? ' (Full Season)' : ''}</option>`).join('')}
             </select>
@@ -9304,7 +9473,7 @@ function renderGroupsGrid() {
 
           <div class="mgmt-group-scope-section">
             <div class="mgmt-group-scope-header">
-              <span class="mgmt-group-info-label">⚽ Club Scope:</span>
+              <span class="mgmt-group-info-label">${svgIcon('ball', 13)} Club Scope:</span>
               <span class="mgmt-group-scope-badge">${scopeDetails.badge}</span>
             </div>
             <div class="mgmt-group-scope-desc" title="${safeFullScope}">
@@ -9315,7 +9484,7 @@ function renderGroupsGrid() {
 
         <div class="mgmt-group-footer">
           <button type="button" class="btn btn-secondary edit-group-scope-btn" data-id="${g.id}">
-            🎯 Edit Club Scope
+            ${svgIcon('target', 13)} Edit Club Scope
           </button>
         </div>
       </div>
@@ -9476,8 +9645,8 @@ export function openGroupScopeModal(groupId) {
           const isPast = s.to_gw != null && currentGw > Number(s.to_gw);
           const rangeStr = (s.to_gw && s.to_gw < 38) ? `GW ${s.from_gw}–${s.to_gw}` : (idx === 0 && (!s.to_gw || s.to_gw >= 38) ? `Full Season (GW ${s.from_gw}–38)` : `GW ${s.from_gw}–38`);
           const teamsList = (s.teams === 'ALL' || !s.teams)
-            ? '⚽ All 20 Premier League Clubs'
-            : (Array.isArray(s.teams) ? `🎯 ${s.teams.length} Clubs: ${s.teams.join(', ')}` : s.teams);
+            ? 'All 20 Premier League Clubs'
+            : (Array.isArray(s.teams) ? `${svgIcon('target', 12)} ${s.teams.length} Clubs: ${s.teams.join(', ')}` : s.teams);
           const badgeClass = isCurrent ? 'current' : (isPast ? 'past' : '');
           const badgeLabel = isCurrent ? 'Active Now' : (isPast ? 'Historical' : 'Upcoming Phase');
           return `
@@ -9625,7 +9794,7 @@ export function initGroupScopeModalEvents() {
 
     try {
       saveBtn.disabled = true;
-      saveBtn.textContent = '💾 Saving Scope…';
+      saveBtn.innerHTML = `${svgIcon('save', 14)} Saving Scope…`;
 
       const updatedFilterVal = buildUpdatedScopeSegments(group, newSelection, effectiveGw, applyMode);
       await apiRenameGroup(group.id, group.name, updatedFilterVal, group.start_gw || 1);
@@ -9640,7 +9809,7 @@ export function initGroupScopeModalEvents() {
       await reloadMasterData();
       populateGroupDropdown();
       renderGroupsGrid();
-      showToast(`Group "${group.name}" scope updated successfully!`);
+      showSaveToast(`Group "${group.name}" scope updated successfully!`);
       hideModal();
     } catch (err) {
       if (errorBanner) {
@@ -9651,7 +9820,7 @@ export function initGroupScopeModalEvents() {
       }
     } finally {
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 Apply Scope Changes';
+      saveBtn.innerHTML = `${svgIcon('save', 14)} Apply Scope Changes`;
     }
   });
 }
@@ -9670,7 +9839,7 @@ function renderMasterPlayersTable() {
   }
 
   if (players.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">No players found. Click "👤 Add New Player" above to register someone!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">No players found. Click "Add New Player" above to register someone!</td></tr>`;
     return;
   }
 
@@ -9690,29 +9859,29 @@ function renderMasterPlayersTable() {
     const passcodeDisplay = state.auth.role === 'admin'
       ? `<div style="display:flex; align-items:center; justify-content:center; gap:6px;">
           <span class="passcode-chip" title="Click to copy passcode">${p.passcode || '-'}</span>
-          <button class="btn-icon copy-passcode-btn" data-code="${p.passcode || ''}" title="Copy Passcode">📋</button>
-          <button class="btn-icon reset-passcode-btn" data-id="${p.id}" title="Reset 6-Char Passcode">🔄</button>
+          <button class="btn-icon copy-passcode-btn" data-code="${p.passcode || ''}" title="Copy Passcode">${svgIcon('copy', 14)}</button>
+          <button class="btn-icon reset-passcode-btn" data-id="${p.id}" title="Reset 6-Char Passcode">${svgIcon('refresh', 14)}</button>
          </div>`
-      : `<span style="color:var(--text-dim); font-size:var(--font-size-xs, 0.8125rem);">🔒 Hidden</span>`;
+      : `<span style="color:var(--text-dim); font-size:var(--font-size-xs, 0.8125rem);">${svgIcon('lock', 12)} Hidden</span>`;
 
     return `
       <tr class="mgmt-player-row">
         <td class="mgmt-player-cell-name">
-          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">👤 Player Name</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">${svgIcon('user', 12)} Player Name</div>
           <input type="text" class="form-input mgmt-player-name-input" data-id="${p.id}" value="${p.name}" style="font-weight:600;" />
         </td>
         <td class="mgmt-player-cell-groups">
-          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🏆 League Memberships</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">${svgIcon('trophy', 12)} League Memberships</div>
           <div class="group-tag-pill-container">
             ${groupPills}
           </div>
         </td>
         <td class="mgmt-player-cell-passcode" style="text-align: center;">
-          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">🔑 Passcode</div>
+          <div class="mobile-only-label" style="display:none; font-size:var(--font-size-2xs, 0.75rem); color:var(--text-muted); font-weight:700; text-transform:uppercase; margin-bottom:4px;">${svgIcon('key', 12)} Passcode</div>
           ${passcodeDisplay}
         </td>
         <td class="mgmt-player-cell-actions" style="text-align: center;">
-          <button class="btn-icon delete-master-player-btn" data-id="${p.id}" title="Remove Person from Directory">🗑️ Delete</button>
+          <button class="btn-icon delete-master-player-btn" data-id="${p.id}" title="Remove Person from Directory">${svgIcon('trash', 14)} Delete</button>
         </td>
       </tr>
     `;
@@ -9723,8 +9892,8 @@ function renderMasterPlayersTable() {
       const code = btn.dataset.code;
       if (!code) return;
       navigator.clipboard.writeText(code).then(() => {
-        btn.textContent = '✅';
-        setTimeout(() => btn.textContent = '📋', 1200);
+        btn.innerHTML = svgIcon('check', 14);
+        setTimeout(() => btn.innerHTML = svgIcon('copy', 14), 1200);
       }).catch(() => { });
     });
   });
@@ -9862,7 +10031,7 @@ function getPlayerStatusInfo(player) {
       status: 'never',
       label: 'Never Logged In',
       badgeClass: 'badge-never',
-      dot: '⚠️'
+      dot: svgIcon('dotNever', 12)
     };
   }
 
@@ -9880,14 +10049,14 @@ function getPlayerStatusInfo(player) {
       status: 'today',
       label: 'Active Today',
       badgeClass: 'badge-today',
-      dot: '🟡'
+      dot: svgIcon('dotToday', 12)
     };
   } else {
     return {
       status: 'inactive',
       label: 'Inactive',
       badgeClass: 'badge-inactive',
-      dot: '⚪'
+      dot: svgIcon('dotInactive', 12)
     };
   }
 }
@@ -9981,7 +10150,7 @@ function renderPlayerActivityTable() {
             <span class="player-avatar-chip">${initial}</span>
             <div>
               <div class="player-name-text">${p.name}</div>
-              <div class="player-tz-text">🌐 ${p.timezone || 'UTC'} • ID #${p.id}</div>
+              <div class="player-tz-text">${svgIcon('globe', 12)} ${p.timezone || 'UTC'} • ID #${p.id}</div>
             </div>
           </div>
         </td>
@@ -10004,7 +10173,7 @@ function renderPlayerActivityTable() {
         </td>
         <td style="text-align: center;">
           <span class="activity-pred-pill">
-            ⚽ ${p.total_predictions || 0}
+            ${svgIcon('ball', 12)} ${p.total_predictions || 0}
           </span>
         </td>
         <td>
@@ -10231,10 +10400,10 @@ async function init() {
     document.getElementById('matrixBody').innerHTML = `
       <tr><td colspan="10">
         <div class="error-state">
-          <span style="font-size:var(--font-size-2xl, 1.625rem)">⚠️</span>
+          ${svgIcon('alert', 36)}
           <strong>Could not connect to backend server</strong>
           <span>${err.message}</span>
-          <button class="btn btn-primary" onclick="location.reload()">🔄 Retry</button>
+          <button class="btn btn-primary" onclick="location.reload()">${svgIcon('refresh', 14)} Retry</button>
         </div>
       </td></tr>`;
   }

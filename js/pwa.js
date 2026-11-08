@@ -1,3 +1,4 @@
+import { svgIcon } from './icons.js';
 // pwa.js - Progressive Web App Registration, Install Prompts & Offline Status Handler
 
 let deferredInstallPrompt = null;
@@ -203,7 +204,7 @@ function initInstallPrompt() {
     const saveToast = document.getElementById('saveToast');
     const saveToastMsg = document.getElementById('saveToastMsg');
     if (saveToast && saveToastMsg) {
-      saveToastMsg.textContent = '🎉 EPL Predictor installed successfully!';
+      saveToastMsg.textContent = 'EPL Predictor installed successfully!';
       saveToast.classList.add('show');
       setTimeout(() => saveToast.classList.remove('show'), 4000);
     }
@@ -246,9 +247,9 @@ function openInstallModal(isIosMode = false) {
           Install EPL Score Predictor on your device to enjoy instant match updates, offline access, and a clean full-screen experience with no browser address bar.
         </p>
         <ul style="margin: 0; padding-left: 20px; color: var(--text-muted, #94a3b8); font-size: 0.85rem; line-height: 1.6;">
-          <li>⚡ Launches instantly from your desktop or home screen</li>
-          <li>📊 Retains your predictions & league views offline</li>
-          <li>🔒 Secure, lightweight and fast</li>
+          <li>${svgIcon('zap', 14)} Launches instantly from your desktop or home screen</li>
+          <li>${svgIcon('chartBar', 14)} Retains your predictions & league views offline</li>
+          <li>${svgIcon('lock', 14)} Secure, lightweight and fast</li>
         </ul>
       </div>
     `;
@@ -353,19 +354,19 @@ function initConnectivityHandler() {
 
   // Handle retry button click
   retryBtn?.addEventListener('click', async () => {
-    retryBtn.textContent = '⏳ Checking...';
+    retryBtn.innerHTML = `${svgIcon('clock', 14)} Checking...`;
     retryBtn.disabled = true;
     const isConnected = await checkServerConnectivity(4000);
     retryBtn.disabled = false;
-    retryBtn.textContent = '🔄 Check Connection';
+    retryBtn.innerHTML = `${svgIcon('refresh', 14)} Check Connection`;
 
     const saveToast = document.getElementById('saveToast');
     const saveToastMsg = document.getElementById('saveToastMsg');
     if (saveToast && saveToastMsg) {
       if (isConnected) {
-        saveToastMsg.textContent = '🌐 Connected to server. Online mode active.';
+        saveToastMsg.textContent = 'Connected to server. Online mode active.';
       } else {
-        saveToastMsg.textContent = '⚠️ Could not reach server. Please check connection.';
+        saveToastMsg.textContent = 'Could not reach server. Please check connection.';
       }
       saveToast.classList.add('show');
       setTimeout(() => saveToast.classList.remove('show'), 3000);
@@ -385,7 +386,7 @@ function initConnectivityHandler() {
     const saveToast = document.getElementById('saveToast');
     const saveToastMsg = document.getElementById('saveToastMsg');
     if (saveToast && saveToastMsg) {
-      saveToastMsg.textContent = '🌐 Connection restored. Online mode.';
+      saveToastMsg.textContent = 'Connection restored. Online mode.';
       saveToast.classList.add('show');
       setTimeout(() => saveToast.classList.remove('show'), 3000);
     }

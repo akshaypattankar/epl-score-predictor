@@ -247,19 +247,19 @@ export function exportRulesToPdf() {
     </head>
     <body>
       <div class="no-print-bar">
-        <span>📄 Scoring Rules Export &bull; Ready for PDF Print</span>
-        <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        <span>Scoring Rules Export &bull; Ready for PDF Print</span>
+        <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
       </div>
 
       <div class="header-bar">
         <div class="title-group">
-          <h1>⚽ Premier League Score Predictor</h1>
+          <h1>Premier League Score Predictor</h1>
           <p>Official Scoring Engine Rules & Points Specification</p>
         </div>
-        <div class="date-badge">📅 Effective: ${currentDate}</div>
+        <div class="date-badge">Effective: ${currentDate}</div>
       </div>
 
-      <div class="section-title">🏆 Base Prediction Scoring Tiers</div>
+      <div class="section-title">Base Prediction Scoring Tiers</div>
       <table class="rules-table">
         <thead>
           <tr>
@@ -277,7 +277,7 @@ export function exportRulesToPdf() {
       </table>
 
       ${SCORING_BONUSES.length > 0 ? `
-        <div class="section-title">🔥 Additive Bonus Rules</div>
+        <div class="section-title">Additive Bonus Rules</div>
         <table class="rules-table">
           <thead>
             <tr>
@@ -347,7 +347,7 @@ export async function exportRulesToJpeg() {
   // Header Title
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('⚽ Premier League Score Predictor', 36, 46);
+  ctx.fillText('Premier League Score Predictor', 36, 46);
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -361,13 +361,13 @@ export async function exportRulesToJpeg() {
   ctx.fill();
   ctx.fillStyle = '#38bdf8';
   ctx.font = 'bold 11px monospace';
-  ctx.fillText(`📅 ${dateStr}`, width - 156, 48);
+  ctx.fillText(dateStr, width - 150, 48);
 
   // Section: Base Tiers
   let y = 110;
   ctx.fillStyle = '#a78bfa';
   ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('🏆 BASE PREDICTION SCORING TIERS', 36, y);
+  ctx.fillText('BASE PREDICTION SCORING TIERS', 36, y);
 
   y += 18;
 
@@ -438,7 +438,7 @@ export async function exportRulesToJpeg() {
     y += 16;
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText('🔥 ADDITIVE BONUS RULES', 36, y);
+    ctx.fillText('ADDITIVE BONUS RULES', 36, y);
 
     y += 18;
 
