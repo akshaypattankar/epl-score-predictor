@@ -279,31 +279,109 @@ function closeInstallModal() {
   }
 }
 
+let isOfflineBannerDismissed = false;
+let checkConnectionInFlight = false;
+
+/**
+ * Updates the online/offline UI state
+ */
+export function setOnlineStatus(isOnline, reason = '') {
+  const offlineBanner = document.getElementById('pwaOfflineBanner');
+  if (isOnline) {
+    if (offlineBanner) {
+      offlineBanner.style.display = 'none';
+    }
+    document.body.classList.remove('is-offline');
+    console.log(`[PWA] Network status: ONLINE ${reason ? `(${reason})` : ''}`);
+  } else {
+    if (!isOfflineBannerDismissed && offlineBanner) {
+      offlineBanner.style.display = 'flex';
+    }
+    document.body.classList.add('is-offline');
+    console.log(`[PWA] Network status: OFFLINE ${reason ? `(${reason})` : ''}`);
+  }
+}
+
+/**
+ * Actively probe the server via /api/health to confirm real network connectivity
+ */
+export async function checkServerConnectivity(timeoutMs = 3500) {
+  if (checkConnectionInFlight) return true;
+  checkConnectionInFlight = true;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch('/api/health?_t=' + Date.now(), {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      setOnlineStatus(true, 'health-probe-ok');
+      return true;
+    }
+    // Any HTTP response (including 4xx/5xx) indicates the network path to server is working
+    setOnlineStatus(true, 'server-responded');
+    return true;
+  } catch (err) {
+    // If the probe failed and navigator reports offline or connection refused
+    if (!navigator.onLine) {
+      setOnlineStatus(false, 'probe-failed-and-navigator-offline');
+    } else {
+      console.warn('[PWA] Server health check failed but browser reports online:', err.message);
+    }
+    return false;
+  } finally {
+    checkConnectionInFlight = false;
+  }
+}
+
 /**
  * Handle network connectivity status (online / offline)
  */
 function initConnectivityHandler() {
   const offlineBanner = document.getElementById('pwaOfflineBanner');
+  const retryBtn = document.getElementById('pwaOfflineRetryBtn');
+  const dismissBtn = document.getElementById('pwaDismissOfflineBtn');
 
-  const updateNetworkStatus = () => {
-    const isOnline = navigator.onLine;
-    if (!isOnline) {
-      if (offlineBanner) {
-        offlineBanner.style.display = 'flex';
+  // Expose global online notifier for API layer and window events
+  if (typeof window !== 'undefined') {
+    window.__eplSetOnline = () => setOnlineStatus(true, 'api-success');
+    window.__eplCheckConnectivity = checkServerConnectivity;
+  }
+
+  // Handle retry button click
+  retryBtn?.addEventListener('click', async () => {
+    retryBtn.textContent = '⏳ Checking...';
+    retryBtn.disabled = true;
+    const isConnected = await checkServerConnectivity(4000);
+    retryBtn.disabled = false;
+    retryBtn.textContent = '🔄 Check Connection';
+
+    const saveToast = document.getElementById('saveToast');
+    const saveToastMsg = document.getElementById('saveToastMsg');
+    if (saveToast && saveToastMsg) {
+      if (isConnected) {
+        saveToastMsg.textContent = '🌐 Connected to server. Online mode active.';
+      } else {
+        saveToastMsg.textContent = '⚠️ Could not reach server. Please check connection.';
       }
-      document.body.classList.add('is-offline');
-      console.log('[PWA] Network status: offline');
-    } else {
-      if (offlineBanner) {
-        offlineBanner.style.display = 'none';
-      }
-      document.body.classList.remove('is-offline');
-      console.log('[PWA] Network status: online');
+      saveToast.classList.add('show');
+      setTimeout(() => saveToast.classList.remove('show'), 3000);
     }
-  };
+  });
 
-  window.addEventListener('online', () => {
-    updateNetworkStatus();
+  // Handle dismiss button click
+  dismissBtn?.addEventListener('click', () => {
+    isOfflineBannerDismissed = true;
+    if (offlineBanner) {
+      offlineBanner.style.display = 'none';
+    }
+  });
+
+  window.addEventListener('online', async () => {
+    await checkServerConnectivity(3000);
     const saveToast = document.getElementById('saveToast');
     const saveToastMsg = document.getElementById('saveToastMsg');
     if (saveToast && saveToastMsg) {
@@ -313,11 +391,18 @@ function initConnectivityHandler() {
     }
   });
 
-  window.addEventListener('offline', updateNetworkStatus);
+  window.addEventListener('offline', async () => {
+    // Verify before assuming offline (Tailscale / VPN virtual interfaces often report false offline)
+    const reachable = await checkServerConnectivity(2500);
+    if (!reachable) {
+      setOnlineStatus(false, 'offline-event');
+    }
+  });
 
-  // Initial check
+  // Initial check: NEVER assume offline just because navigator.onLine is false on VPN/Tailscale!
+  // Instead, actively probe /api/health to verify actual reachability.
   if (!navigator.onLine) {
-    updateNetworkStatus();
+    checkServerConnectivity(2500);
   }
 }
 

@@ -34,12 +34,20 @@ import {
   apiPingActivity,
   apiFetchPasSettings,
   apiSavePasSettings,
-  apiResetPasSettings
+  apiResetPasSettings,
+  apiGetNotificationSettings,
+  apiSaveNotificationSettings,
+  apiUpdateGroupNtfyTopic,
+  apiUpdatePlayerNtfyTopic,
+  apiSendTestNotification,
+  apiTriggerPredictionReminder,
+  apiGetNotificationHistory
 } from './api.js';
 import { evaluatePrediction, ptsBadgeClass, tierLabel, SCORING_TIERS, SCORING_BONUSES, getPredictionBreakdown, renderExampleContainer, updateScoringRulesState } from './scoring.js';
 import { initRulesEditorModal, openRulesEditorModal, renderIconElement, generateLowestScenarioPreset } from './rulesEditor.js';
 import { exportRulesToPdf, exportRulesToJpeg } from './rulesExporter.js';
 import { renderWhatIfView, renderWhatIfDashboardWidget, renderGuestLeagueStandingsWidget, resetWhatIfCache } from './whatIfStandings.js';
+import { renderWagersView } from './wagersView.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
@@ -74,139 +82,16 @@ const state = {
 };
 
 // ─── Color Theory Golden-Ratio Contrasting Player Palette System ───────────
-/**
- * Generates perceptually distinct, maximally contrasting tones across players.
- * Uses the Golden Angle (137.508°) on the HSL color wheel so no two players
- * in a group have same or similar hues, while tuning lightness and saturation
- * for high contrast and legibility on dark glass backgrounds.
- */
-const sessionBaseHue = Math.floor(Math.random() * 360);
-const sessionPlayerColorMap = new Map();
-
-/**
- * Converts HSL values to a 6-digit hex color code.
- */
-function hslToHex(h, s, l) {
-  h = ((h % 360) + 360) % 360;
-  const sNorm = Math.max(0, Math.min(100, s)) / 100;
-  const lNorm = Math.max(0, Math.min(100, l)) / 100;
-  const a = sNorm * Math.min(lNorm, 1 - lNorm);
-  const f = n => {
-    const k = (n + h / 30) % 12;
-    const color = lNorm - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color).toString(16).padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-/**
- * Fine-tunes saturation and lightness per hue region based on human visual perception (Helmholtz-Kohlrausch effect)
- * so that colors across the spectrum have balanced perceived brightness on dark backgrounds.
- */
-function getTunedHsl(hue) {
-  const h = ((hue % 360) + 360) % 360;
-  let s = 88;
-  let l = 60;
-
-  if (h >= 40 && h <= 95) {
-    // Yellows, Ambers, Chartreuse - slightly lower lightness to avoid washed out neon
-    l = 52;
-    s = 92;
-  } else if (h >= 215 && h <= 290) {
-    // Blues, Indigos, Deep Violets - boost lightness for crisp readability on dark glass
-    l = 66;
-    s = 90;
-  } else if (h >= 340 || h <= 25) {
-    // Coral, Crimson, Flame Red
-    l = 60;
-    s = 92;
-  } else if (h >= 140 && h <= 200) {
-    // Emerald, Teal, Cyan
-    l = 56;
-    s = 88;
-  } else {
-    // Magenta, Purple, Rose
-    l = 62;
-    s = 88;
-  }
-
-  return { h, s, l };
-}
-
-/**
- * Re-indexes all active group players to guarantee maximally distinct,
- * contrasting hues distributed via Golden Angle stepping.
- */
-function recalculateGroupPlayerColors(playersList) {
-  if (!Array.isArray(playersList) || playersList.length === 0) return;
-  sessionPlayerColorMap.clear();
-
-  // Stable sort by numeric ID
-  const sorted = [...playersList].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
-
-  sorted.forEach((player, idx) => {
-    // Golden angle distribution: (base + idx * 137.507764°) % 360°
-    const hue = (sessionBaseHue + (idx * 137.507764)) % 360;
-    const { h, s, l } = getTunedHsl(hue);
-    const hex = hslToHex(h, s, l);
-
-    if (player.id != null) {
-      sessionPlayerColorMap.set(`id_${player.id}`, hex);
-    }
-    if (player.name) {
-      sessionPlayerColorMap.set(`name_${player.name.toLowerCase().trim()}`, hex);
-    }
-  });
-}
-
-function getPlayerColor(playerOrIdOrName) {
-  if (playerOrIdOrName == null) {
-    const { h, s, l } = getTunedHsl(sessionBaseHue);
-    return hslToHex(h, s, l);
-  }
-
-  let idKey = null;
-  let nameKey = null;
-
-  if (typeof playerOrIdOrName === 'object') {
-    if (playerOrIdOrName.id != null) idKey = `id_${playerOrIdOrName.id}`;
-    if (playerOrIdOrName.name) nameKey = `name_${playerOrIdOrName.name.toLowerCase().trim()}`;
-  } else if (typeof playerOrIdOrName === 'number') {
-    idKey = `id_${playerOrIdOrName}`;
-  } else if (typeof playerOrIdOrName === 'string') {
-    if (/^\d+$/.test(playerOrIdOrName.trim())) {
-      idKey = `id_${playerOrIdOrName.trim()}`;
-    } else {
-      nameKey = `name_${playerOrIdOrName.toLowerCase().trim()}`;
-    }
-  }
-
-  if (idKey && sessionPlayerColorMap.has(idKey)) return sessionPlayerColorMap.get(idKey);
-  if (nameKey && sessionPlayerColorMap.has(nameKey)) return sessionPlayerColorMap.get(nameKey);
-
-  // Dynamic fallback for any unmapped player
-  const nextIdx = sessionPlayerColorMap.size;
-  const hue = (sessionBaseHue + (nextIdx * 137.507764)) % 360;
-  const { h, s, l } = getTunedHsl(hue);
-  const color = hslToHex(h, s, l);
-
-  if (idKey) sessionPlayerColorMap.set(idKey, color);
-  if (nameKey) sessionPlayerColorMap.set(nameKey, color);
-
-  return color;
-}
-
-function hexToRgba(hex, alpha) {
-  if (!hex || typeof hex !== 'string') return `rgba(56, 189, 248, ${alpha})`;
-  let c = hex.replace('#', '');
-  if (c.length === 3) c = c.split('').map(x => x + x).join('');
-  const num = parseInt(c, 16);
-  if (isNaN(num)) return `rgba(56, 189, 248, ${alpha})`;
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import {
+  hslToHex,
+  getTunedHsl,
+  recalculateGroupPlayerColors,
+  getPlayerColor,
+  hexToRgba,
+  darkenHex,
+  getPlayerColorShades,
+  getRankBadgeHtml
+} from './colors.js';
 
 /**
  * Safely scroll an element into horizontal view inside its overflow-x container.
@@ -226,35 +111,6 @@ function scrollElementHorizontallyIntoView(container, element, smooth = false) {
       behavior: smooth ? 'smooth' : 'auto'
     });
   } catch (_) { }
-}
-
-function darkenHex(hex, factor = 0.45) {
-  if (!hex || typeof hex !== 'string') return '#0f172a';
-  let c = hex.replace('#', '');
-  if (c.length === 3) c = c.split('').map(x => x + x).join('');
-  const num = parseInt(c, 16);
-  if (isNaN(num)) return '#0f172a';
-  const r = Math.round(((num >> 16) & 255) * factor);
-  const g = Math.round(((num >> 8) & 255) * factor);
-  const b = Math.round((num & 255) * factor);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-function getPlayerColorShades(playerOrIdOrName) {
-  const primary = getPlayerColor(playerOrIdOrName);
-  return {
-    primary,
-    border: hexToRgba(primary, 0.45),
-    glow: hexToRgba(primary, 0.25),
-    subtleGlow: hexToRgba(primary, 0.15),
-    bgSubtle: hexToRgba(primary, 0.08),
-    bgCardTop: hexToRgba(primary, 0.18),
-    badgeBg: `radial-gradient(circle at 35% 35%, ${hexToRgba(primary, 0.35)} 0%, ${hexToRgba(primary, 0.08)} 100%)`,
-    badgeBorder: hexToRgba(primary, 0.55),
-    chipBg: hexToRgba(primary, 0.14),
-    chipBorder: hexToRgba(primary, 0.35),
-    textGradient: `linear-gradient(135deg, var(--text-main) 25%, ${primary} 100%)`
-  };
 }
 
 function isMatchFinished(fixture) {
@@ -1791,17 +1647,19 @@ function renderViewByName(targetView) {
   }
   state.activeView = targetView;
   const dashBtn = document.getElementById('navDashboardBtn');
+  const wagersBtn = document.getElementById('navWagersBtn');
   const whatIfBtn = document.getElementById('navWhatIfBtn');
   const scoringBtn = document.getElementById('navScoringBtn');
   const mgmtBtn = document.getElementById('navManagementBtn');
 
   const dashView = document.getElementById('dashboardView');
+  const wagersView = document.getElementById('wagersView');
   const whatIfView = document.getElementById('whatIfView');
   const scoringView = document.getElementById('scoringView');
   const mgmtView = document.getElementById('managementView');
 
-  [dashBtn, whatIfBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
-  [dashView, whatIfView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
+  [dashBtn, wagersBtn, whatIfBtn, scoringBtn, mgmtBtn].forEach(btn => btn?.classList.remove('active'));
+  [dashView, wagersView, whatIfView, scoringView, mgmtView].forEach(v => { if (v) v.style.display = 'none'; });
 
   renderAuthHeader();
 
@@ -1811,6 +1669,11 @@ function renderViewByName(targetView) {
     activeBtn = dashBtn;
     if (dashView) dashView.style.display = 'block';
     renderDashboardComponents();
+  } else if (targetView === 'wagers') {
+    wagersBtn?.classList.add('active');
+    activeBtn = wagersBtn;
+    if (wagersView) wagersView.style.display = 'block';
+    renderWagersView(state);
   } else if (targetView === 'whatif') {
     whatIfBtn?.classList.add('active');
     activeBtn = whatIfBtn;
@@ -1839,6 +1702,7 @@ function renderViewByName(targetView) {
 
 function initNavigation() {
   const dashBtn = document.getElementById('navDashboardBtn');
+  const wagersBtn = document.getElementById('navWagersBtn');
   const whatIfBtn = document.getElementById('navWhatIfBtn');
   const scoringBtn = document.getElementById('navScoringBtn');
   const mgmtBtn = document.getElementById('navManagementBtn');
@@ -1847,6 +1711,7 @@ function initNavigation() {
   const scoringBackBtn = document.getElementById('scoringBackToDashboardBtn');
 
   dashBtn?.addEventListener('click', () => renderViewByName('dashboard'));
+  wagersBtn?.addEventListener('click', () => renderViewByName('wagers'));
   whatIfBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     renderViewByName('dashboard');
@@ -1882,6 +1747,9 @@ async function handleGroupSwitch(groupId) {
   populateGroupDropdown();
   renderGWTabs();
   renderDashboardComponents();
+  if (state.activeView === 'wagers') {
+    renderWagersView(state);
+  }
 }
 
 function populateGroupDropdown() {
@@ -2344,30 +2212,6 @@ function initGWSkipControls() {
       renderMatrix();
     }
   });
-}
-
-// ─── Rank Badge Helper ───────────────────────────────────────────────────────
-/**
- * Renders an image rank badge (for ranks 1-10) using graphical assets,
- * or formatted numeric text (#11, #12...) for ranks beyond 10.
- *
- * @param {number} rank - Player rank (1-indexed)
- * @param {Object} [options]
- * @param {number} [options.size] - Image dimension in pixels (default: 24)
- * @param {string} [options.className] - Additional CSS class name(s)
- * @param {string} [options.alt] - Custom alt text
- * @returns {string} Rendered HTML string
- */
-function getRankBadgeHtml(rank, options = {}) {
-  const r = parseInt(rank, 10);
-  const size = options.size || 24;
-  const extraClass = options.className ? ` ${options.className}` : '';
-  const alt = options.alt || `Rank #${r}`;
-
-  if (r >= 1 && r <= 10) {
-    return `<img src="assets/ranks/rank-badge-${r}.png" alt="${alt}" class="rank-badge-img${extraClass}" width="${size}" height="${size}" loading="lazy" onerror="this.onerror=null;this.replaceWith('#${r}');" />`;
-  }
-  return `<span class="rank-badge-text${extraClass}">#${r || '–'}</span>`;
 }
 
 // ─── Render: Snapshot Leaderboard ────────────────────────────────────────────
@@ -6701,6 +6545,8 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
 
   const homeCrest = fixture ? getCrestImg(fixture.home_code, fixture.home_name) : '';
   const awayCrest = fixture ? getCrestImg(fixture.away_code, fixture.away_name) : '';
+  const homeShort = fixture?.home_short || (fixture?.home_name ? fixture.home_name.slice(0, 3).toUpperCase() : 'Home');
+  const awayShort = fixture?.away_short || (fixture?.away_name ? fixture.away_name.slice(0, 3).toUpperCase() : 'Away');
   const matchTitle = fixture ? `${fixture.home_name} vs ${fixture.away_name}` : 'Premier League Match';
   const gwText = fixture?.event ? `GW ${fixture.event}` : '';
 
@@ -6769,9 +6615,21 @@ function generatePointsTooltipContent(matchId, playerId, isGeneralRulesOnly) {
   const actInGrid = hasActual && actH <= miniMax && actA <= miniMax;
 
   let miniGridHtml = `<div class="mini-heatmap-wrap">`;
-  miniGridHtml += `<div class="mini-heatmap-axis-top"><span>Home Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-axis-top">
+    <span class="mini-hm-axis-badge" title="${fixture?.home_name || 'Home'}">
+      <span class="mini-hm-axis-crest">${homeCrest}</span>
+      <span class="mini-hm-axis-short">${homeShort}</span>
+    </span>
+    <span class="mini-hm-axis-label-text">Home Goals</span>
+  </div>`;
   miniGridHtml += `<div class="mini-heatmap-with-axis">`;
-  miniGridHtml += `<div class="mini-heatmap-axis-y"><span>Away Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-axis-y">
+    <span class="mini-hm-axis-badge mini-hm-axis-y-badge" title="${fixture?.away_name || 'Away'}">
+      <span class="mini-hm-axis-crest">${awayCrest}</span>
+      <span class="mini-hm-axis-short">${awayShort}</span>
+    </span>
+    <span class="mini-hm-axis-text-y">Away Goals</span>
+  </div>`;
   miniGridHtml += `<div class="mini-heatmap-grid" style="grid-template-columns: 22px repeat(${gridSize}, 1fr); grid-template-rows: 22px repeat(${gridSize}, 1fr);">`;
   miniGridHtml += `<div class="mini-hm-corner"></div>`;
 
@@ -7053,6 +6911,8 @@ function renderMatchOverviewTooltip(matchId) {
 
   const homeCrest = getCrestImg(fixture.home_code, fixture.home_name);
   const awayCrest = getCrestImg(fixture.away_code, fixture.away_name);
+  const homeShort = fixture?.home_short || (fixture?.home_name ? fixture.home_name.slice(0, 3).toUpperCase() : 'Home');
+  const awayShort = fixture?.away_short || (fixture?.away_name ? fixture.away_name.slice(0, 3).toUpperCase() : 'Away');
   const matchTitle = `${fixture.home_name} vs ${fixture.away_name}`;
   const gwText = fixture.event ? `GW ${fixture.event}` : '';
 
@@ -7104,9 +6964,21 @@ function renderMatchOverviewTooltip(matchId) {
 
   // Heatmap HTML
   let miniGridHtml = `<div class="mini-heatmap-wrap">`;
-  miniGridHtml += `<div class="mini-heatmap-axis-top"><span>Home Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-axis-top">
+    <span class="mini-hm-axis-badge" title="${fixture?.home_name || 'Home'}">
+      <span class="mini-hm-axis-crest">${homeCrest}</span>
+      <span class="mini-hm-axis-short">${homeShort}</span>
+    </span>
+    <span class="mini-hm-axis-label-text">Home Goals</span>
+  </div>`;
   miniGridHtml += `<div class="mini-heatmap-with-axis">`;
-  miniGridHtml += `<div class="mini-heatmap-axis-y"><span>Away Goals</span></div>`;
+  miniGridHtml += `<div class="mini-heatmap-axis-y">
+    <span class="mini-hm-axis-badge mini-hm-axis-y-badge" title="${fixture?.away_name || 'Away'}">
+      <span class="mini-hm-axis-crest">${awayCrest}</span>
+      <span class="mini-hm-axis-short">${awayShort}</span>
+    </span>
+    <span class="mini-hm-axis-text-y">Away Goals</span>
+  </div>`;
   miniGridHtml += `<div class="mini-heatmap-grid" style="grid-template-columns: 22px repeat(${gridSize}, 1fr); grid-template-rows: 22px repeat(${gridSize}, 1fr);">`;
   miniGridHtml += `<div class="mini-hm-corner"></div>`;
 
@@ -8735,6 +8607,7 @@ function initManagementEvents() {
 
   // PAS Settings Events
   initPasSettingsEvents();
+  initManagementNtfyEvents();
 }
 
 function updatePasLivePreview() {
@@ -8965,11 +8838,362 @@ function showPasFeedback(msg, type = 'success') {
   }, 4000);
 }
 
+// ─── ntfy Push Notifications Component ─────────────────────────────────────
+let ntfySettingsData = null;
+
+async function loadNotificationSettings() {
+  try {
+    ntfySettingsData = await apiGetNotificationSettings();
+    return ntfySettingsData;
+  } catch (err) {
+    console.warn('Failed to load notification settings:', err);
+    return null;
+  }
+}
+
+async function openNotificationsModal() {
+  const modal = document.getElementById('notificationsModal');
+  if (!modal) return;
+
+  await loadNotificationSettings();
+
+  const groupSelect = document.getElementById('ntfyModalGroupSelect');
+  const topicDisplay = document.getElementById('ntfyModalTopicDisplay');
+  const openAppBtn = document.getElementById('ntfyModalOpenAppBtn');
+  const testStatus = document.getElementById('ntfyModalTestStatus');
+  if (testStatus) {
+    testStatus.textContent = '';
+    testStatus.className = 'ntfy-test-status';
+  }
+
+  const groups = (ntfySettingsData && ntfySettingsData.groups) || state.groups || [];
+  if (groupSelect) {
+    groupSelect.innerHTML = groups.map(g => `
+      <option value="${g.id}" ${state.activeGroup && state.activeGroup.id === g.id ? 'selected' : ''}>
+        ${g.name}
+      </option>
+    `).join('') || '<option value="">No leagues found</option>';
+
+    const updateSelectedGroupTopic = () => {
+      const selectedId = parseInt(groupSelect.value, 10);
+      const grp = groups.find(g => g.id === selectedId) || groups[0];
+      const topic = grp ? (grp.ntfy_topic || `epl-league-${grp.id}`) : 'epl-league';
+      const serverUrl = (ntfySettingsData && ntfySettingsData.serverUrl) || 'https://ntfy.sh';
+      if (topicDisplay) topicDisplay.textContent = topic;
+      if (openAppBtn) openAppBtn.href = `${serverUrl}/${topic}`;
+    };
+
+    groupSelect.onchange = updateSelectedGroupTopic;
+    updateSelectedGroupTopic();
+  }
+
+  // Personal player direct topic section
+  const personalCard = document.getElementById('ntfyPersonalCard');
+  const playerTopicInput = document.getElementById('ntfyPlayerTopicInput');
+  const playerTopicStatus = document.getElementById('ntfyPlayerTopicStatus');
+  if (playerTopicStatus) playerTopicStatus.textContent = '';
+
+  if (state.auth && state.auth.role === 'player') {
+    if (personalCard) personalCard.style.display = 'block';
+    if (playerTopicInput) {
+      playerTopicInput.value = (ntfySettingsData && ntfySettingsData.player_topic) || '';
+    }
+  } else {
+    if (personalCard) personalCard.style.display = 'none';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeNotificationsModal() {
+  const modal = document.getElementById('notificationsModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function initNotificationsModalEvents() {
+  const headerBtn = document.getElementById('headerNotificationsBtn');
+  if (headerBtn) {
+    headerBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openNotificationsModal();
+    });
+  }
+
+  const closeBtn = document.getElementById('closeNotificationsModalBtn');
+  if (closeBtn) closeBtn.addEventListener('click', closeNotificationsModal);
+
+  const doneBtn = document.getElementById('ntfyCloseDoneBtn');
+  if (doneBtn) doneBtn.addEventListener('click', closeNotificationsModal);
+
+  const modal = document.getElementById('notificationsModal');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeNotificationsModal();
+    });
+  }
+
+  // Copy Topic button
+  const copyBtn = document.getElementById('ntfyModalCopyTopicBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const topic = document.getElementById('ntfyModalTopicDisplay')?.textContent;
+      if (!topic) return;
+      try {
+        await navigator.clipboard.writeText(topic);
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<span>✅</span> Copied!';
+        setTimeout(() => { copyBtn.innerHTML = originalText; }, 2000);
+      } catch (err) {
+        showSaveToast(`Topic: ${topic}`, 'info');
+      }
+    });
+  }
+
+  // Test Notification buttons (Connection, Kickoff lock alert, Full-time results alert)
+  const triggerTestAlert = async (testType = null) => {
+    const groupSelect = document.getElementById('ntfyModalGroupSelect');
+    const groupId = groupSelect ? parseInt(groupSelect.value, 10) : null;
+    const topic = document.getElementById('ntfyModalTopicDisplay')?.textContent;
+    const statusEl = document.getElementById('ntfyModalTestStatus');
+
+    if (statusEl) {
+      statusEl.className = 'ntfy-test-status loading';
+      statusEl.textContent = testType ? `Sending test ${testType} alert...` : 'Sending test alert...';
+    }
+
+    try {
+      await apiSendTestNotification(topic, groupId, testType);
+      if (statusEl) {
+        statusEl.className = 'ntfy-test-status success';
+        statusEl.textContent = '✅ Alert sent! Check your ntfy app.';
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.className = 'ntfy-test-status error';
+        statusEl.textContent = `❌ ${err.message || 'Failed to send'}`;
+      }
+    }
+  };
+
+  const sendTestBtn = document.getElementById('ntfyModalSendTestBtn');
+  if (sendTestBtn) {
+    sendTestBtn.addEventListener('click', () => triggerTestAlert(null));
+  }
+
+  const testKickoffBtn = document.getElementById('ntfyModalTestKickoffBtn');
+  if (testKickoffBtn) {
+    testKickoffBtn.addEventListener('click', () => triggerTestAlert('kickoff'));
+  }
+
+  const testFinishedBtn = document.getElementById('ntfyModalTestFinishedBtn');
+  if (testFinishedBtn) {
+    testFinishedBtn.addEventListener('click', () => triggerTestAlert('finished'));
+  }
+
+  // Save personal player topic
+  const savePersonalBtn = document.getElementById('ntfySavePlayerTopicBtn');
+  if (savePersonalBtn) {
+    savePersonalBtn.addEventListener('click', async () => {
+      const input = document.getElementById('ntfyPlayerTopicInput');
+      const statusEl = document.getElementById('ntfyPlayerTopicStatus');
+      const topicVal = input ? input.value.trim() : '';
+
+      try {
+        await apiUpdatePlayerNtfyTopic(topicVal);
+        if (statusEl) {
+          statusEl.style.color = 'var(--accent-green)';
+          statusEl.textContent = topicVal ? '✅ Personal topic saved!' : 'Cleared personal topic';
+          setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.style.color = 'var(--accent-rose)';
+          statusEl.textContent = `❌ ${err.message || 'Failed to save'}`;
+        }
+      }
+    });
+  }
+
+  // Test personal player topic
+  const testPersonalBtn = document.getElementById('ntfyTestPlayerTopicBtn');
+  if (testPersonalBtn) {
+    testPersonalBtn.addEventListener('click', async () => {
+      const input = document.getElementById('ntfyPlayerTopicInput');
+      const statusEl = document.getElementById('ntfyPlayerTopicStatus');
+      const topicVal = input ? input.value.trim() : '';
+      if (!topicVal) {
+        if (statusEl) {
+          statusEl.style.color = 'var(--accent-rose)';
+          statusEl.textContent = 'Please enter a personal topic first.';
+        }
+        return;
+      }
+
+      if (statusEl) {
+        statusEl.style.color = 'var(--accent-cyan)';
+        statusEl.textContent = 'Sending test alert...';
+      }
+
+      try {
+        await apiSendTestNotification(topicVal);
+        if (statusEl) {
+          statusEl.style.color = 'var(--accent-green)';
+          statusEl.textContent = '✅ Test notification sent!';
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.style.color = 'var(--accent-rose)';
+          statusEl.textContent = `❌ ${err.message || 'Failed to send'}`;
+        }
+      }
+    });
+  }
+}
+
+// ─── Admin Management ntfy Settings ────────────────────────────────────────
+async function renderManagementNtfySettings() {
+  const container = document.getElementById('mgmtNtfySection');
+  if (!container) return;
+
+  const data = await loadNotificationSettings();
+  if (!data) return;
+
+  const enabledToggle = document.getElementById('mgmtNtfyEnabledToggle');
+  const heatmapsToggle = document.getElementById('mgmtNtfyHeatmapsToggle');
+  const serverInput = document.getElementById('mgmtNtfyServerInput');
+  const reminderInput = document.getElementById('mgmtNtfyReminderHoursInput');
+  const kickoffInput = document.getElementById('mgmtNtfyKickoffMinsInput');
+  const statusBadge = document.getElementById('mgmtNtfyStatusBadge');
+  const tableBody = document.getElementById('mgmtNtfyGroupsTableBody');
+
+  if (enabledToggle) enabledToggle.checked = Boolean(data.enabled);
+  if (heatmapsToggle) heatmapsToggle.checked = data.includeHeatmaps !== false;
+  if (serverInput) serverInput.value = data.serverUrl || 'https://ntfy.sh';
+  if (reminderInput) reminderInput.value = (data.reminderHours || [24, 2]).join(',');
+  if (kickoffInput) kickoffInput.value = data.kickoffMinutes || 15;
+
+  if (statusBadge) {
+    try {
+      statusBadge.textContent = data.enabled ? `Enabled (${new URL(data.serverUrl || 'https://ntfy.sh').hostname})` : 'Disabled';
+    } catch (e) {
+      statusBadge.textContent = data.enabled ? 'Enabled' : 'Disabled';
+    }
+    statusBadge.style.background = data.enabled ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)';
+    statusBadge.style.color = data.enabled ? 'var(--accent-cyan)' : 'var(--text-dim)';
+  }
+
+  if (tableBody) {
+    const groups = data.groups || state.groups || [];
+    tableBody.innerHTML = groups.map(g => `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-main);">${g.name}</td>
+        <td>
+          <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); color: var(--accent-cyan); font-size: 0.8125rem;">
+            ${g.ntfy_topic || '–'}
+          </code>
+        </td>
+        <td style="text-align: center;">
+          <div style="display: inline-flex; gap: 4px; justify-content: center;">
+            <a href="${g.subscribe_url || `https://ntfy.sh/${g.ntfy_topic}`}" target="_blank" rel="noopener" class="btn btn-xs btn-secondary" title="Subscribe in browser / app">
+              📲 Open
+            </a>
+            <button type="button" class="btn btn-xs btn-secondary mgmt-test-group-ntfy-btn" data-group-id="${g.id}" data-topic="${g.ntfy_topic}" title="Send test alert to this group">
+              🔔 Test
+            </button>
+            <button type="button" class="btn btn-xs btn-secondary mgmt-regen-group-ntfy-btn" data-group-id="${g.id}" data-name="${g.name}" title="Regenerate topic name">
+              🔄
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="3" style="text-align:center; padding:12px; color:var(--text-muted);">No league groups found</td></tr>';
+
+    tableBody.querySelectorAll('.mgmt-test-group-ntfy-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const topic = btn.dataset.topic;
+        const gid = btn.dataset.groupId;
+        btn.disabled = true;
+        const oldText = btn.textContent;
+        btn.textContent = '⏳';
+        try {
+          await apiSendTestNotification(topic, gid);
+          showSaveToast('Test notification sent!', 'success');
+        } catch (err) {
+          showSaveToast(err.message || 'Failed to send', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = oldText;
+        }
+      });
+    });
+
+    tableBody.querySelectorAll('.mgmt-regen-group-ntfy-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const gid = btn.dataset.groupId;
+        const gname = btn.dataset.name;
+        if (!confirm(`Regenerate ntfy topic for "${gname}"? Existing subscribers will need to subscribe to the new topic.`)) return;
+        try {
+          await apiUpdateGroupNtfyTopic(gid, null);
+          showSaveToast('Topic regenerated!', 'success');
+          renderManagementNtfySettings();
+        } catch (err) {
+          showSaveToast(err.message || 'Failed to regenerate', 'error');
+        }
+      });
+    });
+  }
+}
+
+function initManagementNtfyEvents() {
+  const saveBtn = document.getElementById('mgmtSaveNtfySettingsBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const enabled = document.getElementById('mgmtNtfyEnabledToggle')?.checked ?? true;
+      const includeHeatmaps = document.getElementById('mgmtNtfyHeatmapsToggle')?.checked ?? true;
+      const serverUrl = document.getElementById('mgmtNtfyServerInput')?.value?.trim() || 'https://ntfy.sh';
+      const reminderHours = document.getElementById('mgmtNtfyReminderHoursInput')?.value?.trim() || '24,2';
+      const kickoffMinutes = parseInt(document.getElementById('mgmtNtfyKickoffMinsInput')?.value, 10) || 15;
+
+      try {
+        await apiSaveNotificationSettings({
+          enabled,
+          include_heatmaps: includeHeatmaps,
+          server_url: serverUrl,
+          reminder_hours: reminderHours,
+          kickoff_minutes: kickoffMinutes
+        });
+        showSaveToast('Notification settings saved', 'success');
+        renderManagementNtfySettings();
+      } catch (err) {
+        showSaveToast(err.message || 'Failed to save settings', 'error');
+      }
+    });
+  }
+
+  const remindNowBtn = document.getElementById('mgmtSendReminderNowBtn');
+  if (remindNowBtn) {
+    remindNowBtn.addEventListener('click', async () => {
+      remindNowBtn.disabled = true;
+      remindNowBtn.textContent = '⏳ Sending...';
+      try {
+        const res = await apiTriggerPredictionReminder();
+        showSaveToast(`Reminders sent: ${res.sent_count || 0} alert(s)`, 'success');
+      } catch (err) {
+        showSaveToast(err.message || 'Failed to trigger reminders', 'error');
+      } finally {
+        remindNowBtn.disabled = false;
+        remindNowBtn.textContent = '⏰ Remind Predictions Now';
+      }
+    });
+  }
+}
+
 function renderManagementPage() {
   renderGroupsGrid();
   renderMasterPlayersTable();
   renderPlayerActivityTable();
   renderPasSettingsSection();
+  renderManagementNtfySettings();
 }
 
 function getGroupScopeDisplayDetails(g) {
@@ -9959,6 +10183,7 @@ async function init() {
   startLockRefresh();
   startActivityHeartbeat();
   initPointsTooltip();
+  initNotificationsModalEvents();
 
   document.getElementById('matrixBody').innerHTML = `
     <tr><td colspan="10">

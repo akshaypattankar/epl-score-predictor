@@ -1,8 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
+import dns from 'dns';
 import fs from 'fs';
 import path from 'path';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (e) {
+  // Ignore
+}
 import db, {
   generatePasscode,
   getFplCache,
@@ -16,9 +23,24 @@ import db, {
   listBackups,
   scheduleNightlyBackup,
   setAppSetting,
-  deleteAppSetting
+  deleteAppSetting,
+  getGroupWagers,
+  bulkSetGroupWagers,
+  setSingleWager,
+  getGroupWagerSettings,
+  setGroupWagerSettings,
+  getGroupPlayerStakes,
+  setGroupPlayerStakes
 } from './db.js';
 import { calculateBackendWhatIfStandings, getPasSettingsDetails } from './whatif.js';
+import {
+  slugifyTopic,
+  getNtfyConfig,
+  sendNtfyNotification,
+  checkAndSendPredictionReminders,
+  runNotificationCycle,
+  startNotificationScheduler
+} from './notifications.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -503,18 +525,19 @@ app.get('/api/groups', (req, res) => {
 
 // Create new group (Admin only)
 app.post('/api/groups', requireAdmin, (req, res) => {
-  const { name, teams_filter, start_gw } = req.body;
+  const { name, teams_filter, start_gw, ntfy_topic } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Group name is required' });
 
   const filterVal = (Array.isArray(teams_filter) && teams_filter.length > 0)
     ? JSON.stringify(teams_filter)
     : (typeof teams_filter === 'string' ? teams_filter : 'ALL');
   const startGwVal = (start_gw !== undefined && start_gw !== null && start_gw !== '') ? Math.max(1, Math.min(38, parseInt(start_gw, 10) || 1)) : 1;
+  const topicVal = ntfy_topic && ntfy_topic.trim() ? ntfy_topic.trim() : slugifyTopic(name.trim(), Date.now());
 
   try {
-    const stmt = db.prepare('INSERT INTO groups (name, teams_filter, start_gw) VALUES (?, ?, ?)');
-    const info = stmt.run(name.trim(), filterVal, startGwVal);
-    res.status(201).json({ id: info.lastInsertRowid, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal, player_count: 0 });
+    const stmt = db.prepare('INSERT INTO groups (name, teams_filter, start_gw, ntfy_topic) VALUES (?, ?, ?, ?)');
+    const info = stmt.run(name.trim(), filterVal, startGwVal, topicVal);
+    res.status(201).json({ id: info.lastInsertRowid, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal, ntfy_topic: topicVal, player_count: 0 });
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
       return res.status(400).json({ error: 'A group with that name already exists' });
@@ -526,7 +549,7 @@ app.post('/api/groups', requireAdmin, (req, res) => {
 // Rename/Update group (Admin only)
 app.put('/api/groups/:id', requireAdmin, (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  const { name, teams_filter, start_gw } = req.body;
+  const { name, teams_filter, start_gw, ntfy_topic } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Group name is required' });
 
   const filterVal = (Array.isArray(teams_filter) && teams_filter.length > 0)
@@ -534,20 +557,19 @@ app.put('/api/groups/:id', requireAdmin, (req, res) => {
     : (typeof teams_filter === 'string' ? teams_filter : 'ALL');
 
   try {
-    let stmt, result;
-    if (start_gw !== undefined && start_gw !== null) {
-      const startGwVal = Math.max(1, Math.min(38, parseInt(start_gw, 10) || 1));
-      stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ?, start_gw = ? WHERE id = ?');
-      result = stmt.run(name.trim(), filterVal, startGwVal, groupId);
-      if (result.changes === 0) return res.status(404).json({ error: 'Group not found' });
-      res.json({ id: groupId, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal });
-    } else {
-      stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ? WHERE id = ?');
-      result = stmt.run(name.trim(), filterVal, groupId);
-      if (result.changes === 0) return res.status(404).json({ error: 'Group not found' });
-      const current = db.prepare('SELECT start_gw FROM groups WHERE id = ?').get(groupId);
-      res.json({ id: groupId, name: name.trim(), teams_filter: filterVal, start_gw: current ? current.start_gw : 1 });
-    }
+    const current = db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId);
+    if (!current) return res.status(404).json({ error: 'Group not found' });
+
+    const startGwVal = (start_gw !== undefined && start_gw !== null)
+      ? Math.max(1, Math.min(38, parseInt(start_gw, 10) || 1))
+      : (current.start_gw || 1);
+    const topicVal = (ntfy_topic !== undefined && ntfy_topic !== null)
+      ? String(ntfy_topic).trim()
+      : (current.ntfy_topic || slugifyTopic(name.trim(), groupId));
+
+    const stmt = db.prepare('UPDATE groups SET name = ?, teams_filter = ?, start_gw = ?, ntfy_topic = ? WHERE id = ?');
+    stmt.run(name.trim(), filterVal, startGwVal, topicVal, groupId);
+    res.json({ id: groupId, name: name.trim(), teams_filter: filterVal, start_gw: startGwVal, ntfy_topic: topicVal });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -599,7 +621,7 @@ app.get('/api/players', (req, res) => {
 
   try {
     const players = db.prepare(`
-      SELECT p.id, p.name, p.passcode, p.timezone, p.last_login_at, p.last_seen_at, p.created_at,
+      SELECT p.id, p.name, p.passcode, p.timezone, p.ntfy_topic, p.last_login_at, p.last_seen_at, p.created_at,
         COALESCE(json_group_array(gp.group_id), '[]') as group_ids,
         MAX(pr.updated_at) as last_prediction_at,
         COUNT(CASE WHEN pr.home_score IS NOT NULL AND pr.away_score IS NOT NULL THEN 1 END) as total_predictions
@@ -834,6 +856,92 @@ app.post('/api/predictions', requirePlayerOrAdmin, (req, res) => {
   }
 });
 
+// ─── WAGERS & STAKES ENDPOINTS ──────────────────────────────────────────────
+// Get all wagers, player stakes, and settings for a group (Public/Player/Admin)
+app.get('/api/wagers', (req, res) => {
+  const groupId = parseInt(req.query.group_id, 10);
+  if (!groupId) {
+    return res.status(400).json({ error: 'group_id query parameter is required' });
+  }
+  try {
+    const wagers = getGroupWagers(groupId);
+    const settings = getGroupWagerSettings(groupId);
+    const player_stakes = getGroupPlayerStakes(groupId);
+    res.json({ success: true, group_id: groupId, wagers, settings, player_stakes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update member stakes in bulk across all scope games (Admin Only)
+app.put('/api/wagers/player-stakes', requireAdmin, (req, res) => {
+  const { group_id, stakes, match_ids } = req.body;
+  if (!group_id || !Array.isArray(stakes)) {
+    return res.status(400).json({ error: 'group_id and stakes array are required' });
+  }
+
+  try {
+    const updatedStakes = setGroupPlayerStakes(Number(group_id), stakes, match_ids);
+    res.json({ success: true, group_id: Number(group_id), player_stakes: updatedStakes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bulk set wagers for matches (Admin Only)
+app.post('/api/wagers/bulk', requireAdmin, (req, res) => {
+  const { group_id, player_id, amount, match_ids } = req.body;
+  if (!group_id || player_id === undefined || amount === undefined || !Array.isArray(match_ids)) {
+    return res.status(400).json({ error: 'group_id, player_id, amount, and match_ids array are required' });
+  }
+
+  const validMatchIds = match_ids.map(Number);
+
+  try {
+    const result = bulkSetGroupWagers(Number(group_id), Number(player_id), Number(amount), validMatchIds);
+    res.json({
+      success: true,
+      group_id: Number(group_id),
+      player_id: Number(player_id),
+      amount: Number(amount),
+      updated_count: result.changes,
+      total_requested: match_ids.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update or set wager for a single match (Admin Only)
+app.put('/api/wagers', requireAdmin, (req, res) => {
+  const { group_id, match_id, player_id, amount } = req.body;
+  if (!group_id || !match_id || player_id === undefined || amount === undefined) {
+    return res.status(400).json({ error: 'group_id, match_id, player_id, and amount are required' });
+  }
+
+  try {
+    setSingleWager(Number(group_id), Number(match_id), Number(player_id), Number(amount));
+    res.json({ success: true, group_id: Number(group_id), match_id: Number(match_id), player_id: Number(player_id), amount: Number(amount) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update group wager settings (default stake and weekly split percent) (Admin Only)
+app.put('/api/wagers/settings', requireAdmin, (req, res) => {
+  const { group_id, default_stake, weekly_split_percent } = req.body;
+  if (!group_id) {
+    return res.status(400).json({ error: 'group_id is required' });
+  }
+
+  try {
+    const updated = setGroupWagerSettings(Number(group_id), { default_stake, weekly_split_percent });
+    res.json({ success: true, settings: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── SCORING RULES ENDPOINTS ────────────────────────────────────────────────
 // Get active scoring tiers and bonus rules (Public)
 app.get('/api/scoring-rules', (req, res) => {
@@ -980,8 +1088,310 @@ app.post('/api/whatif/pas-settings/reset', requireAdmin, (req, res) => {
   }
 });
 
+// ─── NTFY NOTIFICATIONS ENDPOINTS ──────────────────────────────────────────
+// Get current ntfy notification settings and topics
+app.get('/api/notifications/settings', (req, res) => {
+  try {
+    const config = getNtfyConfig();
+    const sess = getSession(req);
+
+    // Get groups with their ntfy topic
+    let groups;
+    if (sess && sess.role === 'player' && sess.playerId) {
+      groups = db.prepare(`
+        SELECT g.id, g.name, g.ntfy_topic
+        FROM groups g
+        INNER JOIN group_players gp ON g.id = gp.group_id AND gp.player_id = ?
+        ORDER BY g.name ASC
+      `).all(sess.playerId);
+    } else {
+      groups = db.prepare('SELECT id, name, ntfy_topic FROM groups ORDER BY name ASC').all();
+    }
+
+    const groupsWithUrls = groups.map(g => ({
+      ...g,
+      subscribe_url: `${config.serverUrl}/${g.ntfy_topic}`
+    }));
+
+    let playerTopic = null;
+    if (sess && sess.playerId) {
+      const p = db.prepare('SELECT ntfy_topic FROM players WHERE id = ?').get(sess.playerId);
+      playerTopic = p?.ntfy_topic || null;
+    }
+
+    res.json({
+      ...config,
+      groups: groupsWithUrls,
+      player_topic: playerTopic,
+      player_subscribe_url: playerTopic ? `${config.serverUrl}/${playerTopic}` : null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update global ntfy notification settings (Admin only)
+app.put('/api/notifications/settings', requireAdmin, (req, res) => {
+  try {
+    const { enabled, server_url, app_url, reminder_hours, kickoff_minutes, include_heatmaps } = req.body;
+
+    if (enabled !== undefined) setAppSetting('ntfy_enabled', enabled ? '1' : '0');
+    if (server_url !== undefined) setAppSetting('ntfy_server', String(server_url).trim().replace(/\/+$/, ''));
+    if (app_url !== undefined) setAppSetting('ntfy_app_url', String(app_url).trim().replace(/\/+$/, ''));
+    if (reminder_hours !== undefined) {
+      const arr = Array.isArray(reminder_hours) ? reminder_hours.join(',') : String(reminder_hours);
+      setAppSetting('ntfy_reminder_hours', arr);
+    }
+    if (kickoff_minutes !== undefined) {
+      const mins = Math.max(1, Math.min(120, parseInt(kickoff_minutes, 10) || 15));
+      setAppSetting('ntfy_kickoff_minutes', String(mins));
+    }
+    if (include_heatmaps !== undefined) {
+      setAppSetting('ntfy_include_heatmaps', include_heatmaps ? '1' : '0');
+    }
+
+    const updated = getNtfyConfig();
+    res.json({ success: true, ...updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update or regenerate ntfy topic for a group (Admin only)
+app.put('/api/groups/:id/ntfy', requireAdmin, (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+
+  let newTopic = req.body.ntfy_topic ? String(req.body.ntfy_topic).trim() : null;
+  if (!newTopic) {
+    newTopic = slugifyTopic(group.name, group.id);
+  }
+
+  // Ensure topic is URL safe
+  newTopic = newTopic.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+
+  try {
+    db.prepare('UPDATE groups SET ntfy_topic = ? WHERE id = ?').run(newTopic, groupId);
+    const config = getNtfyConfig();
+    res.json({
+      success: true,
+      group_id: groupId,
+      ntfy_topic: newTopic,
+      subscribe_url: `${config.serverUrl}/${newTopic}`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update personal ntfy topic for authenticated player
+app.put('/api/players/me/ntfy', requirePlayerOrAdmin, (req, res) => {
+  const playerId = req.session.playerId;
+  if (!playerId) return res.status(400).json({ error: 'No player associated with session' });
+
+  let newTopic = req.body.ntfy_topic ? String(req.body.ntfy_topic).trim() : null;
+  if (newTopic) {
+    newTopic = newTopic.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  try {
+    db.prepare('UPDATE players SET ntfy_topic = ? WHERE id = ?').run(newTopic, playerId);
+    const config = getNtfyConfig();
+    res.json({
+      success: true,
+      player_id: playerId,
+      ntfy_topic: newTopic,
+      subscribe_url: newTopic ? `${config.serverUrl}/${newTopic}` : null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send a test notification to a topic or league
+app.post('/api/notifications/test', requirePlayerOrAdmin, async (req, res) => {
+  try {
+    const { topic, group_id, test_type } = req.body;
+    let targetTopic = topic;
+    let group = null;
+
+    if (group_id) {
+      group = db.prepare('SELECT id, ntfy_topic, name FROM groups WHERE id = ?').get(Number(group_id));
+      if (!targetTopic && group) targetTopic = group.ntfy_topic;
+    }
+
+    if (!targetTopic) {
+      return res.status(400).json({ error: 'Target topic is required' });
+    }
+
+    const config = getNtfyConfig();
+    const groupName = group ? group.name : 'League';
+
+    if (test_type === 'kickoff') {
+      let heatmapBuffer = null;
+      let heatmapFilename = null;
+      try {
+        const { generateMatchHeatmapPng } = await import('./heatmap_generator.js');
+        const { png } = generateMatchHeatmapPng({
+          fixture: { id: 99991, event: 9 },
+          homeTeam: { short: 'ARS', name: 'Arsenal', code: 3, id: 1 },
+          awayTeam: { short: 'CHE', name: 'Chelsea', code: 8, id: 6 },
+          playersWithPreds: [
+            { name: 'Alice', pred_h: 2, pred_a: 1 },
+            { name: 'Bob', pred_h: 1, pred_a: 1 },
+            { name: 'Charlie', pred_h: 3, pred_a: 1 },
+            { name: 'Dave', pred_h: 0, pred_a: 2 }
+          ],
+          leagueName: groupName,
+          isFullTime: false
+        });
+        heatmapBuffer = png;
+        heatmapFilename = 'test_kickoff_heatmap.png';
+      } catch (e) {
+        console.warn('Failed to generate test kickoff heatmap:', e.message);
+      }
+
+      const result = await sendNtfyNotification({
+        serverUrl: config.serverUrl,
+        topic: targetTopic,
+        title: '🔒 Kickoff: ARS vs CHE',
+        message: [
+          '![ARS](https://resources.premierleague.com/premierleague/badges/50/t3.png) **ARS** vs **CHE** ![CHE](https://resources.premierleague.com/premierleague/badges/50/t8.png)',
+          '### 🔒 Inputs Locked — Match Underway!',
+          '**Arsenal** vs **Chelsea**',
+          `*Gameweek 9 · League: ${groupName}*`,
+          '',
+          '---',
+          '### 📋 Group Predictions:',
+          '• **Alice**: `2 - 1`',
+          '• **Bob**: `1 - 1`',
+          '• **Charlie**: `3 - 1`',
+          '• **Dave**: `0 - 2`',
+          '• **Emma**: *(No prediction)*'
+        ].join('\n'),
+        priority: 4,
+        tags: 'soccer,lock,whistle,bar_chart',
+        icon: 'https://resources.premierleague.com/premierleague/badges/70/t3.png',
+        markdown: true,
+        attachmentBuffer: heatmapBuffer,
+        attachmentFilename: heatmapFilename
+      });
+      return res.json({ success: true, topic: targetTopic, result, test_type: 'kickoff' });
+    } else if (test_type === 'finished') {
+      const allRules = getScoringRules();
+      const tiers = Array.isArray(allRules) ? allRules.filter(r => r.rule_type === 'tier') : [];
+      const t1 = tiers.find(t => String(t.id) === '1') || { name: 'Vishwaguru', icon: '🔮', pts: 10 };
+      const t2 = tiers.find(t => String(t.id) === '2') || { name: 'Manager', icon: '🤹', pts: 7 };
+      const t3 = tiers.find(t => String(t.id) === '3') || { name: 'FM Enthusiast', icon: '🧑‍💻', pts: 5 };
+      const t4 = tiers.find(t => String(t.id) === '4') || { name: 'Pundit', icon: '🗣️', pts: 3 };
+      const t5 = tiers.find(t => String(t.id) === '5') || { name: 'Casual Fan', icon: '🍟', pts: 1 };
+      const t6 = tiers.find(t => String(t.id) === '6') || { name: 'Infantino', icon: '🤡', pts: 0 };
+
+      let heatmapBuffer = null;
+      let heatmapFilename = null;
+      try {
+        const { generateMatchHeatmapPng } = await import('./heatmap_generator.js');
+        const { png } = generateMatchHeatmapPng({
+          fixture: { id: 99991, event: 9, team_h_score: 2, team_a_score: 1 },
+          homeTeam: { short: 'ARS', name: 'Arsenal', code: 3, id: 1 },
+          awayTeam: { short: 'CHE', name: 'Chelsea', code: 8, id: 6 },
+          playersWithPreds: [
+            { name: 'Alice', pred_h: 2, pred_a: 1 },
+            { name: 'Charlie', pred_h: 3, pred_a: 1 },
+            { name: 'Bob', pred_h: 1, pred_a: 1 },
+            { name: 'Dave', pred_h: 0, pred_a: 2 }
+          ],
+          actualScore: { home: 2, away: 1 },
+          leagueName: groupName,
+          isFullTime: true
+        });
+        heatmapBuffer = png;
+        heatmapFilename = 'test_final_heatmap.png';
+      } catch (e) {
+        console.warn('Failed to generate test final heatmap:', e.message);
+      }
+
+      const result = await sendNtfyNotification({
+        serverUrl: config.serverUrl,
+        topic: targetTopic,
+        title: '🏁 Full-Time: ARS 2 - 1 CHE',
+        message: [
+          '![ARS](https://resources.premierleague.com/premierleague/badges/50/t3.png) **ARS 2 - 1 CHE** ![CHE](https://resources.premierleague.com/premierleague/badges/50/t8.png)',
+          '### 🏁 Final: Arsenal 2 - 1 Chelsea',
+          `*Gameweek 9 · League: ${groupName}*`,
+          '',
+          '---',
+          '### 🏆 Points Earned This Match:',
+          `• **Alice**: \`2 - 1\` → **+${t1.pts} pts** ${t1.icon} *(${t1.name})*`,
+          `• **Charlie**: \`3 - 1\` → **+${t3.pts} pts** ${t3.icon} *(${t3.name})*`,
+          `• **Bob**: \`1 - 1\` → **+0 pts** ${t6.icon} *(${t6.name})*`,
+          `• **Dave**: \`0 - 2\` → **+0 pts** ${t6.icon} *(${t6.name})*`,
+          '• **Emma**: *(No prediction)* → **+0 pts**'
+        ].join('\n'),
+        priority: 3,
+        tags: 'soccer,checkered_flag,trophy,bar_chart',
+        icon: 'https://resources.premierleague.com/premierleague/badges/70/t3.png',
+        markdown: true,
+        attachmentBuffer: heatmapBuffer,
+        attachmentFilename: heatmapFilename
+      });
+      return res.json({ success: true, topic: targetTopic, result, test_type: 'finished' });
+    }
+
+    const result = await sendNtfyNotification({
+      serverUrl: config.serverUrl,
+      topic: targetTopic,
+      title: '🔔 Test Notification from EPL Predictor',
+      message: `Connection successful for ${groupName}!\nYou are subscribed to match kickoff locks, full-time points, and prediction reminders.`,
+      priority: 3,
+      tags: 'tada,soccer,white_check_mark',
+      markdown: true
+    });
+
+    res.json({ success: true, topic: targetTopic, result, test_type: 'connection' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send test notification: ' + err.message });
+  }
+});
+
+// Manually trigger prediction reminders for active Gameweek (Admin only)
+app.post('/api/notifications/remind-predictions', requireAdmin, async (req, res) => {
+  try {
+    const fixturesCache = getFplCache('fixtures');
+    if (!fixturesCache || !fixturesCache.data) {
+      return res.status(400).json({ error: 'No fixture data available to process reminders' });
+    }
+
+    const fixtures = JSON.parse(fixturesCache.data);
+    const config = getNtfyConfig();
+    const { getTeamsMap } = await import('./notifications.js');
+    const teamsMap = getTeamsMap();
+
+    const sentCount = await checkAndSendPredictionReminders(fixtures, teamsMap, config, { force: true });
+    res.json({ success: true, sent_count: sentCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to trigger prediction reminders: ' + err.message });
+  }
+});
+
+// Get recent notifications log (Admin only)
+app.get('/api/notifications/history', requireAdmin, (req, res) => {
+  try {
+    const history = db.prepare(`
+      SELECT * FROM sent_notifications
+      ORDER BY id DESC
+      LIMIT 50
+    `).all();
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`EPL Predictor Server running on port ${PORT}`);
   scheduleNightlyBackup();
+  startNotificationScheduler();
 });
 

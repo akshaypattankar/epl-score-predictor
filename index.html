@@ -46,8 +46,14 @@
 
     <!-- Offline Status Indicator Banner -->
     <div class="pwa-offline-banner" id="pwaOfflineBanner" style="display: none;" role="status" aria-live="polite">
-      <span class="pwa-offline-icon">⚡</span>
-      <span class="pwa-offline-text">You are currently offline. Viewing cached predictions and fixtures.</span>
+      <div class="pwa-offline-content">
+        <span class="pwa-offline-icon">⚡</span>
+        <span class="pwa-offline-text">You appear to be offline. Viewing cached predictions and fixtures.</span>
+      </div>
+      <div class="pwa-offline-actions">
+        <button type="button" class="pwa-offline-retry-btn" id="pwaOfflineRetryBtn" title="Check connection to server">🔄 Check Connection</button>
+        <button type="button" class="pwa-offline-dismiss-btn" id="pwaDismissOfflineBtn" aria-label="Dismiss offline notification">✕</button>
+      </div>
     </div>
 
     <!-- PWA Update Toast -->
@@ -77,6 +83,10 @@
           <button class="nav-tab active" id="navDashboardBtn" title="Predictions Dashboard">
             <img src="assets/report/report.png" alt="Dashboard" class="nav-tab-icon" />
             <span class="nav-tab-text">DASHBOARD</span>
+          </button>
+          <button class="nav-tab" id="navWagersBtn" title="Weekly Winners &amp; Wager Stakes">
+            <svg class="nav-tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>
+            <span class="nav-tab-text">WAGERS</span>
           </button>
           <button class="nav-tab is-hidden" id="navWhatIfBtn" style="display: none !important;" title="What-If Standings Simulator" disabled aria-hidden="true">
             <span class="nav-tab-icon">🔮</span>
@@ -132,6 +142,12 @@
             <button class="btn btn-sm btn-primary" id="authLoginBtn">🔒 Log In</button>
             <button class="btn btn-sm" id="authLogoutBtn" style="display:none;">🚪 Log Out</button>
           </div>
+
+          <!-- Notifications (ntfy) Button -->
+          <button class="btn btn-sm btn-header-notifications" id="headerNotificationsBtn" title="League & Match Notifications (ntfy)">
+            <span class="btn-icon">🔔</span>
+            <span class="btn-label">Alerts</span>
+          </button>
 
           <!-- PWA Install Button -->
           <button class="btn btn-sm btn-pwa-install" id="pwaInstallHeaderBtn" style="display: none;" title="Install EPL Predictor App">
@@ -561,6 +577,13 @@
       <div id="dashboardWhatIfContainer"></div>
 
     </div><!-- /#dashboardView -->
+
+    <!-- ═════════════════════════════════════════════════════ -->
+    <!-- ── VIEW: WAGERS, POT & WEEKLY WINNERS ─────────────── -->
+    <!-- ═════════════════════════════════════════════════════ -->
+    <div id="wagersView" style="display: none;">
+      <!-- Rendered dynamically by wagersView.js -->
+    </div>
 
     <!-- ═════════════════════════════════════════════════════ -->
     <!-- ── VIEW 2: WHAT-IF LEAGUE STANDINGS SIMULATOR ─────── -->
@@ -1066,6 +1089,98 @@
 
           <!-- Status Banner for Feedback -->
           <div id="mgmtPasStatusMessage" class="mgmt-pas-status-banner" style="display: none;"></div>
+        </div>
+      </section>
+
+      <!-- PUSH NOTIFICATIONS & NTFY SETTINGS SECTION -->
+      <section class="glass-card mgmt-section" id="mgmtNtfySection" style="margin-top: 24px;">
+        <div class="section-header mgmt-section-header-row">
+          <div>
+            <div class="mgmt-section-title-wrap">
+              <h3>🔔 Push Notifications & ntfy Engine</h3>
+              <span class="status-live-badge" id="mgmtNtfyStatusBadge">Enabled (ntfy.sh)</span>
+            </div>
+            <p>Automated prediction reminders, match kickoff alerts with locked predictions at game start, and full-time score &amp; points alerts for all leagues.</p>
+          </div>
+          <div class="mgmt-section-actions">
+            <button type="button" class="btn btn-secondary" id="mgmtSendReminderNowBtn" title="Trigger gameweek prediction reminder right now">
+              ⏰ Remind Predictions Now
+            </button>
+            <button type="button" class="btn btn-primary mgmt-header-action-btn" id="mgmtSaveNtfySettingsBtn">
+              💾 Save Settings
+            </button>
+          </div>
+        </div>
+
+        <div class="mgmt-ntfy-content-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+          <!-- Global Notification Settings Card -->
+          <div class="mgmt-ntfy-settings-card" style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 16px;">
+            <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+              <div>
+                <strong style="color: var(--text-main); font-size: 0.9375rem;">Enable Notifications</strong>
+                <div style="font-size: var(--font-size-xs, 0.8125rem); color: var(--text-muted);">Send automated alerts to players' ntfy topics</div>
+              </div>
+              <label class="toggle-switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" id="mgmtNtfyEnabledToggle" checked style="opacity: 0; width: 0; height: 0;" />
+                <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.2); transition: .3s; border-radius: 24px;"></span>
+              </label>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+              <div>
+                <strong style="color: var(--text-main); font-size: 0.9375rem;">Attach Heatmap Graphics</strong>
+                <div style="font-size: var(--font-size-xs, 0.8125rem); color: var(--text-muted);">Attach visual 2D prediction &amp; result heatmaps to notifications</div>
+              </div>
+              <label class="toggle-switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                <input type="checkbox" id="mgmtNtfyHeatmapsToggle" checked style="opacity: 0; width: 0; height: 0;" />
+                <span class="slider round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.2); transition: .3s; border-radius: 24px;"></span>
+              </label>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label for="mgmtNtfyServerInput" class="form-label">
+                <span>🌐</span> ntfy Server URL
+              </label>
+              <input type="url" id="mgmtNtfyServerInput" class="form-input" value="https://ntfy.sh" placeholder="https://ntfy.sh" />
+              <span class="mgmt-pas-sub-hint" style="font-size: 0.75rem; color: var(--text-dim); display: block; margin-top: 3px;">Default is public <code>https://ntfy.sh</code> or specify your self-hosted instance.</span>
+            </div>
+
+            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label for="mgmtNtfyReminderHoursInput" class="form-label">
+                  <span>⏰</span> Reminder Hours
+                </label>
+                <input type="text" id="mgmtNtfyReminderHoursInput" class="form-input" value="24,2" placeholder="24,2" />
+                <span class="mgmt-pas-sub-hint" style="font-size: 0.75rem; color: var(--text-dim); display: block; margin-top: 3px;">Hours before kickoff</span>
+              </div>
+              <div class="form-group">
+                <label for="mgmtNtfyKickoffMinsInput" class="form-label">
+                  <span>⚽</span> Kickoff Alert (Mins)
+                </label>
+                <input type="number" id="mgmtNtfyKickoffMinsInput" class="form-input" value="15" min="1" max="120" />
+                <span class="mgmt-pas-sub-hint" style="font-size: 0.75rem; color: var(--text-dim); display: block; margin-top: 3px;">Mins before match</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- League Groups Topics Management Table -->
+          <div class="mgmt-ntfy-topics-card" style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 16px;">
+            <h4 style="margin: 0 0 10px 0; font-size: var(--font-size-sm, 0.875rem); color: var(--text-main);">🏆 League Group ntfy Topics</h4>
+            <div class="table-responsive">
+              <table class="data-table" style="font-size: 0.8125rem;">
+                <thead>
+                  <tr>
+                    <th>League Group</th>
+                    <th>ntfy Topic</th>
+                    <th style="width: 170px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="mgmtNtfyGroupsTableBody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1580,6 +1695,126 @@
         <div class="modal-footer pwa-install-modal-footer" style="margin-top: 16px;">
           <button type="button" class="btn btn-primary" id="pwaModalInstallActionBtn" style="width: 100%;">Install App</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NOTIFICATIONS (NTFY) MODAL ────────────────────────────────────── -->
+  <div class="modal-overlay" id="notificationsModal" style="display: none;">
+    <div class="modal-card glass-card notifications-modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-icon" style="background: rgba(0, 240, 255, 0.15); border-color: rgba(0, 240, 255, 0.4); color: var(--accent-cyan);">🔔</div>
+          <div>
+            <h3 class="modal-title">League & Match Alerts</h3>
+            <p class="modal-subtitle">Instant push notifications on your phone using the free <strong>ntfy</strong> app</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="closeNotificationsModalBtn" aria-label="Close dialog">✕</button>
+      </div>
+
+      <div class="modal-body notifications-modal-body">
+        <!-- What you receive banner -->
+        <div class="ntfy-benefits-banner">
+          <div class="ntfy-benefit-item">
+            <span class="ntfy-benefit-icon">⏰</span>
+            <div class="ntfy-benefit-text">
+              <strong>Prediction Reminders</strong>
+              <span>Sent before Gameweek deadline so no one misses out</span>
+            </div>
+          </div>
+          <div class="ntfy-benefit-item">
+            <span class="ntfy-benefit-icon">🔒</span>
+            <div class="ntfy-benefit-text">
+              <strong>Match Kickoff & Predictions Reveal</strong>
+              <span>Inputs lock at game start, revealing everyone's picks</span>
+            </div>
+          </div>
+          <div class="ntfy-benefit-item">
+            <span class="ntfy-benefit-icon">🏁</span>
+            <div class="ntfy-benefit-text">
+              <strong>Full-Time Results & Points</strong>
+              <span>Sent 10m after game ends (post dataset refresh) with official scoring tiers</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- League Selection / Topic Display Box -->
+        <div class="ntfy-league-card">
+          <div class="ntfy-card-header">
+            <label for="ntfyModalGroupSelect" class="form-label" style="margin: 0; font-weight: 700;">
+              <span>🏆</span> Select League Group:
+            </label>
+            <select id="ntfyModalGroupSelect" class="control-dropdown" style="padding: 4px 10px; font-size: 0.8125rem;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <div class="ntfy-topic-container">
+            <div class="ntfy-topic-header">
+              <span class="ntfy-topic-lbl">League ntfy Topic:</span>
+              <span class="ntfy-topic-name" id="ntfyModalTopicDisplay">epl-league</span>
+            </div>
+            <div class="ntfy-topic-actions">
+              <a href="#" target="_blank" rel="noopener" class="btn btn-sm btn-primary ntfy-subscribe-btn" id="ntfyModalOpenAppBtn">
+                <span>📲</span> Subscribe in ntfy
+              </a>
+              <button type="button" class="btn btn-sm btn-secondary" id="ntfyModalCopyTopicBtn">
+                <span>📋</span> Copy Topic
+              </button>
+            </div>
+          </div>
+
+          <!-- Step-by-step instructions -->
+          <div class="ntfy-setup-steps">
+            <div class="ntfy-step">
+              <span class="ntfy-step-num">1</span>
+              <span>Install the free <strong>ntfy</strong> app from <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Google Play</a> or <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">App Store</a> (or visit <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy.sh</a> in your browser).</span>
+            </div>
+            <div class="ntfy-step">
+              <span class="ntfy-step-num">2</span>
+              <span>Tap <strong>"Subscribe in ntfy"</strong> above or add the topic name in the app. No account or signup required!</span>
+            </div>
+            <div class="ntfy-step">
+              <span class="ntfy-step-num">3</span>
+              <span>Test below to make sure notifications ring on your phone.</span>
+            </div>
+          </div>
+
+          <!-- Test Notification Buttons -->
+          <div class="ntfy-test-row" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <button type="button" class="btn btn-sm btn-secondary" id="ntfyModalSendTestBtn" title="Send standard ping test">
+              <span>🔔</span> Test Alert
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" id="ntfyModalTestKickoffBtn" title="Simulate Kickoff Locked Predictions alert">
+              <span>🔒</span> Test Kickoff Alert
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" id="ntfyModalTestFinishedBtn" title="Simulate Full-Time Results & Points alert">
+              <span>🏁</span> Test Full-Time Alert
+            </button>
+            <span class="ntfy-test-status" id="ntfyModalTestStatus"></span>
+          </div>
+        </div>
+
+        <!-- Personal Player Direct Topic (if logged in) -->
+        <div class="ntfy-personal-card" id="ntfyPersonalCard" style="display: none; margin-top: 14px;">
+          <div class="ntfy-personal-header">
+            <span>👤 Personal Direct Reminders</span>
+          </div>
+          <p class="ntfy-personal-sub">
+            Want private reminders specifically for your unpredicted matches? Enter your own personal ntfy topic:
+          </p>
+          <div class="ntfy-personal-input-row">
+            <input type="text" id="ntfyPlayerTopicInput" class="form-input" placeholder="e.g. my-epl-predictions-123" style="font-size: 0.8125rem;" />
+            <button type="button" class="btn btn-sm btn-secondary" id="ntfySavePlayerTopicBtn">Save</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="ntfyTestPlayerTopicBtn" title="Test personal topic">🔔 Test</button>
+          </div>
+          <span class="ntfy-personal-status" id="ntfyPlayerTopicStatus" style="font-size: 0.75rem; margin-top: 4px; display: block;"></span>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="margin-top: 14px;">
+        <button type="button" class="btn btn-secondary" id="ntfyCloseDoneBtn" style="width: 100%;">Done</button>
       </div>
     </div>
   </div>

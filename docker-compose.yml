@@ -27,6 +27,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+      network: host
     container_name: epl_score_predictor_backend
     restart: unless-stopped
     # Share the Tailscale network identity
@@ -35,9 +36,13 @@ services:
       - epl-db-data:/app/data
       - ./data/backups:/app/data/backups
       - ./user_credentials.txt:/app/user_credentials.txt
+      - ./assets:/app/assets:ro
+      - ./server/fonts:/app/fonts:ro
+      - /usr/share/fonts:/usr/share/fonts:ro
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
+      - NODE_OPTIONS=--dns-result-order=ipv4first
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - TZ=${TZ:-Asia/Kolkata}
       - PAS_WEIGHT_MATCH=${PAS_WEIGHT_MATCH:-0.50}
@@ -59,6 +64,7 @@ services:
     build:
       context: .
       target: production
+      network: host
     container_name: epl_score_predictor_prod
     restart: unless-stopped
     # Share the Tailscale network identity

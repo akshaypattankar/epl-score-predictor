@@ -103,6 +103,9 @@ async function parseJsonResponse(res, defaultErrMsg = 'Request failed') {
   }
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || defaultErrMsg);
+  if (typeof window !== 'undefined' && typeof window.__eplSetOnline === 'function') {
+    window.__eplSetOnline();
+  }
   return data;
 }
 
@@ -555,6 +558,145 @@ export async function apiResetPasSettings() {
     throw new Error(data.error || 'Failed to reset PAS settings');
   }
   return res.json();
+}
+
+// ─── NTFY NOTIFICATION APIS ────────────────────────────────────────────────
+export async function apiGetNotificationSettings() {
+  try {
+    const res = await fetch('/api/notifications/settings', {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function apiSaveNotificationSettings(settings) {
+  const res = await fetch('/api/notifications/settings', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(settings),
+  });
+  const data = await parseJsonResponse(res, 'Failed to update notification settings');
+  return data;
+}
+
+export async function apiUpdateGroupNtfyTopic(groupId, ntfyTopic) {
+  const res = await fetch(`/api/groups/${groupId}/ntfy`, {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ntfy_topic: ntfyTopic }),
+  });
+  const data = await parseJsonResponse(res, 'Failed to update group ntfy topic');
+  return data;
+}
+
+export async function apiUpdatePlayerNtfyTopic(ntfyTopic) {
+  const res = await fetch('/api/players/me/ntfy', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ ntfy_topic: ntfyTopic }),
+  });
+  const data = await parseJsonResponse(res, 'Failed to update personal ntfy topic');
+  return data;
+}
+
+export async function apiSendTestNotification(topic, groupId = null, testType = null) {
+  const res = await fetch('/api/notifications/test', {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ topic, group_id: groupId, test_type: testType }),
+  });
+  const data = await parseJsonResponse(res, 'Failed to send test notification');
+  return data;
+}
+
+export async function apiTriggerPredictionReminder(groupId = null) {
+  const res = await fetch('/api/notifications/remind-predictions', {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ group_id: groupId }),
+  });
+  const data = await parseJsonResponse(res, 'Failed to trigger prediction reminder');
+  return data;
+}
+
+export async function apiGetNotificationHistory() {
+  const res = await fetch('/api/notifications/history', {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) return [];
+  return await res.json();
+}
+
+// ─── WAGERS & STAKES APIS ───────────────────────────────────────────────────
+export async function apiFetchGroupWagers(groupId) {
+  if (!groupId) return { wagers: [], settings: { default_stake: 10, weekly_split_percent: 50 } };
+  try {
+    const res = await fetch(`/api/wagers?group_id=${groupId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) return { wagers: [], settings: { default_stake: 10, weekly_split_percent: 50 } };
+    return await res.json();
+  } catch (err) {
+    console.error('Failed to fetch wagers:', err);
+    return { wagers: [], settings: { default_stake: 10, weekly_split_percent: 50 } };
+  }
+}
+
+export async function apiSavePlayerStakes(groupId, stakes, matchIds = []) {
+  const res = await fetch('/api/wagers/player-stakes', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      group_id: Number(groupId),
+      stakes,
+      match_ids: matchIds
+    }),
+  });
+  return await parseJsonResponse(res, 'Failed to save member stakes');
+}
+
+export async function apiBulkSaveWagers(groupId, playerId, amount, matchIds) {
+  const res = await fetch('/api/wagers/bulk', {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      group_id: Number(groupId),
+      player_id: Number(playerId),
+      amount: Number(amount),
+      match_ids: matchIds
+    }),
+  });
+  return await parseJsonResponse(res, 'Failed to save bulk wagers');
+}
+
+export async function apiSaveSingleWager(groupId, matchId, playerId, amount) {
+  const res = await fetch('/api/wagers', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      group_id: Number(groupId),
+      match_id: Number(matchId),
+      player_id: Number(playerId),
+      amount: Number(amount)
+    }),
+  });
+  return await parseJsonResponse(res, 'Failed to save wager');
+}
+
+export async function apiSaveGroupWagerSettings(groupId, settings) {
+  const res = await fetch('/api/wagers/settings', {
+    method: 'PUT',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      group_id: Number(groupId),
+      ...settings
+    }),
+  });
+  return await parseJsonResponse(res, 'Failed to save group wager settings');
 }
 
 

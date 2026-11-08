@@ -1,5 +1,5 @@
 // Service Worker for EPL Score Predictor
-const SW_VERSION = 'v1.0.1';
+const SW_VERSION = 'v1.0.2';
 const STATIC_CACHE_NAME = `epl-predictor-static-${SW_VERSION}`;
 const DYNAMIC_CACHE_NAME = `epl-predictor-dynamic-${SW_VERSION}`;
 const API_CACHE_NAME = `epl-predictor-api-${SW_VERSION}`;
@@ -102,14 +102,21 @@ self.addEventListener('fetch', (event) => {
 
   // 2. API requests (/api/...)
   if (url.pathname.startsWith('/api/')) {
+    // Health probe: always direct to network without caching
+    if (url.pathname === '/api/health') {
+      event.respondWith(fetch(request));
+      return;
+    }
+
     // Non-GET requests (mutations: predict, login, update rules, etc.) -> Network Only
     if (request.method !== 'GET') {
       event.respondWith(
-        fetch(request).catch(() => {
+        fetch(request).catch((err) => {
           return new Response(
             JSON.stringify({
-              error: 'You are currently offline. Changes cannot be saved until internet connectivity is restored.',
-              offline: true,
+              error: 'Connection error. Unable to reach server. Please check your network or try again.',
+              offline: !navigator.onLine,
+              details: err?.message || 'Network request failed'
             }),
             {
               status: 503,

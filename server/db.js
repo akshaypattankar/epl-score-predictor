@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +51,7 @@ db.exec(`
     name TEXT UNIQUE NOT NULL,
     teams_filter TEXT DEFAULT 'ALL',
     start_gw INTEGER DEFAULT 1,
+    ntfy_topic TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -58,6 +60,7 @@ db.exec(`
     name TEXT UNIQUE NOT NULL,
     passcode TEXT DEFAULT '',
     timezone TEXT DEFAULT 'UTC',
+    ntfy_topic TEXT DEFAULT NULL,
     last_login_at DATETIME DEFAULT NULL,
     last_seen_at DATETIME DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -126,6 +129,53 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS sent_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    reference_id TEXT NOT NULL,
+    target_topic TEXT NOT NULL,
+    title TEXT,
+    message TEXT,
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(type, reference_id, target_topic)
+  );
+
+  CREATE TABLE IF NOT EXISTS match_finish_tracking (
+    match_id INTEGER PRIMARY KEY,
+    first_finished_at INTEGER NOT NULL,
+    dataset_refreshed_at INTEGER DEFAULT 0,
+    notification_sent_at INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS group_wagers (
+    group_id INTEGER NOT NULL,
+    match_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, match_id, player_id),
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS group_wager_settings (
+    group_id INTEGER PRIMARY KEY,
+    default_stake INTEGER DEFAULT 10,
+    weekly_split_percent INTEGER DEFAULT 50,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS group_player_stakes (
+    group_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    stake_per_match INTEGER DEFAULT 10,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, player_id),
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
   );
 `);
 
@@ -231,6 +281,40 @@ try {
   }
 } catch (e) {
   console.warn('Groups column migration check warning:', e.message);
+}
+
+// Handle migration for ntfy_topic in groups and players tables
+try {
+  const groupCols = db.prepare(`PRAGMA table_info(groups)`).all();
+  if (!groupCols.some(c => c.name === 'ntfy_topic')) {
+    console.log('Adding ntfy_topic column to groups table...');
+    db.exec(`ALTER TABLE groups ADD COLUMN ntfy_topic TEXT DEFAULT NULL;`);
+  }
+
+  // Populate ntfy_topic for any groups missing one
+  const missingGroupTopics = db.prepare(`SELECT id, name FROM groups WHERE ntfy_topic IS NULL OR ntfy_topic = ''`).all();
+  const updateGroupTopic = db.prepare(`UPDATE groups SET ntfy_topic = ? WHERE id = ?`);
+  for (const g of missingGroupTopics) {
+    const clean = (g.name || 'league')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20);
+    const hash = crypto.randomBytes(3).toString('hex');
+    const topic = `epl-${clean || 'league'}-${g.id}-${hash}`;
+    updateGroupTopic.run(topic, g.id);
+    console.log(`Assigned ntfy_topic "${topic}" to group "${g.name}".`);
+  }
+
+  const playerCols = db.prepare(`PRAGMA table_info(players)`).all();
+  if (!playerCols.some(c => c.name === 'ntfy_topic')) {
+    console.log('Adding ntfy_topic column to players table...');
+    db.exec(`ALTER TABLE players ADD COLUMN ntfy_topic TEXT DEFAULT NULL;`);
+  }
+} catch (e) {
+  console.warn('ntfy_topic column migration check warning:', e.message);
 }
 
 // Handle migration for passcode column
@@ -852,6 +936,155 @@ export function getAllAppSettings() {
   } catch (err) {
     return {};
   }
+}
+
+// ─── Wagers & Settings Helpers ────────────────────────────────────────────────
+export function getGroupWagers(groupId) {
+  try {
+    return db.prepare(`
+      SELECT group_id, match_id, player_id, amount, updated_at
+      FROM group_wagers
+      WHERE group_id = ?
+    `).all(groupId);
+  } catch (err) {
+    console.error('Error fetching group wagers:', err);
+    return [];
+  }
+}
+
+export function getGroupPlayerStakes(groupId) {
+  try {
+    return db.prepare(`
+      SELECT group_id, player_id, stake_per_match, updated_at
+      FROM group_player_stakes
+      WHERE group_id = ?
+    `).all(groupId);
+  } catch (err) {
+    console.error('Error fetching group player stakes:', err);
+    return [];
+  }
+}
+
+export function setGroupPlayerStakes(groupId, stakes, matchIds = []) {
+  if (!Array.isArray(stakes) || stakes.length === 0) return getGroupPlayerStakes(groupId);
+
+  const upsertStakeStmt = db.prepare(`
+    INSERT INTO group_player_stakes (group_id, player_id, stake_per_match, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id, player_id) DO UPDATE SET
+      stake_per_match = excluded.stake_per_match,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const upsertWagerStmt = db.prepare(`
+    INSERT INTO group_wagers (group_id, match_id, player_id, amount, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id, match_id, player_id) DO UPDATE SET
+      amount = excluded.amount,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const tx = db.transaction((items, matches) => {
+    for (const item of items) {
+      const pId = Number(item.player_id);
+      const safeAmount = Math.max(0, parseInt(item.stake_per_match ?? item.amount, 10) || 0);
+      upsertStakeStmt.run(groupId, pId, safeAmount);
+
+      if (Array.isArray(matches) && matches.length > 0) {
+        for (const mid of matches) {
+          upsertWagerStmt.run(groupId, Number(mid), pId, safeAmount);
+        }
+      }
+    }
+  });
+
+  tx(stakes, matchIds);
+  return getGroupPlayerStakes(groupId);
+}
+
+export function bulkSetGroupWagers(groupId, playerId, amount, matchIds) {
+  const safeAmount = Math.max(0, parseInt(amount, 10) || 0);
+
+  try {
+    db.prepare(`
+      INSERT INTO group_player_stakes (group_id, player_id, stake_per_match, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(group_id, player_id) DO UPDATE SET
+        stake_per_match = excluded.stake_per_match,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(groupId, playerId, safeAmount);
+  } catch (e) {
+    console.error('Error saving player stake in bulkSetGroupWagers:', e);
+  }
+
+  if (!Array.isArray(matchIds) || matchIds.length === 0) return { changes: 0 };
+  const stmt = db.prepare(`
+    INSERT INTO group_wagers (group_id, match_id, player_id, amount, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id, match_id, player_id) DO UPDATE SET
+      amount = excluded.amount,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const tx = db.transaction((matches) => {
+    let count = 0;
+    for (const mid of matches) {
+      stmt.run(groupId, Number(mid), playerId, safeAmount);
+      count++;
+    }
+    return count;
+  });
+
+  const count = tx(matchIds);
+  return { changes: count };
+}
+
+export function setSingleWager(groupId, matchId, playerId, amount) {
+  const safeAmount = Math.max(0, parseInt(amount, 10) || 0);
+  const stmt = db.prepare(`
+    INSERT INTO group_wagers (group_id, match_id, player_id, amount, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id, match_id, player_id) DO UPDATE SET
+      amount = excluded.amount,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+  return stmt.run(groupId, Number(matchId), playerId, safeAmount);
+}
+
+export function getGroupWagerSettings(groupId) {
+  try {
+    const row = db.prepare('SELECT * FROM group_wager_settings WHERE group_id = ?').get(groupId);
+    if (!row) {
+      return {
+        group_id: Number(groupId),
+        default_stake: 10,
+        weekly_split_percent: 50
+      };
+    }
+    return row;
+  } catch (err) {
+    return {
+      group_id: Number(groupId),
+      default_stake: 10,
+      weekly_split_percent: 50
+    };
+  }
+}
+
+export function setGroupWagerSettings(groupId, { default_stake, weekly_split_percent }) {
+  const safeStake = default_stake !== undefined ? Math.max(0, parseInt(default_stake, 10) || 0) : 10;
+  const safeSplit = weekly_split_percent !== undefined ? Math.min(100, Math.max(0, parseInt(weekly_split_percent, 10) || 0)) : 50;
+
+  db.prepare(`
+    INSERT INTO group_wager_settings (group_id, default_stake, weekly_split_percent, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id) DO UPDATE SET
+      default_stake = excluded.default_stake,
+      weekly_split_percent = excluded.weekly_split_percent,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(groupId, safeStake, safeSplit);
+
+  return getGroupWagerSettings(groupId);
 }
 
 export default db;
